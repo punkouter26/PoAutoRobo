@@ -46,3 +46,8 @@ Every task: failing test first, then code, `dotnet test`, `dotnet build`, one co
 | DONE | Faster render: clips encoded once in parallel and joined by copying (cross-dissolve replaced by a dip through black) | Same 16-clip episode: about 25 min before, 5 min 36 s after; picture and sound within 0.07 s, no decode errors |
 | NOTE | No long episodes or picture batches on the paid services; use the one-clip quick test for live checks | User instruction 2026-10-08 |
 | DONE | Two-clip episode length; full walk-through of all four steps on live services | 2026-10-08: 77.2 s 1080p30 film, 2316 frames, picture and sound equal length, 0 decode errors, -16.0 LUFS, about 6 cents of pictures |
+| DONE | Second walk-through covering the untested paths: Adopt topic, typed dialogue edit, reorder, visual mix dialog, own footage, preview playback, tooltip | 2026-10-08: 61.8 s 1080p30 film, 1854 frames, 0 decode errors, -16.4 LUFS; own 12 s footage plays in step with narration fitted to 12.8 s |
+| DONE | Bug found and fixed: a typed dialogue edit was lost when clicking straight onto another clip | Retested in the app after the fix |
+| DONE | Move earlier / Move later buttons as a non-drag way to reorder | Driven in the app: swap, no-op at the end, swap back |
+| OPEN | Drag-reorder of clip cards did not respond to three simulated mouse drags; needs trying by hand | Not established whether it is the test or the app |
+| OPEN | Host candidate dialog not exercised in the second run (costs about 5 cents; host already locked) | |

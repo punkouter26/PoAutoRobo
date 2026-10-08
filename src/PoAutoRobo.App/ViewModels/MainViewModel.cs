@@ -275,6 +275,24 @@ public partial class MainViewModel : ObservableObject
         Edit(episode => EpisodeEditor.Reorder(episode, [.. Clips.Select(c => c.Id)]));
     }
 
+    // Reordering without a drag: for keyboard and screen-reader use, and as a dependable alternative to dragging.
+    // Moving the card raises the same collection change a drag does, so the one reorder path handles both.
+    [RelayCommand]
+    private void MoveEarlier() => MoveSelected(-1);
+
+    [RelayCommand]
+    private void MoveLater() => MoveSelected(1);
+
+    private void MoveSelected(int by)
+    {
+        if (SelectedClip is not { } card) return;
+        var from = Clips.IndexOf(card);
+        var to = from + by;
+        if (from < 0 || to < 0 || to >= Clips.Count) return;
+        Clips.Move(from, to);
+        SelectedClip = card; // a move can drop the selection in the list control
+    }
+
     private void Renumber()
     {
         for (var i = 0; i < Clips.Count; i++)
@@ -304,13 +322,24 @@ public partial class MainViewModel : ObservableObject
         FitMessage = null;
     }
 
-    [RelayCommand]
-    private async Task ApplyDialogueAsync(CancellationToken ct)
+    // Selecting another clip reloads the dialogue box, and the click that selects it arrives before the box reports
+    // losing focus. Words typed for the clip being left are saved here first, or they would be thrown away.
+    partial void OnSelectedClipChanging(ClipViewModel? oldValue, ClipViewModel? newValue)
     {
-        if (Episode is null || SelectedClip is not { } clip || DraftDialogue.Trim() == clip.Dialogue) return;
+        if (oldValue is not null && Episode is not null && Episode.Clips.Any(c => c.Id == oldValue.Id) && DraftDialogue.Trim().Length > 0)
+            _ = ApplyDialogueToAsync(oldValue, DraftDialogue, CancellationToken.None);
+    }
+
+    [RelayCommand]
+    private Task ApplyDialogueAsync(CancellationToken ct) =>
+        SelectedClip is { } clip ? ApplyDialogueToAsync(clip, DraftDialogue, ct) : Task.CompletedTask;
+
+    private async Task ApplyDialogueToAsync(ClipViewModel clip, string draft, CancellationToken ct)
+    {
+        if (Episode is null || draft.Trim() == clip.Dialogue) return;
         try
         {
-            var updated = await EpisodeEditor.EditDialogueAsync(Episode, clip.Id, DraftDialogue, _scriptWriter, ct);
+            var updated = await EpisodeEditor.EditDialogueAsync(Episode, clip.Id, draft, _scriptWriter, ct);
             // The drift check above can take a moment; apply only this clip so edits made meanwhile are kept.
             var changed = updated.Clips.First(c => c.Id == clip.Id);
             Edit(e => EpisodeEditor.ReplaceClip(e, changed));

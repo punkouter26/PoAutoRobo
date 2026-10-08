@@ -14,6 +14,16 @@
                          LostFocus="OnDialogueLostFocus" />
                 <TextBlock x:Name="DraftStatsText" Text="{x:Bind ViewModel.DraftStats, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="MoveEarlierButton" Content="Move earlier" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.MoveEarlierCommand}"
+                            ToolTipService.ToolTip="Move this clip one place towards the start. You can also drag the cards." />
+                    <Button x:Name="MoveLaterButton" Grid.Column="1" Content="Move later" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.MoveLaterCommand}"
+                            ToolTipService.ToolTip="Move this clip one place towards the end. You can also drag the cards." />
+                </Grid>
                 <Button x:Name="AuditionButton" ToolTipService.ToolTip="Hear this clip in the host&#39;s voice before building the video." Content="Audition audio"
                         HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.AuditionCommand}" />
                 <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.AuditionCommand.IsRunning, Mode=OneWay}" />
