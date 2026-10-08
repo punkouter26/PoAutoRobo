@@ -164,7 +164,11 @@ public partial class MainViewModel : ObservableObject
     public string DraftStats =>
         $"{DraftDialogue.Length} characters · about {Durations.Estimate(DraftDialogue).TotalSeconds:0} s";
 
-    partial void OnSelectedClipChanged(ClipViewModel? value) => DraftDialogue = value?.Dialogue ?? "";
+    partial void OnSelectedClipChanged(ClipViewModel? value)
+    {
+        DraftDialogue = value?.Dialogue ?? "";
+        FitMessage = null;
+    }
 
     [RelayCommand]
     private async Task ApplyDialogueAsync(CancellationToken ct)
@@ -195,6 +199,55 @@ public partial class MainViewModel : ObservableObject
         {
             ErrorMessage = e.Message;
         }
+    }
+
+    // ---- The user's own footage ----
+
+    [ObservableProperty]
+    public partial string? FitMessage { get; set; }
+
+    [RelayCommand(IncludeCancelCommand = true)]
+    private async Task AttachVideoAsync(string path, CancellationToken ct)
+    {
+        if (Episode is null || SelectedClip is not { } card) return;
+        ErrorMessage = null;
+        FitMessage = "Fitting the narration to your video…";
+        try
+        {
+            var clip = card.Clip;
+            var length = await _builder.ProbeDurationAsync(path, ct);
+            var fit = await Conformance.FitAsync(clip.Active.Dialogue, length, _scriptWriter,
+                async (text, rate, c) => (await _builder.NarrateClipAsync(EpisodeEditor.WithDialogue(clip, text) with { NarrationRate = rate }, EpisodeFolder!, c)).Duration,
+                ct);
+
+            var copy = Path.Combine(EpisodeFolder!, "imports", Path.GetFileName(path));
+            Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
+            if (!string.Equals(Path.GetFullPath(path), copy, StringComparison.OrdinalIgnoreCase))
+                File.Copy(path, copy, overwrite: true);
+
+            Edit(e => EpisodeEditor.AttachVideo(e, clip.Id, copy, fit));
+            DraftDialogue = fit.Dialogue;
+            FitMessage = fit.WithinTolerance
+                ? $"Video {length:m\\:ss} · narration fitted to {fit.Duration.TotalSeconds:0.0} s"
+                : $"Closest fit is {Math.Abs(fit.Gap.TotalSeconds):0.0} s too {(fit.Gap > TimeSpan.Zero ? "short" : "long")}. Edit the dialogue to close the gap.";
+        }
+        catch (OperationCanceledException)
+        {
+            FitMessage = null;
+        }
+        catch (Exception e) when (e is ArgumentOutOfRangeException or FfmpegException or IOException or InvalidDataException or InvalidOperationException)
+        {
+            FitMessage = null;
+            ErrorMessage = e is ArgumentOutOfRangeException ? "Footage must be between 5 seconds and 2 minutes long." : e.Message;
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveVideo()
+    {
+        if (SelectedClip is not { } card) return;
+        Edit(e => EpisodeEditor.RemoveVideo(e, card.Id));
+        FitMessage = null;
     }
 
     // ---- Captions ----

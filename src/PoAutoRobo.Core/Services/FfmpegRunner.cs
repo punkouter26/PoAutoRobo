@@ -40,6 +40,16 @@ public sealed partial class FfmpegRunner(string ffmpegPath)
         return exitCode == 0 ? output : throw new FfmpegException($"The file could not be read.{Environment.NewLine}{log}");
     }
 
+    /// <summary>Length of a video or audio file.</summary>
+    /// <exception cref="FfmpegException">The file is not readable media.</exception>
+    public async Task<TimeSpan> ProbeDurationAsync(string path, CancellationToken ct)
+    {
+        var output = await ProbeAsync(["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path], ct);
+        return double.TryParse(output.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds)
+            ? TimeSpan.FromSeconds(seconds)
+            : throw new FfmpegException("The file's length could not be read.");
+    }
+
     /// <summary>Integrated loudness of a file's audio, in LUFS.</summary>
     public async Task<double> MeasureLoudnessAsync(string path, CancellationToken ct)
     {

@@ -20,5 +20,19 @@
         </Border>
         <Button x:Name="AuditionButton" Content="Audition audio" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.AuditionCommand}" />
         <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.AuditionCommand.IsRunning, Mode=OneWay}" />
+
+        <!-- The user's own footage: drop a file or pick one; the narration is then fitted to its length -->
+        <Grid x:Name="VideoDrop" AllowDrop="True" DragOver="OnVideoDragOver" Drop="OnVideoDrop" Background="Transparent">
+            <Rectangle Stroke="{ThemeResource ControlStrongStrokeColorDefaultBrush}" StrokeDashArray="4,3" RadiusX="6" RadiusY="6" />
+            <StackPanel Padding="16" Spacing="8">
+                <TextBlock Text="Drop your own video here" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Button x:Name="PickVideoButton" Content="Replace with my video" HorizontalAlignment="Stretch" Click="OnPickVideo" />
+            </StackPanel>
+        </Grid>
+        <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.AttachVideoCommand.IsRunning, Mode=OneWay}" />
+        <TextBlock x:Name="FitMessageText" Text="{x:Bind ViewModel.FitMessage, Mode=OneWay}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"
+                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Button Content="Use a generated picture instead" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.RemoveVideoCommand}"
+                Visibility="{x:Bind ViewModel.SelectedClip.HasUserVideo, Mode=OneWay}" />
     </StackPanel>
 </UserControl>

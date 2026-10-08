@@ -14,6 +14,9 @@ public partial class App : Application
 
     private Window? _window;
 
+    /// <summary>Owner handle for file dialogs.</summary>
+    public static nint WindowHandle { get; private set; }
+
     public App() => InitializeComponent();
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
@@ -39,6 +42,7 @@ public partial class App : Application
             Directory.CreateDirectory(Path.GetDirectoryName(WindowStateFile)!);
             File.WriteAllText(WindowStateFile, JsonSerializer.Serialize(windowState.ToDictionary(p => p.Key, p => p.Value?.ToString())));
         };
+        WindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(_window);
         _window.Activate();
     }
 

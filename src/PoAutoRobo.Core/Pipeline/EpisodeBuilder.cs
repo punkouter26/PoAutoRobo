@@ -29,17 +29,19 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
     {
         ct.ThrowIfCancellationRequested();
         var text = clip.Active.Dialogue;
-        var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{narrator.GetType().Name}|{text}")))[..16];
+        var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(FormattableString.Invariant($"{narrator.GetType().Name}|{clip.NarrationRate:0.###}|{text}"))))[..16];
         var audio = Path.Combine(folder, "audio", $"{clip.Id:N}-{key}.wav");
         var words = Path.ChangeExtension(audio, ".words.json");
 
         if (File.Exists(audio) && File.Exists(words))
             return new Narration(audio, WavInfo.Duration(audio), JsonSerializer.Deserialize<List<WordTiming>>(await File.ReadAllTextAsync(words, ct))!);
 
-        var narration = await narrator.SynthesizeAsync(text, audio, 1.0, ct);
+        var narration = await narrator.SynthesizeAsync(text, audio, clip.NarrationRate, ct);
         await File.WriteAllTextAsync(words, JsonSerializer.Serialize(narration.Words), ct);
         return narration;
     }
+
+    public Task<TimeSpan> ProbeDurationAsync(string path, CancellationToken ct) => ffmpeg.ProbeDurationAsync(path, ct);
 
     /// <returns>Path of the finished video in the episode's export folder.</returns>
     public async Task<string> ExportAsync(Episode episode, string folder, ExportPreset preset, CaptionStyle captions, IProgress<double>? progress, CancellationToken ct)

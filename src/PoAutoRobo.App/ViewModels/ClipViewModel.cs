@@ -8,7 +8,7 @@ namespace PoAutoRobo.App.ViewModels;
 public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edit) : ObservableObject
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Heading), nameof(DurationText), nameof(KindText), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(IsStale))]
+    [NotifyPropertyChangedFor(nameof(Heading), nameof(DurationText), nameof(KindText), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(IsStale), nameof(HasUserVideo))]
     public partial Clip Clip { get; set; } = clip;
 
     [ObservableProperty]
@@ -26,6 +26,8 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
     public string Pose => Clip.Active.Pose;
 
     public bool IsStale => Clip.Visual.Stale;
+
+    public bool HasUserVideo => Clip.Visual.Kind == VisualKind.UserVideo;
 
     public string KindText => Clip.Visual.Kind switch
     {

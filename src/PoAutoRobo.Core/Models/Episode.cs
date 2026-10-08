@@ -24,6 +24,9 @@ public sealed record Clip(
     bool HostVisible)
 {
     public TierScript Active => Scripts[ActiveTier];
+
+    /// <summary>Speaking pace multiplier; moves off 1.0 only to fit narration to the user's footage.</summary>
+    public double NarrationRate { get; init; } = 1.0;
 }
 
 public sealed record Episode(

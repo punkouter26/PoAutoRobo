@@ -39,12 +39,25 @@ public static class EpisodeEditor
 
         // ponytail: a clip with no picture yet keeps its old visual prompt after a core change; picture requests add the dialogue (T18).
         var stale = clip.Visual.Stale || (HasGeneratedMedia(clip) && await writer.CoreChangedAsync(before, dialogue, ct));
-        return Update(episode, clipId, c => c with
-        {
-            Scripts = c.Scripts.ToDictionary(s => s.Key, s => s.Key == c.ActiveTier ? s.Value with { Dialogue = dialogue } : s.Value),
-            Visual = c.Visual with { Stale = stale },
-        });
+        return Update(episode, clipId, c => WithDialogue(c, dialogue) with { Visual = c.Visual with { Stale = stale } });
     }
+
+    /// <summary>Swaps the clip's picture for the user's footage and takes the dialogue and pace that were fitted to it.</summary>
+    public static Episode AttachVideo(Episode episode, Guid clipId, string videoPath, FitResult fit) =>
+        Update(episode, clipId, c => WithDialogue(c, fit.Dialogue) with
+        {
+            NarrationRate = fit.Rate,
+            Visual = new VisualSpec(VisualKind.UserVideo, KindLocked: true, UserVideoPath: videoPath),
+        });
+
+    public static Episode RemoveVideo(Episode episode, Guid clipId) =>
+        Update(episode, clipId, c => c with { NarrationRate = 1.0, Visual = new VisualSpec(VisualKind.TitleCard) });
+
+    /// <summary>The clip with its active tier saying <paramref name="dialogue"/>; the other tiers are untouched.</summary>
+    public static Clip WithDialogue(Clip clip, string dialogue) => clip with
+    {
+        Scripts = clip.Scripts.ToDictionary(s => s.Key, s => s.Key == clip.ActiveTier ? s.Value with { Dialogue = dialogue } : s.Value),
+    };
 
     internal static Episode Update(Episode episode, Guid clipId, Func<Clip, Clip> change)
     {
