@@ -1,0 +1,17 @@
+﻿[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 2
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Comic Sans MS,64,&H00000000,&H00000000,&H0000D4FF,&H0000D4FF,-1,0,0,0,100,100,0,0,3,4,0,2,80,80,90,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:01.90,Default,,0,0,0,,THE ROBOT KEEPS ITS BALANCE.
+Dialogue: 0,0:00:02.00,0:00:04.30,Default,,0,0,0,,TINY CORRECTIONS HAPPEN EVERY FEW MILLISECONDS,
+Dialogue: 0,0:00:04.40,0:00:05.50,Default,,0,0,0,,ALL DAY LONG!
+Dialogue: 0,0:00:10.00,0:00:12.30,Default,,0,0,0,,NEXT WE LOOK AT THE REWARD
+Dialogue: 0,0:00:12.40,0:00:12.70,Default,,0,0,0,,FUNCTION.

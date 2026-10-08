@@ -1,0 +1,33 @@
+﻿[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 2
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Segoe UI,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,4,0,2,80,80,90,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:00.40,Default,,0,0,0,,{\c&H0000D4FF}The{\c&H00FFFFFF} robot keeps its balance.
+Dialogue: 0,0:00:00.40,0:00:00.80,Default,,0,0,0,,The {\c&H0000D4FF}robot{\c&H00FFFFFF} keeps its balance.
+Dialogue: 0,0:00:00.80,0:00:01.20,Default,,0,0,0,,The robot {\c&H0000D4FF}keeps{\c&H00FFFFFF} its balance.
+Dialogue: 0,0:00:01.20,0:00:01.60,Default,,0,0,0,,The robot keeps {\c&H0000D4FF}its{\c&H00FFFFFF} balance.
+Dialogue: 0,0:00:01.60,0:00:01.90,Default,,0,0,0,,The robot keeps its {\c&H0000D4FF}balance.{\c&H00FFFFFF}
+Dialogue: 0,0:00:02.00,0:00:02.40,Default,,0,0,0,,{\c&H0000D4FF}Tiny{\c&H00FFFFFF} corrections happen every few
+Dialogue: 0,0:00:02.40,0:00:02.80,Default,,0,0,0,,Tiny {\c&H0000D4FF}corrections{\c&H00FFFFFF} happen every few
+Dialogue: 0,0:00:02.80,0:00:03.20,Default,,0,0,0,,Tiny corrections {\c&H0000D4FF}happen{\c&H00FFFFFF} every few
+Dialogue: 0,0:00:03.20,0:00:03.60,Default,,0,0,0,,Tiny corrections happen {\c&H0000D4FF}every{\c&H00FFFFFF} few
+Dialogue: 0,0:00:03.60,0:00:03.90,Default,,0,0,0,,Tiny corrections happen every {\c&H0000D4FF}few{\c&H00FFFFFF}
+Dialogue: 0,0:00:04.00,0:00:04.40,Default,,0,0,0,,{\c&H0000D4FF}milliseconds,{\c&H00FFFFFF} all day long!
+Dialogue: 0,0:00:04.40,0:00:04.80,Default,,0,0,0,,milliseconds, {\c&H0000D4FF}all{\c&H00FFFFFF} day long!
+Dialogue: 0,0:00:04.80,0:00:05.20,Default,,0,0,0,,milliseconds, all {\c&H0000D4FF}day{\c&H00FFFFFF} long!
+Dialogue: 0,0:00:05.20,0:00:05.50,Default,,0,0,0,,milliseconds, all day {\c&H0000D4FF}long!{\c&H00FFFFFF}
+Dialogue: 0,0:00:10.00,0:00:10.40,Default,,0,0,0,,{\c&H0000D4FF}Next{\c&H00FFFFFF} we look at the
+Dialogue: 0,0:00:10.40,0:00:10.80,Default,,0,0,0,,Next {\c&H0000D4FF}we{\c&H00FFFFFF} look at the
+Dialogue: 0,0:00:10.80,0:00:11.20,Default,,0,0,0,,Next we {\c&H0000D4FF}look{\c&H00FFFFFF} at the
+Dialogue: 0,0:00:11.20,0:00:11.60,Default,,0,0,0,,Next we look {\c&H0000D4FF}at{\c&H00FFFFFF} the
+Dialogue: 0,0:00:11.60,0:00:11.90,Default,,0,0,0,,Next we look at {\c&H0000D4FF}the{\c&H00FFFFFF}
+Dialogue: 0,0:00:12.00,0:00:12.40,Default,,0,0,0,,{\c&H0000D4FF}reward{\c&H00FFFFFF} function.
+Dialogue: 0,0:00:12.40,0:00:12.70,Default,,0,0,0,,reward {\c&H0000D4FF}function.{\c&H00FFFFFF}

@@ -232,7 +232,7 @@ Each external service has a mock chosen automatically when its credentials or bi
 7. After dropping footage of 5–120s on a clip, narration duration is within ±1.0s of the footage duration.
 8. The exported file is H.264/AAC at exactly the chosen resolution and frame rate, per `ffprobe`.
 9. Exported narration measures −16 LUFS ±1 integrated.
-10. Caption word start times are within 100ms of the word timings from synthesis, for all four presets.
+10. Every caption appears within 100ms of when its first word is spoken, for all four presets; the karaoke preset highlights each word within 100ms of its spoken start.
 11. Regenerating an unchanged clip makes zero image or video API calls.
 12. No batch image or video run starts without the cost-estimate confirmation.
 13. The UI stays responsive during generation and export, and every long operation shows progress and can be cancelled.
