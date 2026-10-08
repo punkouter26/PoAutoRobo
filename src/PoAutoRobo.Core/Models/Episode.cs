@@ -30,4 +30,7 @@ public sealed record Episode(
     string Title,
     string Topic,
     IReadOnlyList<Clip> Clips,
-    int MixSeed);
+    int MixSeed)
+{
+    public CaptionStyle Captions { get; init; } = new();
+}

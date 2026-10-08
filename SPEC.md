@@ -73,7 +73,7 @@ audio/<clipId>-<hash>.wav # plus .words.json (word timings)
 images/<hash>.png
 video/<hash>.mp4
 imports/                  # copies of user footage
-export/
+export/                   # finished videos and preview.mp4; render scratch files go to the system temp folder
 ```
 
 The character sheet lives in `%LOCALAPPDATA%\PoAutoRobo\host\` and is shared across episodes.

@@ -7,10 +7,14 @@ using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Pipeline;
 
+/// <summary>A quick low-resolution render for the preview player, plus the word timings its caption overlay draws from.</summary>
+public sealed record Preview(string VideoPath, IReadOnlyList<CaptionSegment> Segments);
+
 /// <summary>Turns an episode into narration files and a finished video inside the episode folder.</summary>
 public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
 {
     private static readonly string[] VideoExtensions = [".mp4", ".mov", ".mkv", ".webm", ".avi"];
+    private static readonly ExportPreset Draft = new(640, 360, 30);
 
     /// <summary>Narrates every clip's active dialogue. Audio is cached by its text, so only changed clips are spoken again.</summary>
     public async Task<IReadOnlyList<Narration>> NarrateAsync(Episode episode, string folder, CancellationToken ct)
@@ -40,13 +44,29 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
     /// <returns>Path of the finished video in the episode's export folder.</returns>
     public async Task<string> ExportAsync(Episode episode, string folder, ExportPreset preset, CaptionStyle captions, IProgress<double>? progress, CancellationToken ct)
     {
+        var output = Path.Combine(folder, "export", $"{Slug(episode.Title)}-{preset.Height}p{preset.Fps}.mp4");
+        await RenderAsync(episode, folder, preset, captions, output, progress, ct);
+        return output;
+    }
+
+    /// <summary>Small, fast render with no captions burned in; the preview draws them live so style changes show at once.</summary>
+    public async Task<Preview> PreviewAsync(Episode episode, string folder, IProgress<double>? progress, CancellationToken ct)
+    {
+        var output = Path.Combine(folder, "export", "preview.mp4");
+        return new Preview(output, await RenderAsync(episode, folder, Draft, null, output, progress, ct));
+    }
+
+    private async Task<IReadOnlyList<CaptionSegment>> RenderAsync(
+        Episode episode, string folder, ExportPreset preset, CaptionStyle? captions, string output, IProgress<double>? progress, CancellationToken ct)
+    {
         var narrations = await NarrateAsync(episode, folder, ct);
         var slots = FfmpegArgs.Timeline([.. narrations.Select(n => n.Duration)]);
-        var exportFolder = Path.Combine(folder, "export");
-        var work = Path.Combine(exportFolder, "work");
-        var output = Path.Combine(exportFolder, $"{Slug(episode.Title)}-{preset.Height}p{preset.Fps}.mp4");
-        var partial = Path.ChangeExtension(output, ".partial.mp4");
-        Directory.CreateDirectory(work);
+        var segments = narrations.Select((n, i) => new CaptionSegment(slots[i].Start, n.Words)).ToList();
+        // Scratch files live in the temp folder, never in the episode folder: that is usually inside a synced
+        // Documents folder, where the sync client locks new files and refuses the cleanup.
+        var work = Directory.CreateTempSubdirectory("poautorobo-render-").FullName;
+        var partial = Path.Combine(work, "master.mp4");
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
         try
         {
             // Each clip is rendered to its own file first, so the final join stays a simple, fast graph.
@@ -67,22 +87,28 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
                 await ffmpeg.RunAsync(FfmpegArgs.ClipVideo(source, input, slots[i].VideoLength, preset, pictures[i]), work, slots[i].VideoLength, clipProgress, ct);
             }
 
-            var segments = narrations.Select((n, i) => new CaptionSegment(slots[i].Start, n.Words));
-            await File.WriteAllTextAsync(Path.Combine(work, "captions.ass"), AssCaptions.Build(segments, captions), ct);
+            if (captions is not null)
+                await File.WriteAllTextAsync(Path.Combine(work, "captions.ass"), AssCaptions.Build(segments, captions), ct);
 
             var total = slots[^1].Start + slots[^1].VideoLength;
             var masterProgress = progress is null ? null : new Relay(p => progress.Report(0.5 + p / 2));
             await ffmpeg.RunAsync(
-                FfmpegArgs.Master(pictures, [.. narrations.Select(n => n.AudioPath)], slots, "captions.ass", preset, partial),
+                FfmpegArgs.Master(pictures, [.. narrations.Select(n => n.AudioPath)], slots, captions is null ? null : "captions.ass", preset, partial),
                 work, total, masterProgress, ct);
 
             File.Move(partial, output, overwrite: true);
-            return output;
+            return segments;
         }
         finally
         {
-            File.Delete(partial);
-            Directory.Delete(work, recursive: true);
+            try
+            {
+                Directory.Delete(work, recursive: true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Leftover scratch in the temp folder is harmless; it must not turn a finished render into an error.
+            }
         }
     }
 

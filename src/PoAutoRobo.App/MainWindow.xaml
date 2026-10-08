@@ -34,16 +34,60 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock x:Name="EpisodeTitleText" Text="{x:Bind ViewModel.EpisodeTitle, Mode=OneWay}" Style="{ThemeResource SubtitleTextBlockStyle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.RuntimeText, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
             <TextBlock Grid.Column="2" x:Name="ClipCountText" Text="{x:Bind ViewModel.ClipCountText, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+            <ComboBox x:Name="CaptionPresetBox" Grid.Column="3" VerticalAlignment="Center" MinWidth="170" AutomationProperties.Name="Caption style"
+                      IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}" SelectedIndex="{x:Bind ViewModel.CaptionPresetIndex, Mode=TwoWay}">
+                <ComboBoxItem Content="Karaoke highlight" />
+                <ComboBoxItem Content="Two-line block" />
+                <ComboBoxItem Content="Clean subtitle" />
+                <ComboBoxItem Content="Comic banner" />
+            </ComboBox>
+            <Button Grid.Column="4" Content="Caption look" VerticalAlignment="Center" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}">
+                <Button.Flyout>
+                    <Flyout>
+                        <StackPanel Width="300" Spacing="12">
+                            <Slider Header="Font size" Minimum="32" Maximum="96" StepFrequency="2" Value="{x:Bind ViewModel.CaptionFontSize, Mode=TwoWay}" />
+                            <Slider Header="Stroke emphasis" Minimum="0" Maximum="10" StepFrequency="1" Value="{x:Bind ViewModel.CaptionStroke, Mode=TwoWay}" />
+                            <TextBlock Text="Accent colour" />
+                            <ColorPicker IsAlphaEnabled="False" IsMoreButtonVisible="False" IsColorSliderVisible="True" IsColorChannelTextInputVisible="False"
+                                         IsHexInputVisible="True" Color="{x:Bind ViewModel.CaptionAccent, Mode=TwoWay}" />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+            <ComboBox x:Name="ExportPresetBox" Grid.Column="5" VerticalAlignment="Center" MinWidth="130" AutomationProperties.Name="Export quality"
+                      SelectedIndex="{x:Bind ViewModel.ExportPresetIndex, Mode=TwoWay}">
+                <ComboBoxItem Content="1080p · 30 fps" />
+                <ComboBoxItem Content="1080p · 60 fps" />
+                <ComboBoxItem Content="4K · 30 fps" />
+                <ComboBoxItem Content="4K · 60 fps" />
+            </ComboBox>
+            <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="8">
+                <Button x:Name="RenderButton" Content="Render master video" Style="{ThemeResource AccentButtonStyle}" Command="{x:Bind ViewModel.RenderCommand}" />
+                <Button Content="Cancel" Command="{x:Bind ViewModel.RenderCancelCommand}" Visibility="{x:Bind ViewModel.RenderCommand.IsRunning, Mode=OneWay}" />
+            </StackPanel>
         </Grid>
 
-        <InfoBar Grid.Row="1" Grid.ColumnSpan="3" IsOpen="True" IsClosable="False" Severity="Informational"
-                 Title="Running offline" Message="Script and voice are simulated until you connect your Azure services." />
-        <InfoBar Grid.Row="1" Grid.ColumnSpan="3" Severity="Error" Title="Something went wrong"
-                 Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" IsOpen="{x:Bind HasText(ViewModel.ErrorMessage), Mode=OneWay}" />
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="3">
+            <ProgressBar x:Name="RenderProgressBar" Maximum="100" Value="{x:Bind ViewModel.RenderProgress, Mode=OneWay}" />
+            <InfoBar IsOpen="True" IsClosable="False" Severity="Informational"
+                     Title="Running offline" Message="Script and voice are simulated until you connect your Azure services." />
+            <InfoBar IsOpen="{x:Bind ViewModel.FfmpegMissing}" IsClosable="False" Severity="Warning"
+                     Title="FFmpeg is needed to preview and export" Message="Install it, then restart the app. Everything else works without it.">
+                <InfoBar.ActionButton>
+                    <HyperlinkButton Content="Get FFmpeg" NavigateUri="https://ffmpeg.org/download.html" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+            <InfoBar Severity="Error" Title="Something went wrong"
+                     Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" IsOpen="{x:Bind HasText(ViewModel.ErrorMessage), Mode=OneWay}" />
+        </StackPanel>
 
         <!-- Topic radar -->
         <StackPanel Grid.Row="2" Padding="16" Spacing="12" Background="{ThemeResource LayerFillColorDefaultBrush}">
@@ -66,10 +110,14 @@
             </GridView.ItemTemplate>
         </GridView>
 
-        <!-- Clip inspector; the timeline row below arrives in T11 -->
+        <!-- Clip inspector -->
         <Border Grid.Row="2" Grid.Column="2" Background="{ThemeResource LayerFillColorDefaultBrush}">
             <views:InspectorView ViewModel="{x:Bind ViewModel}" />
         </Border>
-        <Border Grid.Row="3" Grid.ColumnSpan="3" Background="{ThemeResource LayerFillColorDefaultBrush}" />
+
+        <!-- Master timeline and preview -->
+        <Border Grid.Row="3" Grid.ColumnSpan="3" Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <views:TimelineView ViewModel="{x:Bind ViewModel}" />
+        </Border>
     </Grid>
 </winex:WindowEx>

@@ -75,7 +75,7 @@ public sealed class EndToEndTests : IDisposable
         Assert.InRange(await Ffmpeg.MeasureLoudnessAsync(output, default), -17.0, -15.0);
         Assert.NotEmpty(progress);
         Assert.All(progress, p => Assert.InRange(p, 0.0, 1.0));
-        Assert.False(Directory.Exists(Path.Combine(_folder, "export", "work")));
+        Assert.Empty(Directory.GetDirectories(Path.Combine(_folder, "export"))); // working folder cleaned up
     }
 
     /// <summary>Checkpoint evidence: the whole 16-clip mock episode at 1080p30. Takes minutes, so it is opt-in.</summary>

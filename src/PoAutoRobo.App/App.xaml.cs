@@ -22,7 +22,9 @@ public partial class App : Application
         var windowState = LoadWindowState();
         WindowManager.PersistenceStorage = windowState;
 
-        _window = new MainWindow(new MainViewModel(new MockScriptWriter(), new EpisodeBuilder(new MockNarrator(), new FfmpegRunner(FfmpegRunner.Locate() ?? "ffmpeg.exe"))));
+        var ffmpeg = FfmpegRunner.Locate();
+        var builder = new EpisodeBuilder(new MockNarrator(), new FfmpegRunner(ffmpeg ?? "ffmpeg.exe"));
+        _window = new MainWindow(new MainViewModel(new MockScriptWriter(), builder, ffmpegAvailable: ffmpeg is not null));
         _window.Closed += (_, _) =>
         {
             Directory.CreateDirectory(Path.GetDirectoryName(WindowStateFile)!);
