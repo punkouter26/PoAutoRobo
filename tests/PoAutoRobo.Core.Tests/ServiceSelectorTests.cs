@@ -35,8 +35,7 @@ public sealed class ServiceSelectorTests
     {
         var plan = ServiceSelector.Plan(await AppSettings.LoadAsync(new FakeVault(FullVault), Ct));
 
-        Assert.True(plan.ScriptLive);
-        Assert.True(plan.VoiceLive);
+        Assert.True(plan.Live);
         Assert.Empty(plan.Simulated);
     }
 
@@ -78,7 +77,7 @@ public sealed class ServiceSelectorTests
     {
         var vault = new Dictionary<string, string>(FullVault) { ["AzureOpenAI--Endpoint"] = "not a url" };
 
-        Assert.False(ServiceSelector.Plan(await AppSettings.LoadAsync(new FakeVault(vault), Ct)).ScriptLive);
+        Assert.False(ServiceSelector.Plan(await AppSettings.LoadAsync(new FakeVault(vault), Ct)).Live);
     }
 
     [Fact]

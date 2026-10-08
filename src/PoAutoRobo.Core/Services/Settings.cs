@@ -50,11 +50,11 @@ public sealed record AppSettings(Uri? Endpoint, string? ApiKey, string? GitHubTo
     {
         try
         {
-            var endpoint = await Get("AzureOpenAI--Endpoint");
+            // Fetched together: each is a separate round trip made before the window can appear.
+            var (endpoint, apiKey, gitHub) = (Get("AzureOpenAI--Endpoint"), Get("AzureOpenAI--ApiKey"), Get("GitHub--PAT"));
+            await Task.WhenAll(endpoint, apiKey, gitHub);
             return new AppSettings(
-                Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) ? uri : null,
-                await Get("AzureOpenAI--ApiKey"),
-                await Get("GitHub--PAT"));
+                Uri.TryCreate(await endpoint, UriKind.Absolute, out var uri) ? uri : null, await apiKey, await gitHub);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {

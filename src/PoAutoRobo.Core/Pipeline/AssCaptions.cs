@@ -117,10 +117,12 @@ public static partial class AssCaptions
 
     private static string AssColour(string hex)
     {
-        if (!HexColour().IsMatch(hex))
+        if (!IsHexColour(hex))
             throw new ArgumentException($"'{hex}' is not a #RRGGBB colour.", nameof(hex));
         return $"&H00{hex[5..7]}{hex[3..5]}{hex[1..3]}".ToUpperInvariant();
     }
+
+    public static bool IsHexColour(string? text) => text is not null && HexColour().IsMatch(text);
 
     [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
     private static partial Regex HexColour();

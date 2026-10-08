@@ -51,17 +51,22 @@ public sealed class Visuals(IImageGen images, MediaCache cache, string character
 
     private static readonly string[] Beats = ["the setup", "the key moment", "the result"];
 
-    /// <summary>Generates the clip's picture or panel sequence, reusing cached files for identical requests.</summary>
-    // ponytail: AI video clips get one still until the video service is wired in (T20).
-    public async Task<Episode> GenerateAsync(Episode episode, Guid clipId, CancellationToken ct)
+    /// <summary>
+    /// How many pictures a clip of this kind needs: none for a title card or the user's footage, three for a panel
+    /// sequence, otherwise one. The single place that decides it, for costing and for drawing alike.
+    /// </summary>
+    // ponytail: an AI video clip gets one still until the video service is wired in.
+    public static int PictureCount(VisualKind kind) => kind switch
     {
-        var clip = episode.Clips.FirstOrDefault(c => c.Id == clipId)
-            ?? throw new ArgumentException($"No clip {clipId} in this episode.", nameof(clipId));
-        return EpisodeEditor.ApplyPicture(episode, clip, await DrawAsync(clip, ct));
-    }
+        VisualKind.MultiPanel => PanelCount,
+        VisualKind.Still or VisualKind.AiVideo => 1,
+        _ => 0,
+    };
 
-    // Draws the pictures for one clip and returns their files. The caller attaches them with
-    // EpisodeEditor.ApplyPicture against the episode as it is by then.
+    /// <summary>
+    /// Draws the pictures for one clip and returns their files, reusing cached files for identical requests. The
+    /// caller attaches them with <see cref="EpisodeEditor.ApplyPicture"/> against the episode as it is by then.
+    /// </summary>
     public async Task<IReadOnlyList<string>> DrawAsync(Clip clip, CancellationToken ct)
     {
         var request = RequestFor(clip);

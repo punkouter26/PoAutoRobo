@@ -66,9 +66,8 @@ public sealed class Grounding(RepoSource source, string cacheFolder)
     public async Task<IReadOnlyList<GroundingSnippet>> FindAsync(string topic, CancellationToken ct)
     {
         var keywords = Keywords(topic);
-        var documents = new List<RepoDocument>();
-        foreach (var repo in OfficialRepos)
-            documents.AddRange(await FetchAsync(repo, keywords, ct));
+        // The repositories are independent, so they are fetched together; results come back in repository order.
+        var documents = (await Task.WhenAll(OfficialRepos.Select(repo => FetchAsync(repo, keywords, ct)))).SelectMany(d => d).ToList();
 
         return [.. documents
             .SelectMany(Chunk)
@@ -99,7 +98,7 @@ public sealed class Grounding(RepoSource source, string cacheFolder)
     }
 
     public static IReadOnlyList<string> Keywords(string topic) =>
-        [.. topic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+        [.. Pipeline.Durations.SplitWords(topic)
             .Select(w => w.Trim('.', ',', ':', ';', '!', '?', '(', ')', '"', '\'').ToLowerInvariant())
             .Where(w => w.Length >= 2 && !Filler.Contains(w))
             .Distinct()];

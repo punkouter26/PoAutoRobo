@@ -68,14 +68,16 @@ public sealed partial class TrendFeed(FetchText fetch)
     }
 
     /// <summary>
-    /// True only for the Unitree R1 itself: the card must name both the maker and the model. General humanoid news,
-    /// other Unitree robots and other makers' "R1" products are all left out.
+    /// Feed links end up on a button the user clicks. Anything other than a web address (file shares, search-ms:,
+    /// other protocol handlers) could make that click do something on the machine, so it is refused.
     /// </summary>
-    // Feed links end up on a button the user clicks. Anything other than a web address (file shares, search-ms:,
-    // other protocol handlers) could make that click do something on the machine, so it is refused.
     public static bool IsWebLink(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 
+    /// <summary>
+    /// True only for the Unitree R1 itself: the card must name both the maker and the model. General humanoid news,
+    /// other Unitree robots and other makers' "R1" products are all left out.
+    /// </summary>
     public static bool IsAboutR1(TopicCard card)
     {
         var text = $"{card.Title} {card.Summary}";

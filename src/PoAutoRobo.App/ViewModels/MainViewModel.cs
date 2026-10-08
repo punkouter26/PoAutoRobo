@@ -365,7 +365,7 @@ public partial class MainViewModel : ObservableObject
             var copy = Path.Combine(EpisodeFolder!, "imports", $"{clip.Id:N}-{Path.GetFileName(path)}");
             Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
             if (!string.Equals(Path.GetFullPath(path), copy, StringComparison.OrdinalIgnoreCase))
-                File.Copy(path, copy, overwrite: true);
+                await Task.Run(() => File.Copy(path, copy, overwrite: true), ct); // can be hundreds of megabytes
 
             Edit(e => EpisodeEditor.AttachVideo(e, clip.Id, copy, fit));
             FitMessage = fit.WithinTolerance

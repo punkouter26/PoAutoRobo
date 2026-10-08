@@ -42,7 +42,7 @@ public static class ProjectStore
     private static void CheckShape(Episode episode, string path)
     {
         var sound = episode.Clips is not null && episode.Captions is not null && episode.Mix is not null
-            && System.Text.RegularExpressions.Regex.IsMatch(episode.Captions.AccentColor ?? "", "^#[0-9a-fA-F]{6}$")
+            && Pipeline.AssCaptions.IsHexColour(episode.Captions.AccentColor)
             && episode.Clips.All(c => c is { Title: not null, Visual: not null, Scripts: not null }
                 && Enum.GetValues<Tier>().All(t => c.Scripts.TryGetValue(t, out var script) && script is { Dialogue: not null, VisualPrompt: not null, Pose: not null }));
         if (!sound)

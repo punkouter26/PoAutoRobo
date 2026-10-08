@@ -50,7 +50,7 @@ public sealed partial class InspectorView : UserControl
     private async void OnPickVideo(object sender, RoutedEventArgs e)
     {
         var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.VideosLibrary };
-        foreach (var extension in new[] { ".mp4", ".mov", ".mkv", ".webm", ".avi" })
+        foreach (var extension in PoAutoRobo.Core.Pipeline.EpisodeBuilder.VideoExtensions)
             picker.FileTypeFilter.Add(extension);
         WinRT.Interop.InitializeWithWindow.Initialize(picker, App.WindowHandle); // a desktop app must say which window owns the dialog
         if (await picker.PickSingleFileAsync() is { } file)

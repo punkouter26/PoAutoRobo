@@ -30,12 +30,12 @@ public sealed record CostEstimate(IReadOnlyList<Guid> ClipIds, int Pictures, dec
     public static CostEstimate For(Episode episode, string imageModel)
     {
         var clips = episode.Clips.Where(NeedsPicture).ToList();
-        var pictures = clips.Sum(c => c.Visual.Kind == VisualKind.MultiPanel ? Visuals.PanelCount : 1);
+        var pictures = clips.Sum(c => Visuals.PictureCount(c.Visual.Kind));
         return new CostEstimate([.. clips.Select(c => c.Id)], pictures, imageModel == "gpt-image-1-mini" ? pictures * MiniPicturePrice : null);
     }
 
     /// <summary>Generated kinds with no picture yet, or one the dialogue has since moved away from.</summary>
     public static bool NeedsPicture(Clip clip) =>
-        clip.Visual.Kind is VisualKind.Still or VisualKind.MultiPanel or VisualKind.AiVideo
+        Visuals.PictureCount(clip.Visual.Kind) > 0
         && (clip.Visual.Stale || clip.Visual.MediaPaths is not { Count: > 0 });
 }

@@ -37,7 +37,7 @@ public static class EpisodeEditor
         if (dialogue == before)
             return episode;
 
-        // ponytail: a clip with no picture yet keeps its old visual prompt after a core change; picture requests add the dialogue (T18).
+        // A clip with no picture yet has nothing to go stale: its picture request includes the dialogue as it is then.
         var stale = clip.Visual.Stale || (HasGeneratedMedia(clip) && await writer.CoreChangedAsync(before, dialogue, ct));
         return Update(episode, clipId, c => WithDialogue(c, dialogue) with { Visual = c.Visual with { Stale = stale } });
     }

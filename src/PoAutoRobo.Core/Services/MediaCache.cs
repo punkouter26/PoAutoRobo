@@ -13,7 +13,7 @@ public sealed class MediaCache(string folder)
     /// <param name="create">Writes the media to the path it is given. Only called when nothing is cached.</param>
     public async Task<string> GetOrCreateAsync(IEnumerable<string> keyParts, string extension, Func<string, Task> create)
     {
-        var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\u001f', keyParts))))[..32];
+        var key = TextHash(string.Join('\u001f', keyParts))[..32];
         var path = Path.Combine(folder, key + extension);
         if (File.Exists(path))
             return path;
@@ -32,6 +32,8 @@ public sealed class MediaCache(string folder)
             File.Delete(scratch);
         }
     }
+
+    public static string TextHash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 
     public static string ContentHash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
 }

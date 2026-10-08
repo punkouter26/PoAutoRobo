@@ -60,10 +60,7 @@ public static class FfmpegArgs
             : ["-i", input];
         var filter = source switch
         {
-            // Oversampling before zoompan avoids the visible stair-stepping it has at native size.
-            ClipSource.Image =>
-                $"scale={2 * w}:{2 * h}:force_original_aspect_ratio=increase,crop={2 * w}:{2 * h}," +
-                $"zoompan=z='1+0.08*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}",
+            ClipSource.Image => PanZoom(preset, frames),
             ClipSource.Video =>
                 $"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,fps={fps}," +
                 $"tpad=stop_mode=clone:stop_duration={Seconds(length)}",
@@ -82,9 +79,7 @@ public static class FfmpegArgs
         for (var i = 0; i < images.Count; i++)
         {
             var frames = total / images.Count + (i < total % images.Count ? 1 : 0); // spare frames go to the first panels
-            graph.Add(
-                $"[{i}:v]scale={2 * w}:{2 * h}:force_original_aspect_ratio=increase,crop={2 * w}:{2 * h}," +
-                $"zoompan=z='1+0.08*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}[p{i}]");
+            graph.Add($"[{i}:v]{PanZoom(preset, frames)}[p{i}]");
         }
         graph.Add($"{string.Concat(images.Select((_, i) => $"[p{i}]"))}concat=n={images.Count}:v=1:a=0{Finish(length, captionsFile)}[v]");
         return
@@ -94,6 +89,11 @@ public static class FfmpegArgs
             "-t", Seconds(length), "-an", .. Encode(preset), "-y", output,
         ];
     }
+
+    /// <summary>A slow push-in on a still picture. Oversampling before zoompan avoids the stair-stepping it shows at native size.</summary>
+    private static string PanZoom(ExportPreset p, int frames) =>
+        $"scale={2 * p.Width}:{2 * p.Height}:force_original_aspect_ratio=increase,crop={2 * p.Width}:{2 * p.Height}," +
+        $"zoompan=z='1+0.08*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={p.Width}x{p.Height}:fps={p.Fps}";
 
     /// <summary>The last filters on every clip: captions over the picture, then the fades over both.</summary>
     private static string Finish(TimeSpan length, string? captionsFile) =>

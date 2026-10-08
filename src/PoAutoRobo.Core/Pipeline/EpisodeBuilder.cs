@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using PoAutoRobo.Core.Models;
 using PoAutoRobo.Core.Services;
@@ -13,25 +11,17 @@ public sealed record Preview(string VideoPath, IReadOnlyList<CaptionSegment> Seg
 public sealed record RenderProgress(string Activity, double Fraction);
 
 /// <summary>Turns an episode into narration files and a finished video inside the episode folder.</summary>
-public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
+public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
 {
-    private static readonly string[] VideoExtensions = [".mp4", ".mov", ".mkv", ".webm", ".avi"];
+    public static readonly IReadOnlyList<string> VideoExtensions = [".mp4", ".mov", ".mkv", ".webm", ".avi"];
     private static readonly ExportPreset Draft = new(640, 360, 30);
 
-    /// <summary>Narrates every clip's active dialogue. Audio is cached by its text, so only changed clips are spoken again.</summary>
-    public async Task<IReadOnlyList<Narration>> NarrateAsync(Episode episode, string folder, CancellationToken ct)
-    {
-        var narrations = new List<Narration>(episode.Clips.Count);
-        foreach (var clip in episode.Clips)
-            narrations.Add(await NarrateClipAsync(clip, folder, ct));
-        return narrations;
-    }
-
+    /// <summary>Narrates one clip's active dialogue. Audio is cached by its text, so an unchanged clip is never spoken twice.</summary>
     public async Task<Narration> NarrateClipAsync(Clip clip, string folder, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var text = clip.Active.Dialogue;
-        var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(FormattableString.Invariant($"{narrator.GetType().Name}|{clip.NarrationRate:0.###}|{text}"))))[..16];
+        var key = MediaCache.TextHash(FormattableString.Invariant($"{narrator.GetType().Name}|{clip.NarrationRate:0.###}|{text}"))[..16];
         var audio = Path.Combine(folder, "audio", $"{clip.Id:N}-{key}.wav");
         var words = Path.ChangeExtension(audio, ".words.json");
 
