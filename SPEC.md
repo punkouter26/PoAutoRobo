@@ -10,7 +10,7 @@ Users: robotics researchers, developers and content creators working alone on th
 
 ## 2. User journeys
 
-1. **First run.** Open Settings, sign in with Entra ID or paste endpoint/keys. Generate candidate character sheets for the host, pick one; it is locked for all episodes.
+1. **First run.** Be signed in to Azure (`az login`); the app reads its keys from the key vault by itself. Generate candidate character sheets for the host, pick one; it is locked for all episodes.
 2. **Pick a topic.** Adopt a card from Topic Radar, or paste a custom topic/abstract/code/outline. One topic per episode.
 3. **Generate the script.** The app fetches grounding snippets, then produces 15–20 clips (15–60s each), each with Tier A/B/C dialogue, a visual prompt and a host pose. All clips start on Tier B.
 4. **Direct the episode.** Drag clips to reorder, switch tier per clip, edit dialogue line by line, audition lines, toggle host visible/off-screen. Narration re-synthesizes on any text change; visuals are marked stale only when the edit changes the core action, tool or subject.
@@ -32,7 +32,7 @@ Users: robotics researchers, developers and content creators working alone on th
 | Images | Azure OpenAI image edit endpoint with character sheet as reference | deployment `gpt-image-2` (fallback `gpt-image-1-mini`) |
 | Video | Sora 2, Azure OpenAI v1 API, async job + poll, `input_reference` | deployment `sora-2`, 1280×720 |
 | Assembly | FFmpeg CLI as a child process | 7.x or later (built and tested on 9.0.1), on PATH or downloaded on first run |
-| Auth | `DefaultAzureCredential`, then keys from Windows Credential Locker | `Azure.Identity` |
+| Credentials | Read from Azure Key Vault `kv-poshared` at startup as the signed-in Azure user; held in memory only | `Azure.Security.KeyVault.Secrets` 4.11.2, `Azure.Identity` 1.21.0 |
 | Tests | xUnit, Verify, coverlet | xunit 2.9.3, Verify.Xunit 31.12.5, coverlet.collector 6.0.4 |
 
 Azure resource: `po-aiservices-shared` (AIServices, East US 2, resource group `PoShared`). One endpoint serves chat, images, video and Speech.
@@ -94,7 +94,7 @@ One app, so this table replaces a separate `CAPABILITY-MAP.md`.
 | Duration conformance | `Pipeline/Conformance` | ScriptWriter + Narrator |
 | Captions + render | `Pipeline/Render` | FFmpeg |
 | Project persistence | `Services/ProjectStore` | file system |
-| Settings + credentials | `Services/Settings` | Credential Locker, Entra ID |
+| Settings + credentials | `Services/Settings`, `Services/ServiceSelector` | Azure Key Vault |
 
 ## 6. Conventions
 
@@ -174,7 +174,7 @@ Each external service has a mock chosen automatically when its credentials or bi
 ## 10. Boundaries
 
 **Always**
-- Keep secrets in Credential Locker, `dotnet user-secrets` or environment variables.
+- Keep secrets in the key vault; the app reads them at startup and never writes them to disk.
 - Run long work off the UI thread with progress and cancel.
 - Cache generated media; show a cost estimate before batch image or video runs.
 - Keep `SPEC.md` and `tasks/todo.md` in sync.
@@ -206,7 +206,7 @@ Each external service has a mock chosen automatically when its credentials or bi
 | Situation | Behaviour |
 |---|---|
 | No credentials | Service runs on its mock; banner says which |
-| Entra sign-in fails | Fall back to stored key; if none, mock |
+| Key vault unreachable or not signed in | Every service runs on its mock; the banner gives the reason |
 | LLM returns fewer than 15 or more than 20 clips | One retry, then trim or ask to regenerate |
 | Tier text outside 15–60s | Clip flagged; export still allowed |
 | Content filter blocks an image or video | Clip keeps its title card and shows the reason |
