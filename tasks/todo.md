@@ -1,0 +1,34 @@
+# PoAutoRobo — Tasks
+
+Status column: blank = not started, WIP, DONE. Plan: [plan.md](plan.md).
+
+Every task: failing test first, then code, `dotnet test`, `dotnet build`, one commit. Verify command is `dotnet test PoAutoRobo.sln` unless stated. Paths are under `src/PoAutoRobo.Core/` (Core), `src/PoAutoRobo.App/` (App), `tests/PoAutoRobo.Core.Tests/` (Tests). A task may touch only its listed files.
+
+| Status | ID | Slice | Files (≤5) | Acceptance | Deps |
+|---|---|---|---|---|---|
+| DONE | T1 | Solution scaffold, pinned versions, `git init` | `PoAutoRobo.sln`, `Directory.Build.props`, `Directory.Packages.props`, `.gitignore`, `Core/PoAutoRobo.Core.csproj` | `dotnet build` clean with warnings as errors; versions copied into SPEC §3 | — |
+|  | T2 | Episode model and project store | `Core/Models/Episode.cs`, `Core/Services/ProjectStore.cs`, `Tests/PoAutoRobo.Core.Tests.csproj`, `Tests/ProjectStoreTests.cs` | Save/load round trip equal; reorder persists; corrupt file restores from `.bak` | T1 |
+|  | T3 | Script writer contract, mock episode, duration rules | `Core/Services/IScriptWriter.cs`, `Core/Services/MockScriptWriter.cs`, `Core/Pipeline/Durations.cs`, `Tests/ScriptRulesTests.cs` | Mock gives 16 clips × 3 tiers; all 15–60s at 165 wpm; out-of-range flagged; default Tier B | T2 |
+|  | T4 | Visual mix assignment | `Core/Pipeline/VisualMix.cs`, `Tests/VisualMixTests.cs` | Largest-remainder counts exact; same seed same result; user-video clips excluded; overrides survive re-roll; sum ≠ 100 rejected | T3 |
+|  | T5 | Narrator contract, Windows-voice mock, WAV duration | `Core/Services/INarrator.cs`, `Core/Services/MockNarrator.cs`, `Core/Pipeline/WavInfo.cs`, `Tests/NarratorTests.cs` | WAV written; duration read from header; one timing per word, monotonic | T3 |
+|  | T6 | Caption file generation, four presets | `Core/Pipeline/AssCaptions.cs`, `Core/Models/CaptionStyle.cs`, `Tests/AssCaptionsTests.cs`, `Tests/*.verified.txt` | Snapshot per preset; word starts equal input timings (criterion 10) | T5 |
+|  | T7 | Render: argument builder, runner, end-to-end test | `Core/Pipeline/FfmpegArgs.cs`, `Core/Services/FfmpegRunner.cs`, `Core/Pipeline/EpisodeBuilder.cs`, `Tests/FfmpegArgsTests.cs`, `Tests/EndToEndTests.cs` | Mock topic → MP4; `ffprobe` shows H.264/AAC at chosen size and fps; loudness −16 ±1; cancel deletes partial file | T4, T6 |
+|  | — | **Checkpoint A** | | | |
+|  | T8 | App shell, four-pane layout, new episode from custom topic | `App/PoAutoRobo.App.csproj`, `App/App.xaml(.cs)`, `App/MainWindow.xaml(.cs)`, `App/ViewModels/MainViewModel.cs` | App launches; custom topic produces a visible clip list on mocks; window size remembered | T3 |
+|  | T9 | Clip deck: cards, drag-reorder, tier pill, host toggle | `App/Views/ClipCard.xaml(.cs)`, `App/ViewModels/ClipViewModel.cs`, `App/MainWindow.xaml`, `Tests/ClipEditingTests.cs`, `Core/Pipeline/EpisodeEditor.cs` | Reorder and tier switch change only the targeted clip and persist (criteria 3, 4) | T8 |
+|  | T10 | Inspector: dialogue edit, re-synthesis, drift flag, audition | `App/Views/InspectorView.xaml(.cs)`, `Core/Pipeline/EpisodeEditor.cs`, `Tests/DialogueEditTests.cs` | Edit re-synthesizes one clip only; `coreChanged=false` keeps visual, `true` marks stale (criterion 5) | T9, T5 |
+|  | T11 | Timeline, preview with live caption overlay, export with progress and cancel | `App/Views/TimelineView.xaml(.cs)`, `App/ViewModels/MainViewModel.cs`, `App/MainWindow.xaml` | Preview plays with captions; preset change updates instantly; export runs off the UI thread and cancels cleanly | T7, T10 |
+|  | — | **Checkpoint B** | | | |
+|  | T12 | Settings page, credential storage, real-vs-mock selection | `Core/Services/Settings.cs`, `Core/Services/ServiceSelector.cs`, `App/Views/SettingsPage.xaml(.cs)`, `Tests/ServiceSelectorTests.cs` | Entra → key → mock order proven; keys never in `episode.json` or logs (criterion 15); banner lists mocks | T8 |
+|  | T13 | Live script writer: decompose, drift check, rewrite-to-length | `Core/Services/AzureScriptWriter.cs`, `Core/Services/ScriptSchemas.cs`, `Tests/AzureScriptWriterTests.cs` | Schema and prompt snapshot; canned responses parse; wrong clip count retries once; live test opt-in | T12 |
+|  | T14 | Live narrator: SSML, style, rate, word timings | `Core/Services/AzureNarrator.cs`, `Core/Pipeline/Ssml.cs`, `Tests/SsmlTests.cs` | SSML escapes text and clamps rate to ±10%; live test opt-in | T12 |
+|  | T15 | Duration conformance and user video slot | `Core/Pipeline/Conformance.cs`, `Tests/ConformanceTests.cs`, `Core/Services/FfmpegRunner.cs`, `App/Views/InspectorView.xaml(.cs)` | Within ±1.0s in ≤3 rewrites plus rate; 5–120s enforced; closest kept on failure (criterion 7) | T13, T14 |
+|  | — | **Checkpoint C** | | | |
+|  | T16 | Grounding and Repository Inspector | `Core/Services/Grounding.cs`, `Core/Services/MockGrounding.cs`, `Tests/GroundingTests.cs`, `App/Views/RadarPanel.xaml(.cs)` | Keyword ranking deterministic; snippets carry URLs; rate limit falls back to cache | T12 |
+|  | T17 | Topic Radar feeds | `Core/Services/TrendFeed.cs`, `Core/Services/MockTrendFeed.cs`, `Tests/TrendFeedTests.cs`, `Tests/Fixtures/*`, `App/Views/RadarPanel.xaml(.cs)` | Fixture feeds parse to cards; one dead source doesn't empty the list; Adopt starts an episode | T16 |
+|  | T18 | Image generation and media cache | `Core/Services/IImageGen.cs`, `Core/Services/AzureImageGen.cs`, `Core/Services/MediaCache.cs`, `Tests/MediaCacheTests.cs` | Same request → zero second call (criterion 11); host-visible sends reference, off-screen doesn't (criterion 16); filter block keeps title card | T12 |
+|  | T19 | Host setup, generate buttons, cost confirmation | `App/Views/HostSetupDialog.xaml(.cs)`, `Core/Pipeline/CostEstimate.cs`, `Tests/CostEstimateTests.cs`, `App/Views/ClipCard.xaml(.cs)` | Candidates → pick → locked; batch run blocked without confirmation (criterion 12) | T18 |
+|  | T20 | AI video: live spike, job client, shot planning | `Core/Services/IVideoGen.cs`, `Core/Services/AzureVideoGen.cs`, `Core/Pipeline/ShotPlan.cs`, `Tests/ShotPlanTests.cs` | Shots cover narration, last frame held; timeout/failure falls back to still. **Starts by asking you about the `sora-2` deployment** | T19 |
+|  | T21 | Multi-panel rendering and mix sliders | `Core/Pipeline/FfmpegArgs.cs`, `Tests/FfmpegArgsTests.cs`, `App/Views/MixDialog.xaml(.cs)`, `App/ViewModels/MainViewModel.cs` | Panels cut evenly across narration; sliders sum to 100; re-roll reproducible | T4, T19 |
+|  | — | **Checkpoint D** | | | |
+|  | T22 | Error states and criteria proof | `Core/Pipeline/EpisodeBuilder.cs`, `App/MainWindow.xaml(.cs)`, `Tests/ErrorStateTests.cs`, `SPEC.md` | Every row of SPEC §12 has a test or a recorded manual check; all 17 criteria evidenced | all |
