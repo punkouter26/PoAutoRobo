@@ -1,0 +1,25 @@
+<UserControl
+    x:Class="PoAutoRobo.App.Views.ClipCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls">
+    <StackPanel Width="248" Spacing="8" Padding="4">
+        <Grid Height="140" CornerRadius="4" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
+            <TextBlock Text="{x:Bind Card.KindText, Mode=OneWay}" Margin="8" VerticalAlignment="Bottom"
+                       Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Border Margin="8" Padding="6,2" CornerRadius="4" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+                <TextBlock Text="{x:Bind Card.DurationText, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" />
+            </Border>
+        </Grid>
+        <TextBlock Text="{x:Bind Card.Heading, Mode=OneWay}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+        <controls:Segmented SelectedIndex="{x:Bind Card.TierIndex, Mode=TwoWay}" HorizontalAlignment="Stretch"
+                            AutomationProperties.Name="Depth of explanation">
+            <controls:SegmentedItem Content="A" ToolTipService.ToolTip="Accessible: everyday analogies" />
+            <controls:SegmentedItem Content="B" ToolTipService.ToolTip="Applied: developer workflow" />
+            <controls:SegmentedItem Content="C" ToolTipService.ToolTip="Advanced: systems engineering" />
+        </controls:Segmented>
+        <ToggleSwitch IsOn="{x:Bind Card.HostVisible, Mode=TwoWay}" OnContent="Host visible" OffContent="Off-screen voiceover"
+                      AutomationProperties.Name="Host on screen" />
+    </StackPanel>
+</UserControl>
