@@ -9,7 +9,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using PoAutoRobo.App.ViewModels;
-using PoAutoRobo.Core.Pipeline;
 using Windows.Foundation;
 using Windows.Media.Core;
 using Windows.Media.Playback;
@@ -37,6 +36,35 @@ public sealed partial class TimelineView : UserControl
         _tick.Tick += (_, _) => Refresh();
         // The length is only known once the file has opened, and that event arrives off the UI thread.
         _player.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(Refresh);
+        // The button and the clock follow what the player is really doing, so they are right when a preview plays to its end.
+        _player.PlaybackSession.PlaybackStateChanged += (_, _) => DispatcherQueue.TryEnqueue(ShowPlaying);
+    }
+
+    private void ShowPlaying()
+    {
+        var playing = _player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing;
+        PlayIcon.Symbol = playing ? Symbol.Pause : Symbol.Play;
+        if (playing) _tick.Start(); else _tick.Stop();
+        Refresh();
+    }
+
+    private void OnBuildPreview(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel?.BuildPreviewCommand.CanExecute(null) == true) ViewModel.BuildPreviewCommand.Execute(null);
+    }
+
+    // The waveform from the keyboard: Space plays or pauses, the arrows step five seconds.
+    private void OnWaveKey(object sender, KeyRoutedEventArgs e)
+    {
+        if (!Scrubber.IsEnabled) return;
+        switch (e.Key)
+        {
+            case Windows.System.VirtualKey.Space: OnPlayPause(sender, e); break;
+            case Windows.System.VirtualKey.Left: Scrubber.Value -= 5; break;
+            case Windows.System.VirtualKey.Right: Scrubber.Value += 5; break;
+            default: return;
+        }
+        e.Handled = true;
     }
 
     public MainViewModel? ViewModel
@@ -76,6 +104,7 @@ public sealed partial class TimelineView : UserControl
     {
         var preview = ViewModel?.Preview;
         PlayButton.IsEnabled = Scrubber.IsEnabled = preview is not null;
+        BuildHereButton.Visibility = preview is null ? Visibility.Visible : Visibility.Collapsed;
         _marks = preview?.Marks ?? [];
         _peaks = [];
         _length = TimeSpan.Zero;
@@ -117,18 +146,14 @@ public sealed partial class TimelineView : UserControl
     /// <summary>Lets go of the preview file so a new one can replace it.</summary>
     private void Release()
     {
-        _tick.Stop();
         _player.Pause();
         _player.Source = null;
-        PlayIcon.Symbol = Symbol.Play;
+        ShowPlaying();
     }
 
     private void OnPlayPause(object sender, RoutedEventArgs e)
     {
-        var playing = _player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing;
-        if (playing) _player.Pause(); else _player.Play();
-        PlayIcon.Symbol = playing ? Symbol.Play : Symbol.Pause;
-        if (playing) _tick.Stop(); else _tick.Start();
+        if (_player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing) _player.Pause(); else _player.Play();
     }
 
     private void OnScrub(object sender, RangeBaseValueChangedEventArgs e)
@@ -231,8 +256,11 @@ public sealed partial class TimelineView : UserControl
 
         if (cue.Highlight >= 0)
         {
-            var start = cue.Words.Take(cue.Highlight).Sum(w => w.Length + 1);
-            layout.SetColor(start, cue.Words[cue.Highlight].Length, accent);
+            // The word being spoken takes the accent colour and swells as it starts, as it does in the finished video.
+            var (start, length) = (cue.Words.Take(cue.Highlight).Sum(w => w.Length + 1), cue.Words[cue.Highlight].Length);
+            var swell = Math.Clamp((_player.PlaybackSession.Position - cue.Start).TotalMilliseconds / AssCaptions.PopMilliseconds, 0, 1);
+            layout.SetColor(start, length, accent);
+            layout.SetFontSize(start, length, format.FontSize * (float)(1 + (AssCaptions.PopPercent - 100) / 100.0 * swell));
         }
         session.DrawTextLayout(layout, 0, y, look.DarkTextOnAccent ? Colors.Black : Colors.White);
     }

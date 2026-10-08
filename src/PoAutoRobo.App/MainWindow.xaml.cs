@@ -2,7 +2,9 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.AppNotifications.Builder;
 using PoAutoRobo.App.ViewModels;
@@ -13,9 +15,11 @@ namespace PoAutoRobo.App;
 
 public sealed partial class MainWindow : WindowEx
 {
-    private readonly DispatcherTimer _percentTick = new() { Interval = TimeSpan.FromMilliseconds(30) };
+    private readonly DispatcherTimer _roll = new() { Interval = TimeSpan.FromMilliseconds(30) };
     private readonly ITaskbarList3? _taskbar = NewTaskbar();
     private double _shownPercent;
+    private double _shownRuntime;
+    private double _shownSpent;
     private bool _inFront = true;
     private bool _toastsReady;
 
@@ -24,12 +28,19 @@ public sealed partial class MainWindow : WindowEx
         ViewModel = viewModel;
         InitializeComponent();
         ViewModel.Confirm = ConfirmAsync;
+        ViewModel.Ask = AskAsync;
         ViewModel.JobFinished = OnJobFinished;
+        ViewModel.ClipDone = place => Sounds.Play(Cue.Tick, place * 2 - 1); // the ticks travel left to right across the batch
         ViewModel.PropertyChanged += OnViewModelChanged;
-        _percentTick.Tick += (_, _) => RollPercent();
-        Activated += (_, e) => _inFront = e.WindowActivationState != WindowActivationState.Deactivated;
+        _roll.Tick += (_, _) => Roll();
+        Activated += (_, e) =>
+        {
+            _inFront = e.WindowActivationState != WindowActivationState.Deactivated;
+            TopicPage.SetInFront(_inFront);
+        };
         Closed += (_, _) =>
         {
+            ViewModel.Flush();
             if (_toastsReady) AppNotificationManager.Default.Unregister();
         };
         ApplySounds();
@@ -41,7 +52,7 @@ public sealed partial class MainWindow : WindowEx
     {
         switch (e.PropertyName)
         {
-            case nameof(MainViewModel.SoundsOn):
+            case nameof(MainViewModel.SoundsOn) or nameof(MainViewModel.SoundVolume):
                 ApplySounds();
                 break;
             case nameof(MainViewModel.IsCreating):
@@ -52,33 +63,48 @@ public sealed partial class MainWindow : WindowEx
                 ActivityPercentText.Text = "0%";
                 break;
             case nameof(MainViewModel.ActivityPercent):
-                _percentTick.Start();
+                _roll.Start();
                 ShowTaskbarProgress(ViewModel.ActivityPercent);
+                break;
+            case nameof(MainViewModel.Runtime):
+                _roll.Start();
+                break;
+            case nameof(MainViewModel.ErrorMessage) or nameof(MainViewModel.StatusMessage):
+                ShowMessage();
                 break;
         }
     }
 
-    // The controls' own built-in sounds, placed left to right by where the control is on screen.
+    // The controls' own built-in sounds, placed left to right by where the control is on screen, and the app's own.
     private void ApplySounds()
     {
         ElementSoundPlayer.State = ViewModel.SoundsOn ? ElementSoundPlayerState.On : ElementSoundPlayerState.Off;
         ElementSoundPlayer.SpatialAudioMode = ElementSpatialAudioMode.On;
+        ElementSoundPlayer.Volume = ViewModel.SoundVolume;
+        (Sounds.On, Sounds.Volume) = (ViewModel.SoundsOn, ViewModel.SoundVolume);
     }
 
-    // The percentage counts up to its new value over a few frames instead of jumping.
-    private void RollPercent()
+    // The figures the app shows that change in steps (how far a job has got, the running time, what has been
+    // spent) count up to their new value over a few frames instead of jumping.
+    private void Roll()
     {
-        var target = ViewModel.ActivityPercent;
-        _shownPercent = Math.Abs(target - _shownPercent) < 0.5 ? target : _shownPercent + (target - _shownPercent) * 0.25;
+        var (percent, runtime, spent) = (ViewModel.ActivityPercent, ViewModel.Runtime.TotalSeconds, (double)ViewModel.Spent);
+        _shownPercent = Towards(_shownPercent, percent, 0.5);
+        _shownRuntime = Towards(_shownRuntime, runtime, 0.5);
+        _shownSpent = Towards(_shownSpent, spent, 0.004);
         ActivityPercentText.Text = $"{_shownPercent:0}%";
-        if (_shownPercent == target) _percentTick.Stop();
+        MetaText.Text = ViewModel.MetaText(_shownRuntime, _shownSpent);
+        if (_shownPercent == percent && _shownRuntime == runtime && _shownSpent == spent) _roll.Stop();
+
+        static double Towards(double shown, double target, double near) =>
+            Math.Abs(target - shown) < near ? target : shown + (target - shown) * 0.25;
     }
 
     /// <summary>A long job has ended: clear the taskbar bar, chime, and say so with a notification when the window is not in front.</summary>
     private void OnJobFinished(string job, bool finished)
     {
         ShowTaskbarProgress(null);
-        ElementSoundPlayer.Play(finished ? ElementSoundKind.Invoke : ElementSoundKind.Hide); // silent when sounds are off
+        Sounds.Play(finished ? Cue.Finished : Cue.Stopped); // silent when sounds are off
         if (_inFront) return;
         try
         {
@@ -104,6 +130,55 @@ public sealed partial class MainWindow : WindowEx
         args.Handled = true;
     }
 
+    // The one message bar: an error when there is one, otherwise the outcome of the last action. Set here and not
+    // by binding, because a binding is not told when a message is cleared.
+    private void ShowMessage()
+    {
+        var (error, status) = (ViewModel.ErrorMessage, ViewModel.StatusMessage);
+        MessageBar.Severity = error is null ? InfoBarSeverity.Success : InfoBarSeverity.Error;
+        MessageBar.Title = error is null ? "" : "Something went wrong";
+        MessageBar.Message = error ?? status ?? "";
+        MessageBar.IsOpen = !string.IsNullOrEmpty(error ?? status);
+    }
+
+    // Closed with its own button, the bar forgets what it said, so the same message said again shows again.
+    private void OnMessageClosed(InfoBar sender, InfoBarClosedEventArgs args)
+    {
+        if (args.Reason == InfoBarCloseReason.CloseButton) ViewModel.DismissMessages();
+    }
+
+    // ---- The deck: cards glide to a new place, and a selected card's picture grows into the inspector ----
+
+    private void OnCardShown(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.InRecycleQueue) return;
+        // Whenever the layout gives this card a new position (a reorder, an undo, a card added before it), it travels there.
+        var visual = ElementCompositionPreview.GetElementVisual(args.ItemContainer);
+        var glide = Compositor.CreateVector3KeyFrameAnimation();
+        glide.Target = "Offset";
+        glide.InsertExpressionKeyFrame(1f, "this.FinalValue");
+        glide.Duration = TimeSpan.FromMilliseconds(260);
+        var moves = Compositor.CreateImplicitAnimationCollection();
+        moves["Offset"] = glide;
+        visual.ImplicitAnimations = moves;
+    }
+
+    private void OnCardSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (ClipDeck.SelectedItem is not ClipViewModel { ThumbnailPath.Length: > 0 } card || !Inspector.ShowsPicture || ClipDeck.ContainerFromItem(card) is null) return;
+        try
+        {
+            ClipDeck.PrepareConnectedAnimation("clip", card, "CardRoot");
+            ConnectedAnimationService.GetForCurrentView().GetAnimation("clip")?.TryStart(Inspector.Picture);
+        }
+        catch (Exception ex) when (ex is COMException or ArgumentException or InvalidOperationException)
+        {
+            // The flourish needs the card on screen and laid out; without it the picture simply appears.
+        }
+    }
+
+    // ---- Questions the view model asks the user ----
+
     private async Task<bool> ConfirmAsync(string title, string message, string action)
     {
         var dialog = new ContentDialog
@@ -118,6 +193,21 @@ public sealed partial class MainWindow : WindowEx
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
+    private async Task<string?> AskAsync(string title, string current)
+    {
+        var box = new TextBox { Text = current, SelectionStart = 0, SelectionLength = current.Length };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = title,
+            Content = box,
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary && box.Text.Trim() is { Length: > 0 } text ? text : null;
+    }
+
     private async void OnVisualMix(object sender, RoutedEventArgs e)
     {
         var dialog = new Views.MixDialog(ViewModel.Mix) { XamlRoot = Content.XamlRoot };
@@ -130,8 +220,6 @@ public sealed partial class MainWindow : WindowEx
 
     private async void OnHostSetup(object sender, RoutedEventArgs e) =>
         await new Views.HostSetupDialog(ViewModel) { XamlRoot = Content.XamlRoot }.ShowAsync();
-
-    public static bool HasText(string? text) => !string.IsNullOrEmpty(text);
 
     // ---- Progress on the taskbar button, so a long job can be watched with the window hidden ----
 

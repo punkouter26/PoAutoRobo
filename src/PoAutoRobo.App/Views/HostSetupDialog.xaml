@@ -17,12 +17,12 @@
             <Button Content="Cancel" Command="{x:Bind ViewModel.MakeHostCandidatesCancelCommand}" Visibility="{x:Bind ViewModel.MakeHostCandidatesCommand.IsRunning, Mode=OneWay}" />
             <Button Content="Use my own image…" Click="OnPickOwn" />
         </StackPanel>
-        <TextBlock Text="Making candidates creates 3 pictures (about $0.05)." Style="{StaticResource QuietText}" />
+        <TextBlock Text="{x:Bind ViewModel.HostCandidatesCost, Mode=OneWay}" Style="{StaticResource QuietText}" />
         <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.MakeHostCandidatesCommand.IsRunning, Mode=OneWay}" />
         <GridView x:Name="Candidates" ItemsSource="{x:Bind ViewModel.HostCandidates}" SelectionMode="Single" SelectionChanged="OnSelectionChanged" MaxHeight="300">
             <GridView.ItemTemplate>
                 <DataTemplate x:DataType="x:String">
-                    <Image Width="290" Height="193" Stretch="UniformToFill" Source="{x:Bind local:ClipCard.ToImage((x:String))}" />
+                    <Image Width="290" Height="193" Stretch="UniformToFill" Source="{x:Bind local:ClipCard.ToImage((x:String))}" AutomationProperties.Name="Host candidate" />
                 </DataTemplate>
             </GridView.ItemTemplate>
         </GridView>

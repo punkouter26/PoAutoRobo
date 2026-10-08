@@ -1,5 +1,3 @@
-using PoAutoRobo.Core.Models;
-using PoAutoRobo.Core.Pipeline;
 
 namespace PoAutoRobo.Core.Tests;
 

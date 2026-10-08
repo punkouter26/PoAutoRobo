@@ -2,9 +2,6 @@ using System.Net;
 using System.Text;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using PoAutoRobo.Core.Models;
-using PoAutoRobo.Core.Pipeline;
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 
@@ -195,12 +192,12 @@ public sealed class MediaCacheTests : IDisposable
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
         var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault, AppSettings.SignedInUser), Ct);
-        var images = new AzureImageGen(settings, AzureImageGen.NewHttpClient()) { Quality = "low" };
+        var images = new AzureImageGen(settings, AzureImageGen.NewHttpClient());
         var plain = Path.Combine(_folder, "plain.png");
         var withReference = Path.Combine(_folder, "ref.png");
 
-        await images.GenerateAsync(new ImageRequest("Comic panel: a friendly cartoon humanoid robot waving in a robotics lab.", null), plain, Ct);
-        await images.GenerateAsync(new ImageRequest("Comic panel: the same robot pointing at a whiteboard.", plain), withReference, Ct);
+        await images.GenerateAsync(new ImageRequest("Comic panel: a friendly cartoon humanoid robot waving in a robotics lab.", null, Quality: "low"), plain, Ct);
+        await images.GenerateAsync(new ImageRequest("Comic panel: the same robot pointing at a whiteboard.", plain, Quality: "low"), withReference, Ct);
 
         Assert.True(new FileInfo(plain).Length > 10_000);
         Assert.True(new FileInfo(withReference).Length > 10_000);

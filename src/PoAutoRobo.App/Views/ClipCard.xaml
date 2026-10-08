@@ -3,41 +3,28 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:PoAutoRobo.App.Views"
+    xmlns:app="using:PoAutoRobo.App"
     PointerEntered="OnPointerEntered" PointerExited="OnPointerExited">
-    <!-- Compact on purpose: the card shows a clip's state, and the inspector beside the deck changes it. -->
-    <StackPanel Width="176" Spacing="4" Padding="4" ToolTipService.ToolTip="{x:Bind Card.Heading, Mode=OneWay}">
-        <Grid Height="99" CornerRadius="4" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
+    <!-- Compact on purpose, and always the same height: the card shows a clip's state, and the inspector beside the deck changes it. -->
+    <StackPanel Width="{StaticResource CardWidth}" Spacing="4" Padding="4" ToolTipService.ToolTip="{x:Bind Card.Heading, Mode=OneWay}">
+        <Grid Height="{StaticResource CardPictureHeight}" CornerRadius="4" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
             <Image Source="{x:Bind local:ClipCard.ToImage(Card.ThumbnailPath), Mode=OneWay}" Stretch="UniformToFill" AutomationProperties.Name="Clip picture" />
+            <!-- One mark for everything worth a second look; pointing at it says what -->
             <Border Style="{StaticResource Badge}" HorizontalAlignment="Left" VerticalAlignment="Top" Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
-                    Visibility="{x:Bind Card.IsStale, Mode=OneWay}">
-                <TextBlock Text="Out of date" Style="{ThemeResource CaptionTextBlockStyle}" />
+                    Visibility="{x:Bind app:Ui.ShowText(Card.Warnings), Mode=OneWay}" ToolTipService.ToolTip="{x:Bind Card.Warnings, Mode=OneWay}"
+                    AutomationProperties.Name="{x:Bind Card.Warnings, Mode=OneWay}">
+                <FontIcon Glyph="&#xE7BA;" FontSize="12" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
             </Border>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
-                <Border Style="{StaticResource Badge}" Margin="6,6,0,6" Visibility="{x:Bind Card.IsOffScreen, Mode=OneWay}"
-                        ToolTipService.ToolTip="The host is heard but not seen in this clip's picture.">
-                    <TextBlock Text="Voice only" Style="{ThemeResource CaptionTextBlockStyle}" />
-                </Border>
-                <Border Style="{StaticResource Badge}" ToolTipService.ToolTip="Depth of explanation: A accessible, B applied, C advanced. Change it in the inspector.">
-                    <TextBlock Text="{x:Bind Card.TierText, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" FontWeight="SemiBold" />
-                </Border>
-            </StackPanel>
+            <!-- The clip's state in one strip: depth, picture type, length -->
             <Border Style="{StaticResource Badge}" HorizontalAlignment="Left" VerticalAlignment="Bottom"
-                    ToolTipService.ToolTip="This clip's picture type. Change it in the inspector or with Visual mix.">
-                <TextBlock Text="{x:Bind Card.KindText, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" />
+                    ToolTipService.ToolTip="Depth of explanation (A accessible, B applied, C advanced), picture type, and length: measured once the voice is recorded, estimated from the word count until then.">
+                <TextBlock Text="{x:Bind Card.Summary, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis" />
             </Border>
-            <Border Style="{StaticResource Badge}" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    ToolTipService.ToolTip="Length of this clip: measured once its voice is recorded, estimated from the word count until then.">
-                <TextBlock Text="{x:Bind Card.DurationText, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" />
-            </Border>
-            <!-- Something is being made for this clip right now -->
-            <Grid Background="{ThemeResource SmokeFillColorDefaultBrush}" Visibility="{x:Bind Card.IsBusy, Mode=OneWay}">
-                <ProgressRing IsActive="{x:Bind Card.IsBusy, Mode=OneWay}" Width="32" Height="32" />
+            <!-- Something is being made for this clip right now; a render says how far it has got -->
+            <Grid Background="{ThemeResource SmokeFillColorDefaultBrush}" Visibility="{x:Bind Card.Working, Mode=OneWay}">
+                <ProgressRing IsActive="{x:Bind Card.Working, Mode=OneWay}" IsIndeterminate="{x:Bind Card.ProgressUnknown, Mode=OneWay}" Value="{x:Bind Card.Progress, Mode=OneWay}" Width="32" Height="32" />
             </Grid>
         </Grid>
         <TextBlock Text="{x:Bind Card.Heading, Mode=OneWay}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
-        <TextBlock Text="{x:Bind Card.DurationWarning, Mode=OneWay}" Visibility="{x:Bind Card.HasDurationWarning, Mode=OneWay}" Style="{StaticResource CautionText}" />
-        <TextBlock Text="{x:Bind Card.Unverified, Mode=OneWay}" Visibility="{x:Bind Card.HasUnverified, Mode=OneWay}" Style="{StaticResource CautionText}"
-                   MaxLines="2" TextTrimming="CharacterEllipsis"
-                   ToolTipService.ToolTip="{x:Bind Card.Unverified, Mode=OneWay}" />
     </StackPanel>
 </UserControl>

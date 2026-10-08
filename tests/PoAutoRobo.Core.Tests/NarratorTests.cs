@@ -1,5 +1,3 @@
-using PoAutoRobo.Core.Pipeline;
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 

@@ -1,8 +1,5 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using PoAutoRobo.Core.Models;
-using PoAutoRobo.Core.Pipeline;
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 
@@ -16,6 +13,7 @@ public sealed class FfmpegFactAttribute : FactAttribute
     }
 }
 
+[Trait("Category", "Integration")] // these run FFmpeg for real
 public sealed class EndToEndTests : IDisposable
 {
     private static readonly ExportPreset Small = new(640, 360, 30); // small frame keeps the test quick
@@ -35,7 +33,7 @@ public sealed class EndToEndTests : IDisposable
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=800x600", "-frames:v", "1", image], _folder, null, null, default);
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=320x240:r=25:d=1", "-pix_fmt", "yuv420p", video], _folder, null, null, default);
 
-        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], EpisodeLength.Full, default);
+        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", Subject.UnitreeR1, [], EpisodeLength.Full, default);
         static Clip Short(Clip c, VisualSpec visual) => c with
         {
             Visual = visual,
@@ -58,7 +56,15 @@ public sealed class EndToEndTests : IDisposable
         var episode = await ThreeClipEpisodeAsync();
         var progress = new List<RenderProgress>();
 
-        var output = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), new SyncProgress<RenderProgress>(progress.Add), default);
+        // The user's footage has no picture of its own until a frame is taken from it; that frame then stands for the clip.
+        var footage = episode.Clips[2];
+        Assert.Null(footage.Picture());
+        var poster = await Builder.PosterAsync(footage.Visual.UserVideoPath!, default);
+        Assert.Equal(poster, footage.Picture());
+        Assert.True(new FileInfo(poster).Length > 0);
+        Assert.DoesNotContain(poster, Builder.UnusedMedia(episode, _folder)); // tidying up never takes it away
+
+        var output = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), new Relay<RenderProgress>(progress.Add), default);
 
         var probe = await Ffmpeg.ProbeAsync(["-v", "error", "-show_entries", "stream=codec_name,width,height,r_frame_rate:format=duration", "-of", "default=nw=1", output], default);
         Assert.Contains("codec_name=h264", probe);
@@ -102,7 +108,7 @@ public sealed class EndToEndTests : IDisposable
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_SLOW_OUT") is not { Length: > 0 } keep)
             return;
-        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], EpisodeLength.Full, default);
+        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", Subject.UnitreeR1, [], EpisodeLength.Full, default);
 
         var output = await Builder.ExportAsync(episode, _folder, ExportPreset.Hd30, new CaptionStyle(), null, default);
 

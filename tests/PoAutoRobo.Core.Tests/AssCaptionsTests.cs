@@ -1,7 +1,4 @@
 using System.Globalization;
-using PoAutoRobo.Core.Models;
-using PoAutoRobo.Core.Pipeline;
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 

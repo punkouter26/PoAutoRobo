@@ -15,7 +15,7 @@ indent_size = 4
 indent_size = 2
 
 [*.cs]
-# The conventions in SPEC.md section 6, enforced by `dotnet format --verify-no-changes` and by the build.
+# The code conventions, enforced by `dotnet format --verify-no-changes` and by the build.
 csharp_style_namespace_declarations = file_scoped:warning
 dotnet_sort_system_directives_first = true
 csharp_using_directive_placement = outside_namespace:warning

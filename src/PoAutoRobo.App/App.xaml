@@ -27,6 +27,13 @@
                 <Setter Property="CornerRadius" Value="4" />
                 <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
             </Style>
+            <!-- The heading over a group of controls. -->
+            <Style x:Key="SectionHeading" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                <Setter Property="Margin" Value="0,8,0,0" />
+            </Style>
+            <!-- A clip card's size, shared with the placeholder cards shown while a script is written. -->
+            <x:Double x:Key="CardWidth">176</x:Double>
+            <x:Double x:Key="CardPictureHeight">99</x:Double>
             <!-- A square button that shows only an icon. -->
             <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                 <Setter Property="Width" Value="40" />

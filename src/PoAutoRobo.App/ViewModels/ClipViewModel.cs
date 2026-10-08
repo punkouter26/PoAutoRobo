@@ -1,6 +1,4 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using PoAutoRobo.Core.Models;
-using PoAutoRobo.Core.Pipeline;
 
 namespace PoAutoRobo.App.ViewModels;
 
@@ -14,14 +12,15 @@ public sealed record Choice<T>(string Label, T Value)
 /// <param name="pickTier">Switches depth; the owner writes the depth first when the clip does not have it yet.</param>
 public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edit, Action<ClipViewModel, Tier> pickTier) : ObservableObject
 {
+    // AI video is not offered: until a video service is wired in, such a clip is drawn as one still.
     public static Choice<VisualKind>[] KindChoices { get; } =
     [
-        new("Still panel", VisualKind.Still), new("Panel sequence", VisualKind.MultiPanel),
-        new("AI video", VisualKind.AiVideo), new("Title card", VisualKind.TitleCard),
+        new("Still panel", VisualKind.Still), new("Panel sequence", VisualKind.MultiPanel), new("Title card", VisualKind.TitleCard),
     ];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Heading), nameof(DurationText), nameof(KindText), nameof(TierIndex), nameof(TierText), nameof(HostVisible), nameof(IsOffScreen), nameof(Dialogue), nameof(Pose), nameof(IsStale), nameof(HasUserVideo), nameof(DurationWarning), nameof(HasDurationWarning), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath))]
+    [NotifyPropertyChangedFor(nameof(Title), nameof(Heading), nameof(Summary), nameof(Warnings), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(VisualPrompt),
+        nameof(IsStale), nameof(HasUserVideo), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath))]
     public partial Clip Clip { get; set; } = clip;
 
     [ObservableProperty]
@@ -30,51 +29,70 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
 
     /// <summary>How long the recorded narration really runs; null until this wording has been recorded.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DurationText))]
+    [NotifyPropertyChangedFor(nameof(Summary))]
     public partial TimeSpan? Measured { get; set; }
 
-    /// <summary>Figures and code names in the dialogue that are not in the episode's sources; null when there are none.</summary>
+    /// <summary>Figures and code names in the dialogue that are not in the episode's sources; empty when there are none.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasUnverified))]
-    public partial string? Unverified { get; set; }
+    [NotifyPropertyChangedFor(nameof(Warnings))]
+    public partial string Unverified { get; set; } = "";
 
     /// <summary>True while something is being made for this clip: a picture, a recording or a new depth.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Working))]
     public partial bool IsBusy { get; set; }
 
+    /// <summary>How far this clip's picture has got in the render under way, 0 to 100; 0 when it is not being drawn.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Working), nameof(ProgressUnknown))]
+    public partial double Progress { get; set; }
+
+    /// <summary>Something is being made for this clip right now; the card shows a ring.</summary>
+    public bool Working => IsBusy || Progress is > 0 and < 100;
+
+    /// <summary>The ring spins without a figure until the render says how far it has got.</summary>
+    public bool ProgressUnknown => Progress <= 0;
+
     public Guid Id => Clip.Id;
+
+    public string Title => Clip.Title;
 
     public string Heading => $"{Number} · {Clip.Title}";
 
     /// <summary>The recorded length when there is one, otherwise an estimate from the word count.</summary>
     public TimeSpan Duration => Measured ?? Durations.Estimate(Clip.Active.Dialogue);
 
-    public string DurationText => Measured is { } real ? $"{real.TotalSeconds:0} s" : $"about {Duration.TotalSeconds:0} s";
+    /// <summary>The clip's state in one line for its card: depth, picture type and length.</summary>
+    public string Summary
+    {
+        get
+        {
+            var kind = KindChoices.FirstOrDefault(k => k.Value == Clip.Visual.Kind)?.Label ?? (HasUserVideo ? "My video" : "Still panel");
+            var length = Measured is { } real ? $"{real.TotalSeconds:0} s" : $"about {Duration.TotalSeconds:0} s";
+            return $"{Clip.ActiveTier} · {kind} · {length}{(Clip.HostVisible ? "" : " · voice only")}";
+        }
+    }
 
-    /// <summary>Set when the dialogue runs outside 15 to 60 seconds. A flag only: the clip still exports.</summary>
-    public string? DurationWarning => Durations.Warning(Clip);
-
-    public bool HasDurationWarning => DurationWarning is not null;
-
-    public bool HasUnverified => Unverified is not null;
+    /// <summary>Everything about this clip worth a second look, one to a line; empty when there is nothing.</summary>
+    public string Warnings =>
+        string.Join('\n', new[] { IsStale ? "The picture is out of date." : "", Durations.Warning(Clip) ?? "", Unverified }.Where(line => line.Length > 0));
 
     public string Dialogue => Clip.Active.Dialogue;
 
     public string Pose => Clip.Active.Pose;
 
+    public string VisualPrompt => Clip.Active.VisualPrompt;
+
     public bool IsStale => Clip.Visual.Stale;
 
-    /// <summary>The clip's generated picture, when it has one that is still on disk.</summary>
-    public string? ThumbnailPath =>
-        Clip.Visual.MediaPaths?.FirstOrDefault() is { } path && path.EndsWith(".png", StringComparison.OrdinalIgnoreCase) && File.Exists(path) ? path : null;
+    /// <summary>The clip's generated picture, when it has one that is still on disk; empty when it has none.</summary>
+    public string ThumbnailPath => Clip.Picture() ?? "";
 
     public bool HasUserVideo => Clip.Visual.Kind == VisualKind.UserVideo;
 
-    public string KindText => KindChoices.FirstOrDefault(k => k.Value == Clip.Visual.Kind)?.Label ?? "My video";
-
     public bool CanPickKind => !HasUserVideo;
 
-    /// <summary>Picture type as the inspector's list shows it; -1 for the user's own video, which is not in the list.</summary>
+    /// <summary>Picture type as the inspector's list shows it; -1 for a kind that is not in the list.</summary>
     public int KindIndex
     {
         get => Array.FindIndex(KindChoices, k => k.Value == Clip.Visual.Kind);
@@ -84,8 +102,6 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
                 edit(e => EpisodeEditor.SetKind(e, Id, KindChoices[value].Value));
         }
     }
-
-    public string TierText => Clip.ActiveTier.ToString();
 
     public int TierIndex
     {
@@ -97,6 +113,9 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
                 pickTier(this, (Tier)value);
         }
     }
+
+    /// <summary>A picture for this clip has appeared on disk without the clip itself changing.</summary>
+    public void PictureChanged() => OnPropertyChanged(nameof(ThumbnailPath));
 
     /// <summary>Puts the depth selector back on the depth the clip is really on, after a switch that did not happen.</summary>
     public void ResetTierSelector() => OnPropertyChanged(nameof(TierIndex));
@@ -110,8 +129,6 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
                 edit(e => EpisodeEditor.SetHostVisible(e, Id, value));
         }
     }
-
-    public bool IsOffScreen => !Clip.HostVisible;
 
     public override string ToString() => Heading; // what a screen reader calls the card
 }

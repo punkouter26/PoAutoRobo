@@ -3,8 +3,10 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
-    xmlns:models="using:PoAutoRobo.Core.Models"
+    xmlns:models="using:PoAutoRobo.Core.Library"
     xmlns:vm="using:PoAutoRobo.App.ViewModels"
+    xmlns:local="using:PoAutoRobo.App.Views"
+    xmlns:app="using:PoAutoRobo.App"
     Unloaded="OnUnloaded">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Padding="16" Spacing="12" Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay}">
@@ -13,8 +15,10 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="InspectorHeading" Text="{x:Bind ViewModel.SelectedClip.Heading, Mode=OneWay}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <TextBox x:Name="TitleBox" Text="{x:Bind ViewModel.SelectedClip.Title, Mode=OneWay}" LostFocus="OnTitleLostFocus" VerticalAlignment="Center" AutomationProperties.Name="Clip title"
+                         ToolTipService.ToolTip="This clip's title. It is shown on a title card and in the chapter list." />
                 <Button x:Name="MoveEarlierButton" Grid.Column="1" Style="{StaticResource IconButton}" Command="{x:Bind ViewModel.MoveEarlierCommand}" AutomationProperties.Name="Move earlier"
                         ToolTipService.ToolTip="Move this clip one place towards the start (Alt+Left). You can also drag the cards.">
                     <Button.KeyboardAccelerators>
@@ -29,10 +33,26 @@
                     </Button.KeyboardAccelerators>
                     <SymbolIcon Symbol="Forward" />
                 </Button>
+                <Button x:Name="ClipMoreButton" Grid.Column="3" Style="{StaticResource IconButton}" AutomationProperties.Name="More actions for this clip" ToolTipService.ToolTip="Add, copy or delete a clip">
+                    <SymbolIcon Symbol="More" />
+                    <Button.Flyout>
+                        <MenuFlyout Placement="Bottom">
+                            <MenuFlyoutItem Text="Add a clip after this one" Command="{x:Bind ViewModel.AddClipCommand}" />
+                            <MenuFlyoutItem Text="Make a copy" Command="{x:Bind ViewModel.DuplicateClipCommand}" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Text="Delete this clip" Command="{x:Bind ViewModel.RemoveClipCommand}" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
             </Grid>
 
-            <!-- Script step: the depth, the words and the voice -->
-            <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.IsScriptStep, Mode=OneWay}">
+            <controls:Segmented x:Name="TabSelector" SelectedIndex="{x:Bind ViewModel.InspectorTab, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="What to edit">
+                <controls:SegmentedItem Content="Words" />
+                <controls:SegmentedItem Content="Picture" />
+            </controls:Segmented>
+
+            <!-- Words: the depth, the dialogue and the voice -->
+            <StackPanel Spacing="12" Visibility="{x:Bind app:Ui.ShowIf(ViewModel.InspectorTab, 0), Mode=OneWay}">
                 <controls:Segmented x:Name="TierSelector" SelectedIndex="{x:Bind ViewModel.SelectedClip.TierIndex, Mode=TwoWay}" HorizontalAlignment="Stretch"
                                     AutomationProperties.Name="Depth of explanation"
                                     ToolTipService.ToolTip="How deep this clip goes. Every clip starts on B; A and C are written the first time you pick them, which takes a few seconds.">
@@ -45,12 +65,12 @@
                          Text="{x:Bind ViewModel.DraftDialogue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          LostFocus="OnDialogueLostFocus" />
                 <TextBlock x:Name="DraftStatsText" Text="{x:Bind ViewModel.DraftStats, Mode=OneWay}" Style="{StaticResource QuietText}" Margin="0,-6,0,0" />
-                <!-- Said here, as you type, and not in the error bar after you click away -->
-                <TextBlock x:Name="DraftProblemText" Text="{x:Bind ViewModel.DraftProblem, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasDraftProblem, Mode=OneWay}"
+                <!-- Said here, as you type, and not in the message bar after you click away -->
+                <TextBlock x:Name="DraftProblemText" Text="{x:Bind ViewModel.DraftProblem, Mode=OneWay}" Visibility="{x:Bind app:Ui.ShowText(ViewModel.DraftProblem), Mode=OneWay}"
                            Style="{StaticResource CautionText}" Margin="0,-6,0,0" AutomationProperties.LiveSetting="Polite" />
-                <TextBlock Text="{x:Bind ViewModel.SelectedClip.Unverified, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedClip.HasUnverified, Mode=OneWay}"
+                <TextBlock Text="{x:Bind ViewModel.SelectedClip.Unverified, Mode=OneWay}" Visibility="{x:Bind app:Ui.ShowText(ViewModel.SelectedClip.Unverified), Mode=OneWay}"
                            Style="{StaticResource CautionText}" Margin="0,-6,0,0"
-                           ToolTipService.ToolTip="Figures and code names the script uses that appear nowhere in the passages it was written from. Check them before publishing." />
+                           ToolTipService.ToolTip="Figures and code names the script uses that appear nowhere in what it was written from: the passages below, or the topic you gave. Check them before publishing." />
                 <Button x:Name="AuditionButton" ToolTipService.ToolTip="Hear this clip in the host&#39;s voice before building the video." Content="Audition audio"
                         HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.AuditionCommand}" />
                 <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.AuditionCommand.IsRunning, Mode=OneWay}" />
@@ -74,10 +94,16 @@
                 </Expander>
             </StackPanel>
 
-            <!-- Pictures step: what this clip shows -->
-            <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.IsPicturesStep, Mode=OneWay}">
+            <!-- Picture: what this clip shows -->
+            <StackPanel x:Name="PicturePane" Spacing="12" Visibility="{x:Bind app:Ui.ShowIf(ViewModel.InspectorTab, 1), Mode=OneWay}">
+                <Border CornerRadius="4" Background="{ThemeResource ControlAltFillColorSecondaryBrush}" Visibility="{x:Bind app:Ui.ShowText(ViewModel.SelectedClip.ThumbnailPath), Mode=OneWay}">
+                    <Image x:Name="PictureImage" Source="{x:Bind local:ClipCard.ToImage(ViewModel.SelectedClip.ThumbnailPath), Mode=OneWay}" Stretch="Uniform" AutomationProperties.Name="This clip's picture" />
+                </Border>
                 <InfoBar IsOpen="{x:Bind ViewModel.SelectedClip.IsStale, Mode=OneWay}" IsClosable="False" Severity="Warning"
-                         Title="Picture out of date" Message="The dialogue now describes something different. Generate the picture again when you are ready." />
+                         Title="Picture out of date" Message="The words or the description now say something different. Generate the picture again when you are ready." />
+                <TextBox x:Name="PromptBox" Header="What the picture shows" Text="{x:Bind ViewModel.SelectedClip.VisualPrompt, Mode=OneWay}" LostFocus="OnPromptLostFocus"
+                         AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="140" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ToolTipService.ToolTip="One sentence describing this clip's picture. Change it, then generate the picture again." />
                 <Border ToolTipService.ToolTip="What the host is doing in this clip&#39;s picture, taken from the subject." Padding="10,6" CornerRadius="12" HorizontalAlignment="Left"
                         Background="{ThemeResource ControlFillColorSecondaryBrush}">
                     <TextBlock TextWrapping="Wrap">
@@ -91,7 +117,7 @@
                 <ComboBox x:Name="KindBox" ToolTipService.ToolTip="Set this clip&#39;s picture type yourself. A clip set by hand keeps its type when the visual mix changes." Header="Picture type"
                           HorizontalAlignment="Stretch" IsEnabled="{x:Bind ViewModel.SelectedClip.CanPickKind, Mode=OneWay}"
                           ItemsSource="{x:Bind vm:ClipViewModel.KindChoices}" SelectedIndex="{x:Bind ViewModel.SelectedClip.KindIndex, Mode=TwoWay}" />
-                <Button x:Name="GeneratePictureButton" ToolTipService.ToolTip="Draw this one clip&#39;s picture now (a few cents). An identical request reuses the saved picture free." Content="Generate this clip&#39;s picture"
+                <Button x:Name="GeneratePictureButton" ToolTipService.ToolTip="Draw this one clip&#39;s picture now (a cent or two). An identical request reuses the saved picture free." Content="Generate this clip&#39;s picture"
                         HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.GeneratePictureCommand}" />
 
                 <!-- The user's own footage: drop a file or pick one; the narration is then fitted to its length -->

@@ -11,4 +11,12 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
   </PropertyGroup>
+  <!-- The core is grouped by what each part does. Every project sees all five parts, so no file lists them. -->
+  <ItemGroup>
+    <Using Include="PoAutoRobo.Core.Library" />
+    <Using Include="PoAutoRobo.Core.Script" />
+    <Using Include="PoAutoRobo.Core.Voice" />
+    <Using Include="PoAutoRobo.Core.Pictures" />
+    <Using Include="PoAutoRobo.Core.Render" />
+  </ItemGroup>
 </Project>

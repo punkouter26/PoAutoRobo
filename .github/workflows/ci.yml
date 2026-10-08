@@ -5,6 +5,10 @@ on:
     branches: [master]
   pull_request:
 
+# The job only reads the code; it is given nothing more.
+permissions:
+  contents: read
+
 jobs:
   build:
     # WinUI 3 and the Windows voice used by the offline narrator only exist on Windows.
@@ -14,16 +18,23 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - name: Build (warnings are errors)
-        run: dotnet build PoAutoRobo.sln --configuration Release
-      # No Azure sign-in here, so everything runs on the mocks. Tests that need FFmpeg skip themselves when it is absent.
-      - name: Test
-        run: dotnet test PoAutoRobo.sln --configuration Release --no-build
+      # First, because it is the quickest thing that can fail.
       - name: Formatting
-        run: dotnet format PoAutoRobo.sln --verify-no-changes
+        run: dotnet format PoAutoRobo.slnx --verify-no-changes
+      - name: Build (warnings are errors)
+        run: dotnet build PoAutoRobo.slnx --configuration Release
+      # Tests that render video skip themselves without FFmpeg, so it is installed for them to really run.
+      - name: FFmpeg
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg -y --no-progress }
+          ffmpeg -version | Select-Object -First 1
+      # No Azure sign-in here, so everything runs on the mocks.
+      - name: Test
+        run: dotnet test PoAutoRobo.slnx --configuration Release --no-build
       - name: Known-vulnerable packages
         shell: pwsh
         run: |
-          $report = dotnet list PoAutoRobo.sln package --vulnerable --include-transitive | Out-String
+          $report = dotnet list PoAutoRobo.slnx package --vulnerable --include-transitive | Out-String
           $report
           if ($report -match 'has the following vulnerable packages') { exit 1 }

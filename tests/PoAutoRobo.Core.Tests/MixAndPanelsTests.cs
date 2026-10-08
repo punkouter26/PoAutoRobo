@@ -1,9 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using NSubstitute;
-using PoAutoRobo.Core.Models;
-using PoAutoRobo.Core.Pipeline;
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 

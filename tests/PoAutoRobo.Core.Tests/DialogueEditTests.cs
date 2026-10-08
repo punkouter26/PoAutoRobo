@@ -1,7 +1,4 @@
 using NSubstitute;
-using PoAutoRobo.Core.Models;
-using PoAutoRobo.Core.Pipeline;
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 
@@ -48,6 +45,11 @@ public sealed class DialogueEditTests : IDisposable
         var same = await EpisodeEditor.EditDialogueAsync(_episode, Target.Id, "  " + Target.Active.Dialogue + "\n", _writer, Ct);
 
         Assert.Same(_episode, same);
+        // A touch-up that keeps nearly every word is plainly the same subject: the picture stays, and no paid question is asked.
+        var line = "The robot keeps its balance by making tiny corrections many times every second without thinking.";
+        var settled = EpisodeEditor.Update(_episode, Target.Id, c => EpisodeEditor.WithDialogue(c, line));
+        var touched = await EpisodeEditor.EditDialogueAsync(settled, Target.Id, line.Replace("without thinking.", "without thinking, really."), _writer, Ct);
+        Assert.False(touched.Clips[1].Visual.Stale);
         await _writer.DidNotReceiveWithAnyArgs().CoreChangedAsync(default!, default!, default);
         await Assert.ThrowsAsync<ArgumentException>(() => EpisodeEditor.EditDialogueAsync(_episode, Target.Id, "   ", _writer, Ct));
     }

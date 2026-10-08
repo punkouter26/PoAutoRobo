@@ -1,4 +1,3 @@
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 
@@ -108,6 +107,27 @@ public sealed class TrendFeedTests
         Assert.Contains(cards, c => c.Title == "Ask HN: humanoid robot sims?"); // not about the R1, and kept
         Assert.DoesNotContain(cards, c => c.Title == "Unitree R1 firmware");    // its link is not a web address
         Assert.Empty(await new TrendFeed((_, _) => throw new HttpRequestException("down")).GetGeneralAsync(Ct));
+
+        // A topic the user has typed is looked up in an encyclopedia and in the news: made safe for an address, cut when
+        // it is a whole pasted page, and with the filler words left out of the news search, which wants every word matched.
+        var asked = new List<string>();
+        const string wikipedia = """{ "query": { "search": [ { "title": "Hamburger (food)", "snippet": "A <span class=\"searchmatch\">burger</span> is grilled &amp; served." } ] } }""";
+        var search = new TrendFeed((url, _) =>
+        {
+            lock (asked) asked.Add(url);
+            return Task.FromResult(url.Contains("wikipedia") ? wikipedia : HackerNews);
+        });
+
+        var found = await search.SearchAsync("how to grill\n a burger & " + new string('x', 500), Ct);
+
+        Assert.Equal(("Hamburger (food)", "A burger is grilled & served.", "https://en.wikipedia.org/wiki/Hamburger_%28food%29"), (found[0].Title, found[0].Summary, found[0].Url));
+        Assert.Contains(found, c => c.Title == "Ask HN: humanoid robot sims?");
+        Assert.Contains(asked, url => url.Contains("srsearch=how%20to%20grill%20a%20burger%20%26%20xxx"));
+        Assert.Contains(asked, url => url.Contains("query=grill%20burger%20xxx"));
+        Assert.All(asked, url => Assert.True(url.Length < 350));
+        // One source down leaves the other's results; both down leaves none.
+        Assert.Single(await new TrendFeed((url, _) => url.Contains("wikipedia") ? Task.FromResult(wikipedia) : throw new HttpRequestException("down")).SearchAsync("burgers", Ct));
+        Assert.Empty(await new TrendFeed((_, _) => throw new HttpRequestException("down")).SearchAsync("burgers", Ct));
     }
 
     [Fact]

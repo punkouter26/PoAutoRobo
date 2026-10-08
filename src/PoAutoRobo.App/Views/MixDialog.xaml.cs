@@ -1,6 +1,5 @@
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using PoAutoRobo.Core.Models;
 
 namespace PoAutoRobo.App.Views;
 
@@ -11,21 +10,21 @@ public sealed partial class MixDialog : ContentDialog
         InitializeComponent();
         StillSlider.Value = current.Still;
         PanelsSlider.Value = current.MultiPanel;
-        VideoSlider.Value = current.AiVideo;
         TitleSlider.Value = current.TitleCard;
         Update();
     }
 
     /// <summary>The shares as currently set; only applied when they add up to 100.</summary>
-    public MixPercentages Mix => new((int)StillSlider.Value, (int)PanelsSlider.Value, (int)VideoSlider.Value, (int)TitleSlider.Value);
+    // AI video has no slider and always gets none: until a video service is wired in it would only be a still.
+    public MixPercentages Mix => new((int)StillSlider.Value, (int)PanelsSlider.Value, 0, (int)TitleSlider.Value);
 
     private void OnChanged(object sender, RangeBaseValueChangedEventArgs e) => Update();
 
     private void Update()
     {
         if (TotalText is null) return; // sliders report changes while the dialog is still being built
-        var total = Mix.Still + Mix.MultiPanel + Mix.AiVideo + Mix.TitleCard;
-        TotalText.Text = total == 100 ? "Total 100%" : $"Total {total}%. The four must add up to 100.";
+        var total = Mix.Still + Mix.MultiPanel + Mix.TitleCard;
+        TotalText.Text = total == 100 ? "Total 100%" : $"Total {total}%. The three must add up to 100.";
         IsPrimaryButtonEnabled = total == 100;
     }
 }

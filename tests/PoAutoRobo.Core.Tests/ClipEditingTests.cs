@@ -1,7 +1,4 @@
 using NSubstitute;
-using PoAutoRobo.Core.Models;
-using PoAutoRobo.Core.Pipeline;
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 
@@ -13,6 +10,63 @@ public sealed class ClipEditingTests
     private Clip Target => _episode.Clips[1];
 
     private static FitResult Fit(string dialogue, double rate) => new(dialogue, rate, TimeSpan.FromSeconds(12), TimeSpan.FromSeconds(0.2), WithinTolerance: true);
+
+    [Fact]
+    public void Clips_can_be_added_copied_removed_and_renamed_and_a_new_picture_description_marks_an_old_picture_out_of_date()
+    {
+        var blank = EpisodeEditor.NewClip();
+        var copy = EpisodeEditor.Copy(Target);
+
+        var grown = EpisodeEditor.AddClip(EpisodeEditor.AddClip(_episode, Target.Id, blank), Target.Id, copy);
+
+        Assert.Equal([_episode.Clips[0].Id, Target.Id, copy.Id, blank.Id, _episode.Clips[2].Id], grown.Clips.Take(5).Select(c => c.Id));
+        Assert.Equal(Target.Title + " copy", copy.Title);
+        Assert.Equal(Target.Scripts, copy.Scripts);
+        Assert.Equal(_episode.Clips, EpisodeEditor.RemoveClip(EpisodeEditor.RemoveClip(grown, blank.Id), copy.Id).Clips);
+        // An episode always has a clip to show.
+        var one = ProjectStoreTests.NewEpisode(1);
+        Assert.Throws<ArgumentException>(() => EpisodeEditor.RemoveClip(one, one.Clips[0].Id));
+
+        var renamed = EpisodeEditor.SetClipTitle(EpisodeEditor.Rename(_episode, "  Standing up  "), Target.Id, " First steps ");
+        Assert.Equal(("Standing up", "First steps"), (renamed.Title, renamed.Clips[1].Title));
+        Assert.Same(_episode, EpisodeEditor.Rename(_episode, "   ")); // an empty name is not taken
+
+        // A clip with no picture yet has nothing to go out of date; one with a picture has.
+        var described = EpisodeEditor.SetVisualPrompt(_episode, Target.Id, "A robot on a tightrope.");
+        Assert.Equal("A robot on a tightrope.", described.Clips[1].Active.VisualPrompt);
+        Assert.False(described.Clips[1].Visual.Stale);
+        var drawn = EpisodeEditor.Update(_episode, Target.Id, c => c with { Visual = c.Visual with { MediaPaths = ["panel.png"] } });
+        Assert.True(EpisodeEditor.SetVisualPrompt(drawn, Target.Id, "A robot on a tightrope.").Clips[1].Visual.Stale);
+    }
+
+    [Fact]
+    public void Undo_steps_back_one_edit_at_a_time_redo_returns_and_a_run_of_slider_ticks_is_undone_as_one()
+    {
+        var history = new EditHistory<string>(kept: 3);
+        Assert.False(history.TryUndo("a", out _));
+
+        history.Record("a");                 // a -> b
+        history.Record("b", merges: true);   // b -> c, c -> d, d -> e: one drag of a slider
+        history.Record("c", merges: true);
+        history.Record("d", merges: true);
+
+        Assert.True(history.TryUndo("e", out var beforeDrag));
+        Assert.Equal("b", beforeDrag);
+        Assert.True(history.TryUndo("b", out var first));
+        Assert.Equal("a", first);
+        Assert.False(history.CanUndo);
+        Assert.True(history.TryRedo("a", out var again));
+        Assert.Equal("b", again);
+
+        // A new edit ends the chance to redo, and only the last few steps are kept.
+        history.Record("b");
+        Assert.False(history.CanRedo);
+        foreach (var value in new[] { "c", "d", "e", "f" })
+            history.Record(value);
+        var steps = 0;
+        for (var now = "g"; history.TryUndo(now, out now);) steps++;
+        Assert.Equal(3, steps);
+    }
 
     [Fact]
     public void Reorder_changes_the_running_order_and_nothing_else_and_rejects_a_list_that_drops_or_invents_clips()

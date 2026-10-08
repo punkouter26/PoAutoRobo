@@ -1,6 +1,4 @@
 using System.Globalization;
-using PoAutoRobo.Core.Pipeline;
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 
@@ -43,12 +41,30 @@ public sealed class FfmpegArgsTests : IDisposable
         Verify(Lines(FfmpegArgs.ClipVideo(ClipSource.Image, "panel.png", S(20), ExportPreset.Hd30, "clip_00.mp4", "captions_00.ass")));
 
     [Fact]
-    public Task Join_copies_the_finished_pictures_and_crossfades_and_normalises_the_narration() =>
-        Verify(Lines(FfmpegArgs.Join("clips.txt", ["a0.wav", "a1.wav", "a2.wav"], "out.mp4")));
+    public Task Join_copies_the_finished_pictures_and_crossfades_and_normalises_the_narration()
+    {
+        // One clip has nothing to fade into, and is still levelled.
+        var alone = Lines(FfmpegArgs.Join("clips.txt", ["a0.wav"], "out.mp4"));
+        Assert.DoesNotContain("acrossfade", alone);
+        Assert.Contains("[s0]loudnorm", alone);
+
+        return Verify(Lines(FfmpegArgs.Join("clips.txt", ["a0.wav", "a1.wav", "a2.wav"], "out.mp4")));
+    }
 
     [Fact]
-    public Task Join_with_one_clip_has_no_crossfade() =>
-        Verify(Lines(FfmpegArgs.Join("clips.txt", ["a0.wav"], "out.mp4")));
+    public void An_upright_short_sizes_its_title_by_width_and_wraps_its_captions_to_the_narrow_frame()
+    {
+        var card = Lines(FfmpegArgs.ClipVideo(ClipSource.TitleCard, "title_00.txt", S(15), ExportPreset.Shorts, "clip_00.mp4"));
+        CaptionSegment[] words = [new(S(0), [new WordTiming("Hello.", S(0), S(0.4))])];
+
+        Assert.Contains("s=1080x1920", card);
+        Assert.Contains("fontsize=w/12", card); // sized by height, a title would run off the sides
+        var upright = AssCaptions.Build(words, new CaptionStyle(), portrait: true);
+        Assert.Contains("PlayResX: 1080", upright);
+        Assert.Contains("PlayResY: 1920", upright);
+        Assert.Contains("WrapStyle: 0", upright);
+        Assert.Contains("PlayResX: 1920", AssCaptions.Build(words, new CaptionStyle())); // the master is unchanged
+    }
 
     [Fact]
     public void Every_kind_of_clip_is_encoded_identically_so_they_can_be_joined_by_copying_and_numbers_use_a_dot_on_any_system()

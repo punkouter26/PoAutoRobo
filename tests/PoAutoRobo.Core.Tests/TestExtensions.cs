@@ -1,8 +1,5 @@
 using Azure.Core;
 using NSubstitute;
-using PoAutoRobo.Core.Models;
-using PoAutoRobo.Core.Pipeline;
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 
@@ -52,10 +49,4 @@ internal sealed class FakeCredential : TokenCredential
 
     public override ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken) =>
         new(GetToken(requestContext, cancellationToken));
-}
-
-/// <summary>Reports on the calling thread; <see cref="Progress{T}"/> would post to a context and reorder values.</summary>
-internal sealed class SyncProgress<T>(Action<T> report) : IProgress<T>
-{
-    public void Report(T value) => report(value);
 }

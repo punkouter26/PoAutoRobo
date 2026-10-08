@@ -19,7 +19,7 @@ public sealed partial class ClipCard : UserControl
 
     /// <summary>Thumbnail for a picture path; null (nothing drawn) when the clip has no picture.</summary>
     public static ImageSource? ToImage(string? path) =>
-        path is null ? null : new BitmapImage(new Uri(path)) { DecodePixelWidth = 400 };
+        string.IsNullOrEmpty(path) ? null : new BitmapImage(new Uri(path)) { DecodePixelWidth = 400 };
 
     public ClipViewModel? Card
     {

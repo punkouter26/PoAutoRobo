@@ -1,4 +1,3 @@
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 
@@ -20,5 +19,13 @@ public sealed class SpendLogTests : IDisposable
 
         Assert.Equal(0.06m, SpendLog.Total(episode));
         Assert.Equal("about $0.06 of pictures", SpendLog.InWords(SpendLog.Total(episode)));
+
+        // Script and voice use has no price the app knows; it is counted, and adds nothing to the dollars.
+        SpendLog.Add(episode, "script tokens", 0, units: 1200);
+        SpendLog.Add(episode, "script tokens", 0, units: 300);
+        SpendLog.Add(episode, "voice characters", 0, units: 90);
+        Assert.Equal(1500, SpendLog.Units(episode, "script tokens"));
+        Assert.Equal(90, SpendLog.Units(episode, "voice characters"));
+        Assert.Equal(0.06m, SpendLog.Total(episode));
     }
 }

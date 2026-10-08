@@ -1,5 +1,3 @@
-using PoAutoRobo.Core.Pipeline;
-using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Tests;
 
@@ -14,6 +12,10 @@ public sealed class PublishPackTests
 
         // Video sites read this form, and need the first chapter at 0:00; past the hour the minutes keep counting.
         Assert.Equal("0:00 Meet the R1\n1:15 Why balance is hard\n62:05 What to try next\n", chapters);
+
+        // The upload details are laid out to copy from, a part at a time.
+        var notes = PublishPack.Description(new PublishNotes(["One", "Two"], "About it.", ["robots", "balance"], ["#r1"]));
+        Assert.Equal("TITLES\nOne\nTwo\n\nDESCRIPTION\nAbout it.\n\n#r1\n\nTAGS\nrobots, balance\n", notes);
     }
 
     [Fact]

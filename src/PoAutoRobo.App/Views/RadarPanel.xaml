@@ -3,7 +3,10 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:PoAutoRobo.App.Views"
-    xmlns:services="using:PoAutoRobo.Core.Services">
+    xmlns:library="using:PoAutoRobo.Core.Library"
+    xmlns:script="using:PoAutoRobo.Core.Script"
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
+    Loaded="OnLoaded" Unloaded="OnUnloaded" ActualThemeChanged="OnThemeChanged">
     <!-- Left: start something new. Right: carry on with something saved, or take a story from the radar. -->
     <Grid>
         <Grid.ColumnDefinitions>
@@ -25,15 +28,20 @@
                     HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.CreateEpisodeCommand}" />
         </StackPanel>
 
+        <!-- Slow drifting cloud in the accent colour, drawn on the graphics card behind the saved episodes and stories -->
+        <canvas:CanvasAnimatedControl x:Name="Backdrop" Grid.Column="1" Draw="OnDrawBackdrop" ClearColor="Transparent" IsHitTestVisible="False" IsTabStop="False"
+                                      AutomationProperties.AccessibilityView="Raw" />
+
         <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
             <StackPanel Padding="16" Spacing="12">
                 <TextBlock Text="Saved episodes" Style="{ThemeResource BodyStrongTextBlockStyle}" Visibility="{x:Bind ViewModel.HasLibrary, Mode=OneWay}" />
+                <!-- Scrolls by itself within a few rows, so only the episodes in view are built however many are saved -->
                 <GridView x:Name="Library" ItemsSource="{x:Bind ViewModel.Library}" SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnOpenEpisode"
-                          ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.VerticalScrollBarVisibility="Hidden" AutomationProperties.Name="Saved episodes"
+                          MaxHeight="232" AutomationProperties.Name="Saved episodes"
                           Visibility="{x:Bind ViewModel.HasLibrary, Mode=OneWay}"
                           ToolTipService.ToolTip="Carry on with an episode you made earlier. Everything is saved as you go.">
                     <GridView.ItemTemplate>
-                        <DataTemplate x:DataType="services:EpisodeSummary">
+                        <DataTemplate x:DataType="library:EpisodeSummary">
                             <Grid Width="264" Height="64" ColumnSpacing="10" Padding="4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="96" />
@@ -73,7 +81,7 @@
                 <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.RefreshTopicsCommand.IsRunning, Mode=OneWay}" />
                 <ItemsControl x:Name="TopicCards" ItemsSource="{x:Bind ViewModel.Topics}">
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="services:TopicCard">
+                        <DataTemplate x:DataType="script:TopicCard">
                             <Grid ColumnSpacing="12" Padding="12" Margin="0,0,0,8" CornerRadius="6" Background="{ThemeResource ControlFillColorDefaultBrush}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />

@@ -11,7 +11,13 @@
     <!-- Unpackaged: runs as a plain exe, with the Windows App SDK runtime copied alongside it. -->
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Beside the exe as well as inside it: the window's title bar and taskbar button read the file. -->
+    <Content Include="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PoAutoRobo.Core\PoAutoRobo.Core.csproj" />

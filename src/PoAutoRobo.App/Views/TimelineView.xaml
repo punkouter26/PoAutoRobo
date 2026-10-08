@@ -16,12 +16,16 @@
             <Grid x:Name="Screen" Width="640" Height="360" CornerRadius="4" Background="Black">
                 <MediaPlayerElement x:Name="Player" AreTransportControlsEnabled="False" Stretch="Uniform" />
                 <canvas:CanvasControl x:Name="Overlay" Draw="OnDrawCaption" IsHitTestVisible="False" />
+                <!-- Until there is a preview, the empty screen offers the one thing to do here -->
+                <Button x:Name="BuildHereButton" Content="Build preview" Style="{ThemeResource AccentButtonStyle}" HorizontalAlignment="Center" VerticalAlignment="Center" Click="OnBuildPreview"
+                        ToolTipService.ToolTip="Make a quick low-resolution version to watch here." />
             </Grid>
         </Grid>
 
         <!-- The narration's waveform with a mark where each clip starts; click anywhere on it to jump there -->
         <canvas:CanvasControl x:Name="Wave" Grid.Row="1" Draw="OnDrawWave" PointerPressed="OnWavePressed" AutomationProperties.Name="Waveform and clip markers"
-                              ToolTipService.ToolTip="The narration, with a mark where each clip starts. Click to jump to that point." />
+                              IsTabStop="True" UseSystemFocusVisuals="True" KeyDown="OnWaveKey"
+                              ToolTipService.ToolTip="The narration, with a mark where each clip starts. Click to jump to that point. With the keyboard: Space plays or pauses, the left and right arrows step five seconds." />
 
         <Grid Grid.Row="2" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
