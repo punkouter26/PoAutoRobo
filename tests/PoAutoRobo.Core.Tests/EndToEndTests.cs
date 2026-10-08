@@ -1,0 +1,149 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
+using PoAutoRobo.Core.Models;
+using PoAutoRobo.Core.Pipeline;
+using PoAutoRobo.Core.Services;
+
+namespace PoAutoRobo.Core.Tests;
+
+/// <summary>Runs only where FFmpeg is installed; skipped elsewhere.</summary>
+public sealed class FfmpegFactAttribute : FactAttribute
+{
+    public FfmpegFactAttribute()
+    {
+        if (FfmpegRunner.Locate() is null)
+            Skip = "FFmpeg is not installed.";
+    }
+}
+
+public sealed class EndToEndTests : IDisposable
+{
+    private static readonly ExportPreset Small = new(640, 360, 30); // small frame keeps the test quick
+    private readonly string _folder = Directory.CreateTempSubdirectory("poautorobo-").FullName;
+
+    public void Dispose() => Directory.Delete(_folder, recursive: true);
+
+    private static FfmpegRunner Ffmpeg => new(FfmpegRunner.Locate()!);
+
+    private EpisodeBuilder Builder => new(new MockNarrator(), Ffmpeg);
+
+    /// <summary>Mock script cut down to three short clips: a title card, a still image and user footage.</summary>
+    private async Task<Episode> ThreeClipEpisodeAsync()
+    {
+        var image = Path.Combine(_folder, "panel.png");
+        var video = Path.Combine(_folder, "lab.mp4");
+        await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=800x600", "-frames:v", "1", image], _folder, null, null, default);
+        await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=320x240:r=25:d=1", "-pix_fmt", "yuv420p", video], _folder, null, null, default);
+
+        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], default);
+        static Clip Short(Clip c, VisualSpec visual) => c with
+        {
+            Visual = visual,
+            Scripts = c.Scripts.ToDictionary(s => s.Key, s => s.Value with { Dialogue = string.Join(' ', Durations.SplitWords(s.Value.Dialogue).Take(8)) + "." }),
+        };
+        return episode with
+        {
+            Clips =
+            [
+                Short(episode.Clips[0], new VisualSpec(VisualKind.TitleCard)),
+                Short(episode.Clips[1], new VisualSpec(VisualKind.Still, MediaPaths: [image])),
+                Short(episode.Clips[2], new VisualSpec(VisualKind.UserVideo, UserVideoPath: video)),
+            ],
+        };
+    }
+
+    [FfmpegFact]
+    public async Task Mock_topic_exports_h264_aac_at_the_chosen_size_rate_and_loudness()
+    {
+        var episode = await ThreeClipEpisodeAsync();
+        var progress = new List<double>();
+
+        var output = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), new SyncProgress(progress.Add), default);
+
+        var probe = await Ffmpeg.ProbeAsync(["-v", "error", "-show_entries", "stream=codec_name,width,height,r_frame_rate:format=duration", "-of", "default=nw=1", output], default);
+        Assert.Contains("codec_name=h264", probe);
+        Assert.Contains("codec_name=aac", probe);
+        Assert.Contains("width=640", probe);
+        Assert.Contains("height=360", probe);
+        Assert.Contains("r_frame_rate=30/1", probe);
+
+        var narration = await Builder.NarrateAsync(episode, _folder, default);
+        var expected = FfmpegArgs.Timeline([.. narration.Select(n => n.Duration)])[^1] is var last ? last.Start + last.VideoLength : default;
+        var actual = double.Parse(Regex.Match(probe, @"duration=([\d.]+)").Groups[1].Value, CultureInfo.InvariantCulture);
+        Assert.InRange(actual, expected.TotalSeconds - 0.2, expected.TotalSeconds + 0.2);
+
+        Assert.InRange(await Ffmpeg.MeasureLoudnessAsync(output, default), -17.0, -15.0);
+        Assert.NotEmpty(progress);
+        Assert.All(progress, p => Assert.InRange(p, 0.0, 1.0));
+        Assert.False(Directory.Exists(Path.Combine(_folder, "export", "work")));
+    }
+
+    /// <summary>Checkpoint evidence: the whole 16-clip mock episode at 1080p30. Takes minutes, so it is opt-in.</summary>
+    [FfmpegFact]
+    public async Task Full_mock_episode_exports_at_1080p30()
+    {
+        if (Environment.GetEnvironmentVariable("POAUTOROBO_SLOW_OUT") is not { Length: > 0 } keep)
+            return;
+        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], default);
+
+        var output = await Builder.ExportAsync(episode, _folder, ExportPreset.Hd30, new CaptionStyle(), null, default);
+
+        File.Copy(output, keep, overwrite: true);
+    }
+
+    [FfmpegFact]
+    public async Task Narration_is_cached_so_unchanged_clips_are_not_synthesised_again()
+    {
+        var episode = await ThreeClipEpisodeAsync();
+        var narrator = new CountingNarrator();
+        var builder = new EpisodeBuilder(narrator, Ffmpeg);
+
+        var first = await builder.NarrateAsync(episode, _folder, default);
+        var edited = episode with { Clips = [episode.Clips[0], episode.Clips[1] with { ActiveTier = Tier.C }, episode.Clips[2]] };
+        var second = await builder.NarrateAsync(edited, _folder, default);
+
+        Assert.Equal(4, narrator.Calls); // three clips, then only the edited one
+        Assert.Equal(first[0].Words.Select(w => w.Text), second[0].Words.Select(w => w.Text));
+        Assert.Equal(first[0].Duration, second[0].Duration);
+    }
+
+    [FfmpegFact]
+    public async Task Cancelling_an_export_leaves_no_file_behind()
+    {
+        var episode = await ThreeClipEpisodeAsync();
+        using var cts = new CancellationTokenSource();
+        await Builder.NarrateAsync(episode, _folder, default);
+        cts.CancelAfter(TimeSpan.FromMilliseconds(150));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Builder.ExportAsync(episode, _folder, ExportPreset.Uhd60, new CaptionStyle(), null, cts.Token));
+
+        Assert.Empty(Directory.Exists(Path.Combine(_folder, "export")) ? Directory.GetFiles(Path.Combine(_folder, "export"), "*", SearchOption.AllDirectories) : []);
+    }
+
+    [FfmpegFact]
+    public async Task A_failing_ffmpeg_run_reports_its_last_log_lines()
+    {
+        var error = await Assert.ThrowsAsync<FfmpegException>(() =>
+            Ffmpeg.RunAsync(["-i", "does-not-exist.mp4", "out.mp4"], _folder, null, null, default));
+
+        Assert.Contains("does-not-exist.mp4", error.Message);
+    }
+
+    private sealed class SyncProgress(Action<double> report) : IProgress<double>
+    {
+        public void Report(double value) => report(value);
+    }
+
+    private sealed class CountingNarrator : INarrator
+    {
+        private readonly MockNarrator _inner = new();
+        public int Calls { get; private set; }
+
+        public Task<Narration> SynthesizeAsync(string text, string outputPath, double rate, CancellationToken ct)
+        {
+            Calls++;
+            return _inner.SynthesizeAsync(text, outputPath, rate, ct);
+        }
+    }
+}

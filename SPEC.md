@@ -31,9 +31,9 @@ Users: robotics researchers, developers and content creators working alone on th
 | Narration | Azure AI Speech SDK, SSML `express-as`, `WordBoundary` events | `Microsoft.CognitiveServices.Speech`, latest stable at scaffold |
 | Images | Azure OpenAI image edit endpoint with character sheet as reference | deployment `gpt-image-2` (fallback `gpt-image-1-mini`) |
 | Video | Sora 2, Azure OpenAI v1 API, async job + poll, `input_reference` | deployment `sora-2`, 1280×720 |
-| Assembly | FFmpeg CLI as a child process | 7.x or later, on PATH or downloaded on first run |
+| Assembly | FFmpeg CLI as a child process | 7.x or later (built and tested on 9.0.1), on PATH or downloaded on first run |
 | Auth | `DefaultAzureCredential`, then keys from Windows Credential Locker | `Azure.Identity` |
-| Tests | xUnit | latest stable at scaffold |
+| Tests | xUnit, Verify, coverlet | xunit 2.9.3, Verify.Xunit 31.12.5, coverlet.collector 6.0.4 |
 
 Azure resource: `po-aiservices-shared` (AIServices, East US 2, resource group `PoShared`). One endpoint serves chat, images, video and Speech.
 

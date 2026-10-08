@@ -1,0 +1,106 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text.RegularExpressions;
+
+namespace PoAutoRobo.Core.Services;
+
+public sealed class FfmpegException(string message) : Exception(message);
+
+/// <summary>The only place that starts FFmpeg processes.</summary>
+public sealed partial class FfmpegRunner(string ffmpegPath)
+{
+    private const int LogLinesKept = 20;
+
+    /// <summary>Finds ffmpeg.exe on PATH, or null when it is not installed.</summary>
+    public static string? Locate() =>
+        (Environment.GetEnvironmentVariable("PATH") ?? "")
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(dir => Path.Combine(dir.Trim(), "ffmpeg.exe"))
+            .FirstOrDefault(File.Exists);
+
+    /// <param name="total">Expected output length; with <paramref name="progress"/> it turns FFmpeg's clock into 0..1.</param>
+    public async Task RunAsync(IReadOnlyList<string> args, string workingDirectory, TimeSpan? total, IProgress<double>? progress, CancellationToken ct)
+    {
+        var (exitCode, _, log) = await StartAsync(
+            ffmpegPath, ["-hide_banner", "-nostdin", "-nostats", "-progress", "pipe:1", .. args], workingDirectory,
+            line =>
+            {
+                if (total is { Ticks: > 0 } && progress is not null && line.StartsWith("out_time_us=", StringComparison.Ordinal)
+                    && long.TryParse(line.AsSpan(12), out var microseconds))
+                    progress.Report(Math.Clamp(microseconds / 1e6 / total.Value.TotalSeconds, 0, 1));
+            }, ct);
+        if (exitCode != 0)
+            throw new FfmpegException($"FFmpeg stopped with an error.{Environment.NewLine}{log}");
+    }
+
+    public async Task<string> ProbeAsync(IReadOnlyList<string> args, CancellationToken ct)
+    {
+        var ffprobe = Path.Combine(Path.GetDirectoryName(ffmpegPath)!, "ffprobe.exe");
+        var (exitCode, output, log) = await StartAsync(ffprobe, args, Environment.CurrentDirectory, null, ct);
+        return exitCode == 0 ? output : throw new FfmpegException($"The file could not be read.{Environment.NewLine}{log}");
+    }
+
+    /// <summary>Integrated loudness of a file's audio, in LUFS.</summary>
+    public async Task<double> MeasureLoudnessAsync(string path, CancellationToken ct)
+    {
+        var (_, _, log) = await StartAsync(
+            ffmpegPath, ["-hide_banner", "-nostdin", "-nostats", "-i", path, "-af", "ebur128", "-f", "null", "-"],
+            Environment.CurrentDirectory, null, ct, keepLogLines: 40);
+        var match = IntegratedLoudness().Matches(log).LastOrDefault()
+            ?? throw new FfmpegException($"Loudness could not be measured.{Environment.NewLine}{log}");
+        return double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<(int ExitCode, string Output, string Log)> StartAsync(
+        string exe, IReadOnlyList<string> args, string workingDirectory, Action<string>? onOutputLine, CancellationToken ct, int keepLogLines = LogLinesKept)
+    {
+        var info = new ProcessStartInfo(exe)
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in args)
+            info.ArgumentList.Add(arg);
+
+        using var process = new Process { StartInfo = info };
+        var output = new System.Text.StringBuilder();
+        var log = new Queue<string>();
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is null) return;
+            if (onOutputLine is null) lock (output) output.AppendLine(e.Data);
+            else onOutputLine(e.Data);
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is null) return;
+            lock (log)
+            {
+                log.Enqueue(e.Data);
+                if (log.Count > keepLogLines) log.Dequeue();
+            }
+        };
+
+        ct.ThrowIfCancellationRequested();
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        try
+        {
+            await process.WaitForExitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync(CancellationToken.None); // files stay locked until it is really gone
+            throw;
+        }
+        return (process.ExitCode, output.ToString(), string.Join(Environment.NewLine, log));
+    }
+
+    [GeneratedRegex(@"I:\s+(-?[\d.]+) LUFS")]
+    private static partial Regex IntegratedLoudness();
+}

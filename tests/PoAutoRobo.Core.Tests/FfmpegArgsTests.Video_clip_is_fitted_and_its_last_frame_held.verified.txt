@@ -1,0 +1,15 @@
+﻿-i
+lab.mp4
+-vf
+scale=3840:2160:force_original_aspect_ratio=decrease,pad=3840:2160:(ow-iw)/2:(oh-ih)/2,fps=60,tpad=stop_mode=clone:stop_duration=12.000,format=yuv420p
+-t
+12.000
+-an
+-c:v
+libx264
+-preset
+veryfast
+-crf
+16
+-y
+clip_01.mp4

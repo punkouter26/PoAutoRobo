@@ -1,0 +1,17 @@
+﻿-f
+lavfi
+-i
+color=c=0x101828:s=1920x1080:r=30
+-vf
+drawtext=textfile=title_02.txt:fontfile=title-font.ttf:fontcolor=white:fontsize=h/12:x=(w-text_w)/2:y=(h-text_h)/2,format=yuv420p
+-t
+15.000
+-an
+-c:v
+libx264
+-preset
+veryfast
+-crf
+16
+-y
+clip_02.mp4
