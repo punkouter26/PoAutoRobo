@@ -1,0 +1,43 @@
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cs,xaml,props,csproj,json,yml}]
+indent_style = space
+
+[*.{cs,xaml}]
+indent_size = 4
+
+[*.{props,csproj,json,yml}]
+indent_size = 2
+
+[*.cs]
+# The conventions in SPEC.md section 6, enforced by `dotnet format --verify-no-changes` and by the build.
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+dotnet_diagnostic.IDE0005.severity = warning   # unused using
+dotnet_diagnostic.IDE0161.severity = warning   # file-scoped namespace
+
+# Rules from the recommended set that do not fit this app.
+dotnet_diagnostic.CA1305.severity = none       # text shown to the one user follows their own regional settings on purpose
+dotnet_diagnostic.CA1848.severity = none       # the app has no logging
+dotnet_diagnostic.CA1001.severity = none       # the app's long-lived objects live until the process ends
+dotnet_diagnostic.CA1720.severity = none       # names like "Short" (an episode length) are the domain's own words
+dotnet_diagnostic.CA1826.severity = none       # FirstOrDefault on a list reads better than index checks; these lists hold a handful of items
+dotnet_diagnostic.CA1861.severity = none       # inline arrays in one-off calls are clearer than a named static field
+dotnet_diagnostic.CA1859.severity = none       # command methods must return plain Task whatever they hand back inside
+dotnet_diagnostic.CA2007.severity = none       # ConfigureAwait: a UI app wants its continuations back on the UI thread
+
+[tests/**.cs]
+dotnet_diagnostic.CA1707.severity = none       # test names are sentences joined by underscores
+dotnet_diagnostic.CA1310.severity = none       # tests compare plain ASCII they wrote themselves
+dotnet_diagnostic.CA1822.severity = none       # test helpers stay instance methods so they read like the tests around them
+
+# Code the XAML compiler writes touches WinUIEx's obsolete WindowEx.Icon; not our code to fix.
+[*.g.cs]
+dotnet_diagnostic.CS0618.severity = none

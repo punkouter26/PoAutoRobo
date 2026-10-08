@@ -8,7 +8,7 @@
 ## Working on code
 
 - Always restart the app after making a code change, and verify it restarts successfully.
-- Check for a `DOCS` folder in the root to get an overall summary of the project.
+- Read `SPEC.md` in the root for an overall summary of the project; older planning notes are in `docs`.
 - Do not use `dotnet user-secrets` to store data locally. Put it in `appSettings` or in Azure Key Vault (if one exists).
 - Treat compile warnings as errors and make sure they are fixed.
 - Do not run all tests after code changes. Only run the tests related to the code change, or run no tests at all if the change is simple.

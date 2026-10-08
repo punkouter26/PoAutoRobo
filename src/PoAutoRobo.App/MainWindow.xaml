@@ -6,6 +6,7 @@
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:vm="using:PoAutoRobo.App.ViewModels"
     xmlns:views="using:PoAutoRobo.App.Views"
+    xmlns:local="using:PoAutoRobo.App"
     Title="PoAutoRobo"
     PersistenceId="Main"
     Width="1280"
@@ -16,38 +17,84 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <!-- A four-step wizard: Topic, Script, Pictures, Export. One page shows at a time. -->
-    <Grid>
+    <!-- Four steps: Topic, Script, Pictures, Export. One page shows at a time; the selector in the header moves between them. -->
+    <Grid x:Name="Root">
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Modifiers="Control" Key="Number1" Invoked="OnStepShortcut" />
+            <KeyboardAccelerator Modifiers="Control" Key="Number2" Invoked="OnStepShortcut" />
+            <KeyboardAccelerator Modifiers="Control" Key="Number3" Invoked="OnStepShortcut" />
+            <KeyboardAccelerator Modifiers="Control" Key="Number4" Invoked="OnStepShortcut" />
+        </Grid.KeyboardAccelerators>
+        <Grid.Resources>
+            <!-- The placeholder cards breathe while a script is being written. -->
+            <Storyboard x:Name="SkeletonPulse" RepeatBehavior="Forever" AutoReverse="True">
+                <DoubleAnimation Storyboard.TargetName="Skeleton" Storyboard.TargetProperty="Opacity" From="1" To="0.35" Duration="0:0:0.9" />
+            </Storyboard>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Header: what you are making, and where you are in the four steps -->
-        <Grid Padding="16,10" ColumnSpacing="16" Background="{ThemeResource LayerFillColorDefaultBrush}">
+        <!-- Header: what you are making, where you are in the four steps, and what to do on this one -->
+        <Grid Padding="16,8" ColumnSpacing="8" RowSpacing="2" Background="{ThemeResource LayerFillColorDefaultBrush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="EpisodeTitleText" Text="{x:Bind ViewModel.EpisodeTitle, Mode=OneWay}" Style="{ThemeResource SubtitleTextBlockStyle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="1" ToolTipService.ToolTip="Estimated length of the finished video, from the dialogue each clip is currently set to." Text="{x:Bind ViewModel.RuntimeText, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="2" x:Name="ClipCountText" Text="{x:Bind ViewModel.ClipCountText, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-            <controls:Segmented x:Name="StepSelector" Grid.Column="3" SelectedIndex="{x:Bind ViewModel.Step, Mode=TwoWay}" VerticalAlignment="Center"
-                                AutomationProperties.Name="Step" ToolTipService.ToolTip="The four steps of making an episode. Steps 2 to 4 open once you have an episode.">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock x:Name="EpisodeTitleText" Text="{x:Bind ViewModel.EpisodeTitle, Mode=OneWay}" ToolTipService.ToolTip="{x:Bind ViewModel.EpisodeTitle, Mode=OneWay}"
+                           Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="MetaText" Text="{x:Bind ViewModel.MetaText, Mode=OneWay}" Style="{StaticResource QuietText}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                           ToolTipService.ToolTip="Clips, length of the finished video (measured once a clip's voice is recorded, estimated from the word count until then) and what the pictures have cost." />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <Button x:Name="UndoButton" Style="{StaticResource IconButton}" Command="{x:Bind ViewModel.UndoCommand}" AutomationProperties.Name="Undo" ToolTipService.ToolTip="Undo the last change to the episode (Ctrl+Z)">
+                    <Button.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control" Key="Z" />
+                    </Button.KeyboardAccelerators>
+                    <SymbolIcon Symbol="Undo" />
+                </Button>
+                <Button x:Name="RedoButton" Style="{StaticResource IconButton}" Command="{x:Bind ViewModel.RedoCommand}" AutomationProperties.Name="Redo" ToolTipService.ToolTip="Redo the change you undid (Ctrl+Y)">
+                    <Button.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control" Key="Y" />
+                    </Button.KeyboardAccelerators>
+                    <SymbolIcon Symbol="Redo" />
+                </Button>
+                <ToggleButton x:Name="SoundButton" Width="40" Height="36" Padding="0" IsChecked="{x:Bind ViewModel.SoundsOn, Mode=TwoWay}" AutomationProperties.Name="Sounds"
+                              ToolTipService.ToolTip="Button sounds and a chime when a long job finishes. Click to turn them on or off.">
+                    <SymbolIcon Symbol="Volume" />
+                </ToggleButton>
+                <Button x:Name="MoreButton" Style="{StaticResource IconButton}" AutomationProperties.Name="More actions" ToolTipService.ToolTip="More actions for this episode">
+                    <SymbolIcon Symbol="More" />
+                    <Button.Flyout>
+                        <MenuFlyout Placement="Bottom">
+                            <MenuFlyoutItem x:Name="ShowFolderItem" Text="Show the episode folder" Command="{x:Bind ViewModel.ShowEpisodeFolderCommand}" />
+                            <MenuFlyoutItem x:Name="CleanMediaItem" Text="Remove unused media…" Command="{x:Bind ViewModel.CleanMediaCommand}" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </StackPanel>
+            <controls:Segmented x:Name="StepSelector" Grid.Column="2" SelectedIndex="{x:Bind ViewModel.Step, Mode=TwoWay}" VerticalAlignment="Center"
+                                AutomationProperties.Name="Step" ToolTipService.ToolTip="The four steps of making an episode (Ctrl+1 to Ctrl+4). Steps 2 to 4 open once you have an episode.">
                 <controls:SegmentedItem Content="1 · Topic" />
                 <controls:SegmentedItem Content="2 · Script" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}" />
                 <controls:SegmentedItem Content="3 · Pictures" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}" />
                 <controls:SegmentedItem Content="4 · Export" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}" />
             </controls:Segmented>
+            <TextBlock x:Name="StepHintText" Grid.Row="1" Grid.ColumnSpan="3" Text="{x:Bind ViewModel.StepHint, Mode=OneWay}" Style="{StaticResource QuietText}" />
         </Grid>
 
+        <!-- Everything the app has to tell you, in one place and on every step -->
         <StackPanel Grid.Row="1">
             <!-- The one long job in progress: what it is, the exact step, how far, how long, and a way to stop it -->
-            <Grid x:Name="ActivityPanel" Padding="16,12" ColumnSpacing="16" Visibility="{x:Bind ViewModel.IsWorking, Mode=OneWay}"
+            <Grid x:Name="ActivityPanel" Padding="16,10" ColumnSpacing="16" Visibility="{x:Bind ViewModel.IsWorking, Mode=OneWay}"
                   Background="{ThemeResource SystemFillColorAttentionBackgroundBrush}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -65,9 +112,11 @@
                             <ColumnDefinition Width="48" />
                         </Grid.ColumnDefinitions>
                         <ProgressBar x:Name="RenderProgressBar" Maximum="100" Height="8" VerticalAlignment="Center" Value="{x:Bind ViewModel.ActivityPercent, Mode=OneWay}" />
-                        <TextBlock x:Name="ActivityPercentText" Grid.Column="1" Text="{x:Bind ViewModel.ActivityPercentText, Mode=OneWay}" HorizontalAlignment="Right" />
+                        <!-- Counted up by the window, so the figure rolls to its new value instead of jumping. -->
+                        <TextBlock x:Name="ActivityPercentText" Grid.Column="1" Text="0%" HorizontalAlignment="Right" />
                     </Grid>
-                    <TextBlock x:Name="ActivityDetailText" Text="{x:Bind ViewModel.ActivityDetail, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="ActivityDetailText" Text="{x:Bind ViewModel.ActivityDetail, Mode=OneWay}" ToolTipService.ToolTip="{x:Bind ViewModel.ActivityDetail, Mode=OneWay}"
+                               TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite" />
                 </StackPanel>
                 <Button x:Name="CancelActivityButton" Grid.Column="1" Content="Cancel" MinWidth="96" VerticalAlignment="Center" Command="{x:Bind ViewModel.CancelActivityCommand}"
                         ToolTipService.ToolTip="Stop this job. Narration and pictures already made are kept, so starting again picks up faster." />
@@ -80,17 +129,34 @@
                     <HyperlinkButton Content="Get FFmpeg" NavigateUri="https://ffmpeg.org/download.html" />
                 </InfoBar.ActionButton>
             </InfoBar>
-            <InfoBar Severity="Error" Title="Something went wrong"
-                     Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" IsOpen="{x:Bind HasText(ViewModel.ErrorMessage), Mode=OneWay}" />
+            <InfoBar x:Name="ErrorBar" Severity="Error" Title="Something went wrong" AutomationProperties.LiveSetting="Assertive"
+                     Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" IsOpen="{x:Bind local:MainWindow.HasText(ViewModel.ErrorMessage), Mode=OneWay}" />
+            <InfoBar x:Name="StatusBar" Severity="Success" AutomationProperties.LiveSetting="Polite"
+                     Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" IsOpen="{x:Bind local:MainWindow.HasText(ViewModel.StatusMessage), Mode=OneWay}">
+                <InfoBar.ActionButton>
+                    <Button x:Name="ShowExportButton" Content="Show in folder" Command="{x:Bind ViewModel.ShowExportCommand}" Visibility="{x:Bind ViewModel.HasExport, Mode=OneWay}"
+                            ToolTipService.ToolTip="Open the folder holding the finished video, its chapter list, subtitles and thumbnail." />
+                </InfoBar.ActionButton>
+            </InfoBar>
         </StackPanel>
 
         <!-- Step 1 · Topic -->
-        <Border x:Name="TopicPage" Grid.Row="2" Visibility="{x:Bind ViewModel.IsTopicStep, Mode=OneWay}">
-            <views:RadarPanel ViewModel="{x:Bind ViewModel}" MaxWidth="760" HorizontalAlignment="Stretch" />
+        <Border x:Name="TopicPage" Grid.Row="2" Visibility="{x:Bind ViewModel.ShowTopic, Mode=OneWay}">
+            <Border.Transitions>
+                <TransitionCollection>
+                    <EntranceThemeTransition />
+                </TransitionCollection>
+            </Border.Transitions>
+            <views:RadarPanel ViewModel="{x:Bind ViewModel}" />
         </Border>
 
         <!-- Steps 2 and 3 · Script and Pictures share the clip deck; each shows only its own tools -->
-        <Grid x:Name="DeckPage" Grid.Row="2" Visibility="{x:Bind ViewModel.IsDeckStep, Mode=OneWay}">
+        <Grid x:Name="DeckPage" Grid.Row="2" Visibility="{x:Bind ViewModel.ShowDeck, Mode=OneWay}">
+            <Grid.Transitions>
+                <TransitionCollection>
+                    <EntranceThemeTransition />
+                </TransitionCollection>
+            </Grid.Transitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -99,13 +165,17 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="360" />
             </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="8" Padding="16,12,16,0" Visibility="{x:Bind ViewModel.IsScriptStep, Mode=OneWay}">
+                <Button x:Name="NarrateAllButton" Content="Record all voices" Command="{x:Bind ViewModel.NarrateAllCommand}"
+                        ToolTipService.ToolTip="Record every clip's voice now. Each card and the running time then show the real length, not an estimate, and previews build faster." />
+            </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="8" Padding="16,12,16,0" Visibility="{x:Bind ViewModel.IsPicturesStep, Mode=OneWay}">
                 <Button x:Name="HostButton" ToolTipService.ToolTip="Choose the cartoon robot that presents every episode. Once locked, every new picture keeps the same character." Content="1 · Choose host" Click="OnHostSetup" IsEnabled="{x:Bind ViewModel.PicturesAvailable}" />
                 <Button x:Name="MixButton" ToolTipService.ToolTip="Set what share of clips are still panels, panel sequences, AI video or title cards, or re-deal the same shares." Content="2 · Visual mix" Click="OnVisualMix" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}" />
                 <Button x:Name="GenerateAllButton" ToolTipService.ToolTip="Draw a picture for every clip that needs one. You are shown the count and cost first; pictures you already have are reused free." Content="3 · Generate pictures" Style="{ThemeResource AccentButtonStyle}" Command="{x:Bind ViewModel.GenerateAllCommand}" />
             </StackPanel>
-            <GridView x:Name="ClipDeck" Grid.Row="1" ToolTipService.ToolTip="Your clips in running order. Click one to edit it on the right; drag a card to move it." Padding="16" ItemsSource="{x:Bind ViewModel.Clips}"
-                      SelectedItem="{x:Bind ViewModel.SelectedClip, Mode=TwoWay}" SelectionMode="Single"
+            <GridView x:Name="ClipDeck" Grid.Row="1" ToolTipService.ToolTip="Your clips in running order. Click one to edit it on the right; drag a card to move it." Padding="12" ItemsSource="{x:Bind ViewModel.Clips}"
+                      SelectedItem="{x:Bind ViewModel.SelectedClip, Mode=TwoWay}" SelectionMode="Single" AutomationProperties.Name="Clips"
                       CanReorderItems="True" CanDragItems="True" AllowDrop="True">
                 <GridView.ItemTemplate>
                     <DataTemplate x:DataType="vm:ClipViewModel">
@@ -116,21 +186,41 @@
             <Border Grid.RowSpan="2" Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}">
                 <views:InspectorView ViewModel="{x:Bind ViewModel}" />
             </Border>
+
+            <!-- While the script is written: placeholder cards in the shape of what is coming, laid over the deck -->
+            <Grid Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" Visibility="{x:Bind ViewModel.IsCreating, Mode=OneWay}">
+                <GridView x:Name="Skeleton" Padding="12" ItemsSource="{x:Bind ViewModel.Skeletons, Mode=OneWay}" SelectionMode="None" IsHitTestVisible="False" IsTabStop="False"
+                          AutomationProperties.AccessibilityView="Raw">
+                    <GridView.ItemTemplate>
+                        <DataTemplate x:DataType="x:Int32">
+                            <StackPanel Width="176" Spacing="8" Padding="4">
+                                <Border Height="99" CornerRadius="4" Background="{ThemeResource ControlAltFillColorTertiaryBrush}" />
+                                <Border Height="14" Width="150" CornerRadius="4" HorizontalAlignment="Left" Background="{ThemeResource ControlAltFillColorTertiaryBrush}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </GridView.ItemTemplate>
+                </GridView>
+            </Grid>
         </Grid>
 
-        <!-- Step 4 · Export -->
-        <ScrollViewer x:Name="ExportPage" Grid.Row="2" Visibility="{x:Bind ViewModel.IsExportStep, Mode=OneWay}" VerticalScrollBarVisibility="Auto">
-            <StackPanel MaxWidth="1100" Padding="24" Spacing="16">
-                <TextBlock Text="1 · Captions" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <ComboBox x:Name="CaptionPresetBox" ToolTipService.ToolTip="How the burned-in captions look. The preview below updates as soon as you change this." MinWidth="200" AutomationProperties.Name="Caption style"
-                              SelectedIndex="{x:Bind ViewModel.CaptionPresetIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="Karaoke highlight" />
-                        <ComboBoxItem Content="Two-line block" />
-                        <ComboBoxItem Content="Clean subtitle" />
-                        <ComboBoxItem Content="Comic banner" />
-                    </ComboBox>
-                    <Button Content="Caption look" ToolTipService.ToolTip="Caption font size, outline thickness and highlight colour.">
+        <!-- Step 4 · Export: the preview takes the room there is; captions and the master video sit beside it -->
+        <Grid x:Name="ExportPage" Grid.Row="2" Padding="16" ColumnSpacing="16" Visibility="{x:Bind ViewModel.IsExportStep, Mode=OneWay}">
+            <Grid.Transitions>
+                <TransitionCollection>
+                    <EntranceThemeTransition />
+                </TransitionCollection>
+            </Grid.Transitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="280" />
+            </Grid.ColumnDefinitions>
+            <views:TimelineView ViewModel="{x:Bind ViewModel}" />
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="1 · Captions" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <ComboBox x:Name="CaptionPresetBox" ToolTipService.ToolTip="How the burned-in captions look. The preview updates as soon as you change this." HorizontalAlignment="Stretch" AutomationProperties.Name="Caption style"
+                              ItemsSource="{x:Bind ViewModel.CaptionChoices}" SelectedIndex="{x:Bind ViewModel.CaptionPresetIndex, Mode=TwoWay}" />
+                    <Button Content="Caption look" HorizontalAlignment="Stretch" ToolTipService.ToolTip="Caption font size, outline thickness and highlight colour.">
                         <Button.Flyout>
                             <Flyout>
                                 <StackPanel Width="300" Spacing="12">
@@ -143,37 +233,16 @@
                             </Flyout>
                         </Button.Flyout>
                     </Button>
+
+                    <TextBlock Text="2 · Preview" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+                    <Button x:Name="PreviewButton" HorizontalAlignment="Stretch" ToolTipService.ToolTip="Make a quick low-resolution version to watch here. Faster than the master, and captions are drawn live so style changes show at once." Content="Build preview" Command="{x:Bind ViewModel.BuildPreviewCommand}" />
+
+                    <TextBlock Text="3 · Master video" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+                    <ComboBox x:Name="ExportPresetBox" ToolTipService.ToolTip="Size and smoothness of the finished video. 4K and 60 fps take much longer to render." HorizontalAlignment="Stretch" AutomationProperties.Name="Export quality"
+                              ItemsSource="{x:Bind ViewModel.ExportChoices}" SelectedIndex="{x:Bind ViewModel.ExportPresetIndex, Mode=TwoWay}" />
+                    <Button x:Name="RenderButton" HorizontalAlignment="Stretch" ToolTipService.ToolTip="Build the finished video file with voice, pictures and captions, plus a chapter list, subtitles and a thumbnail to upload with it. A full episode can take several minutes; progress is shown at the top with a Cancel button." Content="Render master video" Style="{ThemeResource AccentButtonStyle}" Command="{x:Bind ViewModel.RenderCommand}" />
                 </StackPanel>
-
-                <TextBlock Text="2 · Preview" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-                <views:TimelineView ViewModel="{x:Bind ViewModel}" />
-
-                <TextBlock Text="3 · Master video" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <ComboBox x:Name="ExportPresetBox" ToolTipService.ToolTip="Size and smoothness of the finished video. 4K and 60 fps take much longer to render." MinWidth="160" AutomationProperties.Name="Export quality"
-                              SelectedIndex="{x:Bind ViewModel.ExportPresetIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="1080p · 30 fps" />
-                        <ComboBoxItem Content="1080p · 60 fps" />
-                        <ComboBoxItem Content="4K · 30 fps" />
-                        <ComboBoxItem Content="4K · 60 fps" />
-                    </ComboBox>
-                    <Button x:Name="RenderButton" ToolTipService.ToolTip="Build the finished video file with voice, pictures and captions. A full episode can take half an hour; progress is shown at the top with a Cancel button." Content="Render master video" Style="{ThemeResource AccentButtonStyle}" Command="{x:Bind ViewModel.RenderCommand}" />
-                </StackPanel>
-                <TextBlock x:Name="StatusText" Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
-        </ScrollViewer>
-
-        <!-- Footer: what to do on this step, and Back / Next -->
-        <Grid Grid.Row="3" Padding="16,10" ColumnSpacing="16" Background="{ThemeResource LayerFillColorDefaultBrush}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <Button x:Name="BackButton" Content="Back" MinWidth="96" Command="{x:Bind ViewModel.PreviousStepCommand}" />
-            <TextBlock x:Name="StepHintText" Grid.Column="1" Text="{x:Bind ViewModel.StepHint, Mode=OneWay}" TextWrapping="Wrap" VerticalAlignment="Center" />
-            <Button x:Name="NextButton" Grid.Column="2" Content="{x:Bind ViewModel.NextLabel, Mode=OneWay}" MinWidth="140" Style="{ThemeResource AccentButtonStyle}" Command="{x:Bind ViewModel.NextStepCommand}" />
+            </ScrollViewer>
         </Grid>
     </Grid>
 </winex:WindowEx>

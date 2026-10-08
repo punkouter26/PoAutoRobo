@@ -1,5 +1,7 @@
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using PoAutoRobo.App.ViewModels;
+using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.App.Views;
 
@@ -20,24 +22,42 @@ public sealed partial class RadarPanel : UserControl
         }
     }
 
-    // Built each time it opens, so episodes created this session appear.
-    private void OnSavedEpisodesOpening(object? sender, object e)
+    private async void OnOpenEpisode(object sender, ItemClickEventArgs e)
     {
-        SavedEpisodesMenu.Items.Clear();
-        var folders = ViewModel?.SavedEpisodes() ?? [];
-        foreach (var folder in folders)
-        {
-            var item = new MenuFlyoutItem { Text = Path.GetFileName(folder) };
-            item.Click += async (_, _) => await ViewModel!.OpenEpisodeAsync(folder);
-            SavedEpisodesMenu.Items.Add(item);
-        }
-        if (folders.Count == 0)
-            SavedEpisodesMenu.Items.Add(new MenuFlyoutItem { Text = "No saved episodes yet", IsEnabled = false });
+        if (ViewModel is not null && e.ClickedItem is EpisodeSummary summary)
+            await ViewModel.OpenEpisodeAsync(summary.Folder);
     }
 
-    private void OnAdoptTopic(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    // The menu items carry their episode in Tag.
+    private static EpisodeSummary? Episode(object sender) => (sender as FrameworkElement)?.Tag as EpisodeSummary;
+
+    private async void OnOpenFromMenu(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: PoAutoRobo.Core.Services.TopicCard card })
+        if (ViewModel is not null && Episode(sender) is { } summary)
+            await ViewModel.OpenEpisodeAsync(summary.Folder);
+    }
+
+    private void OnDuplicateEpisode(object sender, RoutedEventArgs e)
+    {
+        if (Episode(sender) is { } summary)
+            ViewModel?.DuplicateEpisode(summary);
+    }
+
+    private void OnShowEpisode(object sender, RoutedEventArgs e)
+    {
+        if (Episode(sender) is { } summary)
+            MainViewModel.ShowInExplorer(summary.Folder);
+    }
+
+    private async void OnDeleteEpisode(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not null && Episode(sender) is { } summary)
+            await ViewModel.DeleteEpisodeAsync(summary);
+    }
+
+    private void OnAdoptTopic(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: TopicCard card })
             ViewModel?.AdoptTopicCommand.Execute(card);
     }
 }

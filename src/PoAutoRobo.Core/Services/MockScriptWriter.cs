@@ -28,7 +28,10 @@ public sealed class MockScriptWriter : IScriptWriter
 
     private const string Filler = "That is the idea in a nutshell, and it is worth saying again in a slightly different way so it really sticks.";
 
-    public Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct)
+    public Task<TierScript> WriteTierAsync(string topic, Clip clip, Tier tier, CancellationToken ct) =>
+        Task.FromResult(Script(topic, clip.Title, clip.Active.Pose, tier));
+
+    public Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<int>? clipsWritten = null)
     {
         var clips = Outline.Take(Math.Clamp(Outline.Length, length.MinClips, length.MaxClips)).Select(o => new Clip(
             Guid.NewGuid(), o.Title, Tier.B,

@@ -58,7 +58,8 @@ public sealed class AzureImageGen(AppSettings settings, HttpClient http) : IImag
         var operation = request.ReferencePath is null ? "generations" : "edits";
         var message = new HttpRequestMessage(HttpMethod.Post,
             new Uri(settings.Endpoint!, $"openai/deployments/{settings.ImageDeployment}/images/{operation}?api-version={ApiVersion}"));
-        message.Headers.Add("api-key", settings.ApiKey);
+        var token = await settings.Credential.GetTokenAsync(new Azure.Core.TokenRequestContext(["https://cognitiveservices.azure.com/.default"]), ct);
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
 
         if (request.ReferencePath is null)
         {

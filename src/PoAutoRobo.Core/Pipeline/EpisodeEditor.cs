@@ -14,10 +14,19 @@ public static class EpisodeEditor
         return episode with { Clips = [.. order.Select(id => byId[id])] };
     }
 
+    /// <exception cref="ArgumentException">The clip has not been written at that depth yet; add it with <see cref="AddTier"/> first.</exception>
     public static Episode SetTier(Episode episode, Guid clipId, Tier tier) =>
         Update(episode, clipId, clip => clip.ActiveTier == tier
             ? clip
+            : !clip.Scripts.ContainsKey(tier)
+            ? throw new ArgumentException($"This clip has not been written at depth {tier} yet.", nameof(tier))
             : clip with { ActiveTier = tier, Visual = clip.Visual with { Stale = clip.Visual.Stale || HasGeneratedMedia(clip) } });
+
+    /// <summary>Gives a clip a depth it did not have. A depth already written is kept, so a slow reply cannot undo edits made to it.</summary>
+    public static Episode AddTier(Episode episode, Guid clipId, Tier tier, TierScript script) =>
+        Update(episode, clipId, clip => clip.Scripts.ContainsKey(tier)
+            ? clip
+            : clip with { Scripts = new Dictionary<Tier, TierScript>(clip.Scripts) { [tier] = script } });
 
     public static Episode SetHostVisible(Episode episode, Guid clipId, bool visible) =>
         Update(episode, clipId, clip => clip with { HostVisible = visible });
@@ -85,9 +94,6 @@ public static class EpisodeEditor
             Visual = c.Visual.Kind == kind ? c.Visual with { KindLocked = true } : new VisualSpec(kind, KindLocked: true),
         });
     }
-
-    /// <summary>Replaces one clip's picture settings, leaving any edits made to the rest of the episode meanwhile.</summary>
-    public static Episode SetVisual(Episode episode, Guid clipId, VisualSpec visual) => Update(episode, clipId, c => c with { Visual = visual });
 
     /// <summary>The clip with its active tier saying <paramref name="dialogue"/>; the other tiers are untouched.</summary>
     public static Clip WithDialogue(Clip clip, string dialogue) => clip with

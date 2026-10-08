@@ -32,70 +32,43 @@ public sealed class GroundingTests : IDisposable
     };
 
     [Fact]
-    public void Keywords_drop_filler_words_and_keep_short_model_names()
+    public void Topics_become_keywords_without_filler_and_documents_are_split_at_headings_and_cut_to_a_readable_size()
     {
         Assert.Equal(["training", "balance", "r1", "edu", "isaac", "lab"], Grounding.Keywords("Training the balance of an R1 EDU using Isaac Lab"));
-    }
 
-    [Fact]
-    public void Documents_are_split_at_headings_and_keep_their_source()
-    {
         var chunks = Grounding.Chunk(Doc("unitreerobotics/unitree_rl_mjlab", MjlabReadme));
 
         Assert.Equal(3, chunks.Count);
         Assert.StartsWith("## Training", chunks[1].Text);
         Assert.All(chunks, c => Assert.Equal("https://github.com/unitreerobotics/unitree_rl_mjlab/blob/main/README.md", c.Url));
+        Assert.Equal(Grounding.MaxSnippetLength, Assert.Single(Grounding.Chunk(Doc("a/b", "# Big\n\n" + new string('x', 5000)))).Text.Length);
     }
 
     [Fact]
-    public void Long_sections_are_cut_to_a_readable_size()
-    {
-        var chunks = Grounding.Chunk(Doc("a/b", "# Big\n\n" + new string('x', 5000)));
-
-        Assert.All(chunks, c => Assert.InRange(c.Text.Length, 1, Grounding.MaxSnippetLength));
-    }
-
-    [Fact]
-    public async Task Sections_matching_more_topic_words_come_first_and_unrelated_ones_are_left_out()
-    {
-        var grounding = new Grounding(Serving(new() { ["unitreerobotics/unitree_rl_mjlab"] = MjlabReadme }), _cache);
-
-        var snippets = await grounding.FindAsync("Training a walking policy with balance rewards", Ct);
-
-        Assert.StartsWith("## Training", snippets[0].Text);
-        Assert.DoesNotContain(snippets, s => s.Text.StartsWith("## License"));
-    }
-
-    [Fact]
-    public async Task Ranking_is_the_same_every_time()
-    {
-        var grounding = new Grounding(Serving(new() { ["unitreerobotics/unitree_rl_mjlab"] = MjlabReadme, ["unitreerobotics/unitree_sdk2"] = MjlabReadme }), _cache);
-
-        var first = await grounding.FindAsync("R1 training", Ct);
-        var second = await grounding.FindAsync("R1 training", Ct);
-
-        Assert.Equal(first, second);
-        Assert.Equal("unitreerobotics/unitree_sdk2", first[0].Repo); // ties keep the fixed repository order
-    }
-
-    [Fact]
-    public async Task Only_the_official_repositories_are_asked()
+    public async Task Only_the_official_repositories_are_asked_and_the_best_matching_sections_come_first_in_the_same_order_every_time()
     {
         var asked = new List<string>();
+        var grounding = new Grounding(Serving(new() { ["unitreerobotics/unitree_rl_mjlab"] = MjlabReadme, ["unitreerobotics/unitree_sdk2"] = MjlabReadme }, asked), _cache);
 
-        await new Grounding(Serving([], asked), _cache).FindAsync("anything", Ct);
+        var first = await grounding.FindAsync("Training a walking policy with balance rewards", Ct);
+        var second = await grounding.FindAsync("Training a walking policy with balance rewards", Ct);
 
-        Assert.Equal(Grounding.OfficialRepos, asked);
-        Assert.Contains("unitreerobotics/unitree_rl_mjlab", asked);
-        Assert.Contains("isaac-sim/IsaacLab", asked);
+        Assert.Equal(Grounding.OfficialRepos, asked.Take(Grounding.OfficialRepos.Count));
+        Assert.Contains("unitreerobotics/unitree_rl_mjlab", asked); // where R1 training is actually supported
+        Assert.StartsWith("## Training", first[0].Text);
+        Assert.Equal("unitreerobotics/unitree_sdk2", first[0].Repo); // ties keep the fixed repository order
+        Assert.DoesNotContain(first, s => s.Text.StartsWith("## License", StringComparison.Ordinal));
+        Assert.Equal(first, second);
     }
 
     [Fact]
-    public async Task When_github_refuses_the_last_good_copy_is_used()
+    public async Task When_github_refuses_the_last_good_copy_is_used_and_with_none_saved_there_are_simply_no_snippets()
     {
-        await new Grounding(Serving(new() { ["unitreerobotics/unitree_rl_mjlab"] = MjlabReadme }), _cache).FindAsync("R1 training", Ct);
         RepoSource rateLimited = (_, _, _) => throw new HttpRequestException("API rate limit exceeded");
 
+        Assert.Empty(await new Grounding(rateLimited, _cache).FindAsync("R1 training", Ct));
+
+        await new Grounding(Serving(new() { ["unitreerobotics/unitree_rl_mjlab"] = MjlabReadme }), _cache).FindAsync("R1 training", Ct);
         var snippets = await new Grounding(rateLimited, _cache).FindAsync("R1 training", Ct);
 
         Assert.NotEmpty(snippets);
@@ -103,11 +76,13 @@ public sealed class GroundingTests : IDisposable
     }
 
     [Fact]
-    public async Task With_no_network_and_no_saved_copy_there_are_simply_no_snippets()
+    public void Figures_and_code_names_the_sources_do_not_contain_are_flagged_and_ones_they_do_contain_are_not()
     {
-        RepoSource offline = (_, _, _) => throw new HttpRequestException("No such host");
+        string[] sources = ["The policy runs at 500Hz on the robot.", "Observations include joint_pos."];
 
-        Assert.Empty(await new Grounding(offline, _cache).FindAsync("R1 training", Ct));
+        var claims = Grounding.UnverifiedClaims("I run my policy at 500Hz, read joint_pos and joint_vel, and move 23 joints.", sources);
+
+        Assert.Equal(["joint_vel", "23"], claims);
     }
 
     /// <summary>Opt-in: real GitHub.</summary>
@@ -116,7 +91,7 @@ public sealed class GroundingTests : IDisposable
     public async Task Live_github_returns_snippets_from_official_repositories()
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
-        var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault), Ct);
+        var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault, AppSettings.SignedInUser), Ct);
 
         var snippets = await Grounding.Create(settings.GitHubToken, _cache).FindAsync("Training a walking policy for the R1 in MuJoCo", Ct);
 

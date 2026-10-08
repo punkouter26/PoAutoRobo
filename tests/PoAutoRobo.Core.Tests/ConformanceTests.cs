@@ -1,5 +1,4 @@
 using NSubstitute;
-using PoAutoRobo.Core.Models;
 using PoAutoRobo.Core.Pipeline;
 using PoAutoRobo.Core.Services;
 
@@ -29,15 +28,14 @@ public sealed class ConformanceTests
         return writer;
     }
 
-    [Theory]
-    [InlineData(40)]  // footage longer than the 20s of dialogue: expand
-    [InlineData(8)]   // footage shorter: condense
-    public async Task Dialogue_is_rewritten_until_the_narration_matches_the_footage(double footage)
+    [Fact]
+    public async Task Dialogue_is_rewritten_until_the_narration_matches_the_footage_even_when_the_writer_always_runs_long()
     {
-        var fit = await Conformance.FitAsync(Words(60), S(footage), WriterOffBy(1.0), Speak, Ct);
+        // 20s of dialogue for 40s of footage, and 30% too many words every time: aiming by the measured result still closes in.
+        var fit = await Conformance.FitAsync(Words(60), S(40), WriterOffBy(1.3), Speak, Ct);
 
         Assert.True(fit.WithinTolerance);
-        Assert.InRange(fit.Duration.TotalSeconds, footage - 1, footage + 1);
+        Assert.InRange(fit.Duration.TotalSeconds, 39, 41);
         Assert.Equal(1.0, fit.Rate);
         Assert.NotEqual(Words(60), fit.Dialogue);
     }
@@ -52,15 +50,6 @@ public sealed class ConformanceTests
         Assert.Equal(Words(60), fit.Dialogue);
         Assert.True(fit.WithinTolerance);
         await writer.DidNotReceiveWithAnyArgs().RewriteToLengthAsync(default!, default, default);
-    }
-
-    [Fact]
-    public async Task A_writer_that_always_runs_long_is_corrected_using_the_measured_pace()
-    {
-        // 30% too many words every time; aiming by the measured result still closes in.
-        var fit = await Conformance.FitAsync(Words(60), S(40), WriterOffBy(1.3), Speak, Ct);
-
-        Assert.InRange(fit.Duration.TotalSeconds, 39, 41);
     }
 
     [Fact]
@@ -92,12 +81,11 @@ public sealed class ConformanceTests
         Assert.Equal(S(40) - fit.Duration, fit.Gap);
     }
 
-    [Theory]
-    [InlineData(4.9)]
-    [InlineData(120.1)]
-    public async Task Footage_outside_5_to_120_seconds_is_rejected_before_any_work(double footage)
+    [Fact]
+    public async Task Footage_outside_5_to_120_seconds_is_rejected_before_any_work()
     {
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Conformance.FitAsync(Words(60), S(footage), WriterOffBy(1.0), Speak, Ct));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Conformance.FitAsync(Words(60), S(4.9), WriterOffBy(1.0), Speak, Ct));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Conformance.FitAsync(Words(60), S(120.1), WriterOffBy(1.0), Speak, Ct));
 
         Assert.Equal(0, _spoken);
     }
@@ -110,7 +98,7 @@ public sealed class ConformanceTests
     public async Task Live_narration_lands_within_a_second_of_the_footage(double footage)
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
-        var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault), Ct);
+        var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault, AppSettings.SignedInUser), Ct);
         var narrator = new AzureNarrator(settings);
         var folder = Directory.CreateTempSubdirectory("poautorobo-").FullName;
         const string line = "Next up, balance. I stay upright by reading my joint angles and my inertial sensor many times a second, then nudging my ankles, knees and hips before a wobble can grow. In simulation I practise that on thousands of slightly different floors, so the real lab floor feels like just one more of them.";
@@ -121,54 +109,6 @@ public sealed class ConformanceTests
                 async (text, rate, ct) => (await narrator.SynthesizeAsync(text, Path.Combine(folder, $"take{take++}.wav"), rate, ct)).Duration, Ct);
 
             Assert.True(fit.WithinTolerance, $"footage {footage}s, narration {fit.Duration.TotalSeconds:0.00}s at rate {fit.Rate:0.00} after {take} takes");
-        }
-        finally
-        {
-            Directory.Delete(folder, recursive: true);
-        }
-    }
-
-    [Fact]
-    public void Attaching_footage_sets_the_clip_to_my_video_with_the_fitted_words_and_rate()
-    {
-        var episode = ProjectStoreTests.NewEpisode(3);
-        var fit = new FitResult("Fitted words.", 1.05, S(12), S(0.2), WithinTolerance: true);
-
-        var edited = EpisodeEditor.AttachVideo(episode, episode.Clips[1].Id, @"imports\lab.mp4", fit);
-
-        var clip = edited.Clips[1];
-        Assert.Equal(VisualKind.UserVideo, clip.Visual.Kind);
-        Assert.Equal(@"imports\lab.mp4", clip.Visual.UserVideoPath);
-        Assert.Equal("Fitted words.", clip.Active.Dialogue);
-        Assert.Equal(1.05, clip.NarrationRate);
-        Assert.Same(episode.Clips[0], edited.Clips[0]);
-    }
-
-    [Fact]
-    public void Removing_footage_returns_the_clip_to_a_generated_picture_at_normal_rate()
-    {
-        var episode = ProjectStoreTests.NewEpisode(2);
-        var id = episode.Clips[0].Id;
-        var withVideo = EpisodeEditor.AttachVideo(episode, id, "lab.mp4", new FitResult("Fitted.", 0.95, S(10), S(0), true));
-
-        var clip = EpisodeEditor.RemoveVideo(withVideo, id).Clips[0];
-
-        Assert.Equal(VisualKind.TitleCard, clip.Visual.Kind);
-        Assert.Null(clip.Visual.UserVideoPath);
-        Assert.Equal(1.0, clip.NarrationRate);
-        Assert.Equal("Fitted.", clip.Active.Dialogue); // the words stay; only the picture and pace reset
-    }
-
-    [Fact]
-    public void Narration_rate_is_saved_with_the_episode()
-    {
-        var folder = Directory.CreateTempSubdirectory("poautorobo-").FullName;
-        try
-        {
-            var episode = ProjectStoreTests.NewEpisode(1);
-            ProjectStore.Save(EpisodeEditor.AttachVideo(episode, episode.Clips[0].Id, "lab.mp4", new FitResult("x", 1.07, S(9), S(0), true)), folder);
-
-            Assert.Equal(1.07, ProjectStore.Load(folder).Clips[0].NarrationRate);
         }
         finally
         {

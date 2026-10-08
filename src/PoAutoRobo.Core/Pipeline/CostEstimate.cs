@@ -31,8 +31,11 @@ public sealed record CostEstimate(IReadOnlyList<Guid> ClipIds, int Pictures, dec
     {
         var clips = episode.Clips.Where(NeedsPicture).ToList();
         var pictures = clips.Sum(c => Visuals.PictureCount(c.Visual.Kind));
-        return new CostEstimate([.. clips.Select(c => c.Id)], pictures, imageModel == "gpt-image-1-mini" ? pictures * MiniPicturePrice : null);
+        return new CostEstimate([.. clips.Select(c => c.Id)], pictures, pictures * PriceOf(imageModel));
     }
+
+    /// <summary>Price of one picture from this model, or null when it is not known.</summary>
+    public static decimal? PriceOf(string imageModel) => imageModel == "gpt-image-1-mini" ? MiniPicturePrice : null;
 
     /// <summary>Generated kinds with no picture yet, or one the dialogue has since moved away from.</summary>
     public static bool NeedsPicture(Clip clip) =>

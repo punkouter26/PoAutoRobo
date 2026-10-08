@@ -1,53 +1,20 @@
-# PoAutoRobo — Tasks
+# PoAutoRobo — Open work
 
-Status column: blank = not started, WIP, DONE. Plan: [plan.md](plan.md).
+Only what is still to do. Finished tasks T1–T19, T21, T22 and the 2026-10-08 change list are in the git history; the original plan is archived at [docs/plan-2026-10-archive.md](../docs/plan-2026-10-archive.md).
 
-Every task: failing test first, then code, `dotnet test`, `dotnet build`, one commit. Verify command is `dotnet test PoAutoRobo.sln` unless stated. Paths are under `src/PoAutoRobo.Core/` (Core), `src/PoAutoRobo.App/` (App), `tests/PoAutoRobo.Core.Tests/` (Tests). A task may touch only its listed files.
+Every task: failing test first, then code, the related tests, `dotnet build`, one commit. Paths are under `src/PoAutoRobo.Core/` (Core), `src/PoAutoRobo.App/` (App), `tests/PoAutoRobo.Core.Tests/` (Tests).
 
 | Status | ID | Slice | Files (≤5) | Acceptance | Deps |
 |---|---|---|---|---|---|
-| DONE | T1 | Solution scaffold, pinned versions, `git init` | `PoAutoRobo.sln`, `Directory.Build.props`, `Directory.Packages.props`, `.gitignore`, `Core/PoAutoRobo.Core.csproj` | `dotnet build` clean with warnings as errors; versions copied into SPEC §3 | — |
-| DONE | T2 | Episode model and project store | `Core/Models/Episode.cs`, `Core/Services/ProjectStore.cs`, `Tests/PoAutoRobo.Core.Tests.csproj`, `Tests/ProjectStoreTests.cs` | Save/load round trip equal; reorder persists; corrupt file restores from `.bak` | T1 |
-| DONE | T3 | Script writer contract, mock episode, duration rules | `Core/Services/IScriptWriter.cs`, `Core/Services/MockScriptWriter.cs`, `Core/Pipeline/Durations.cs`, `Tests/ScriptRulesTests.cs` | Mock gives 16 clips × 3 tiers; all 15–60s at 165 wpm; out-of-range flagged; default Tier B | T2 |
-| DONE | T4 | Visual mix assignment | `Core/Pipeline/VisualMix.cs`, `Tests/VisualMixTests.cs` | Largest-remainder counts exact; same seed same result; user-video clips excluded; overrides survive re-roll; sum ≠ 100 rejected | T3 |
-| DONE | T5 | Narrator contract, Windows-voice mock, WAV duration | `Core/Services/INarrator.cs`, `Core/Services/MockNarrator.cs`, `Core/Pipeline/WavInfo.cs`, `Tests/NarratorTests.cs` | WAV written; duration read from header; one timing per word, monotonic | T3 |
-| DONE | T6 | Caption file generation, four presets | `Core/Pipeline/AssCaptions.cs`, `Core/Models/CaptionStyle.cs`, `Tests/AssCaptionsTests.cs`, `Tests/*.verified.txt` | Snapshot per preset; word starts equal input timings (criterion 10) | T5 |
-| DONE | T7 | Render: argument builder, runner, end-to-end test | `Core/Pipeline/FfmpegArgs.cs`, `Core/Services/FfmpegRunner.cs`, `Core/Pipeline/EpisodeBuilder.cs`, `Tests/FfmpegArgsTests.cs`, `Tests/EndToEndTests.cs` | Mock topic → MP4; `ffprobe` shows H.264/AAC at chosen size and fps; loudness −16 ±1; cancel deletes partial file | T4, T6 |
-| DONE | — | **Checkpoint A** (2026-10-07: 16-clip mock episode, 1920x1080 30fps H.264/AAC, 400s, -16.4 LUFS, 90s render) | | | |
-| DONE | T8 | App shell, four-pane layout, new episode from custom topic | `App/PoAutoRobo.App.csproj`, `App/App.xaml(.cs)`, `App/MainWindow.xaml(.cs)`, `App/ViewModels/MainViewModel.cs` | App launches; custom topic produces a visible clip list on mocks; window size remembered | T3 |
-| DONE | T9 | Clip deck: cards, drag-reorder, tier pill, host toggle | `App/Views/ClipCard.xaml(.cs)`, `App/ViewModels/ClipViewModel.cs`, `App/MainWindow.xaml`, `Tests/ClipEditingTests.cs`, `Core/Pipeline/EpisodeEditor.cs` | Reorder and tier switch change only the targeted clip and persist (criteria 3, 4) | T8 |
-| DONE | T10 | Inspector: dialogue edit, re-synthesis, drift flag, audition | `App/Views/InspectorView.xaml(.cs)`, `Core/Pipeline/EpisodeEditor.cs`, `Tests/DialogueEditTests.cs` | Edit re-synthesizes one clip only; `coreChanged=false` keeps visual, `true` marks stale (criterion 5) | T9, T5 |
-| DONE | T11 | Timeline, preview with live caption overlay, export with progress and cancel | `App/Views/TimelineView.xaml(.cs)`, `App/ViewModels/MainViewModel.cs`, `App/MainWindow.xaml` | Preview plays with captions; preset change updates instantly; export runs off the UI thread and cancels cleanly | T7, T10 |
-| DONE | — | **Checkpoint B** (2026-10-07: app driven end to end on mocks: create, preview in 51s, 1080p30 export in 230s; caption overlay not yet checked by eye) | | | |
-| DONE | T12 | Credentials from Key Vault, real-vs-mock selection (changed 2026-10-07: no Settings page or Credential Locker; the app reads `kv-poshared` as the signed-in user) | `Core/Services/Settings.cs`, `Core/Services/ServiceSelector.cs`, `Tests/ServiceSelectorTests.cs` | Vault names map to settings; missing secret mocks that service only; unreachable vault mocks all with a reason; secrets never printed (criterion 15) | T8 |
-| DONE | T13 | Live script writer: decompose, drift check, rewrite-to-length | `Core/Services/AzureScriptWriter.cs`, `Core/Services/ScriptSchemas.cs`, `Tests/AzureScriptWriterTests.cs` | Schema and prompt snapshot; canned responses parse; wrong clip count retries once; live test opt-in | T12 |
-| DONE | T14 | Live narrator: SSML, style, rate, word timings | `Core/Services/AzureNarrator.cs`, `Core/Pipeline/Ssml.cs`, `Tests/SsmlTests.cs` | SSML escapes text and clamps rate to ±10%; live test opt-in | T12 |
-| DONE | T15 | Duration conformance and user video slot | `Core/Pipeline/Conformance.cs`, `Tests/ConformanceTests.cs`, `Core/Services/FfmpegRunner.cs`, `App/Views/InspectorView.xaml(.cs)` | Within ±1.0s in ≤3 rewrites plus rate; 5–120s enforced; closest kept on failure (criterion 7) | T13, T14 |
-| DONE | — | **Checkpoint C** (2026-10-07: live script in about 2 min, live voice with word timings, live footage fit within 1.0s for 34s and 9s footage; footage drop and picker not yet tried by hand) | | | |
-| DONE | T16 | Grounding and Repository Inspector (no mock: with no network and no saved copy the script is simply written without snippets) | `Core/Services/Grounding.cs`, `Tests/GroundingTests.cs`, `App/Views/RadarPanel.xaml(.cs)` | Keyword ranking deterministic; snippets carry URLs; rate limit falls back to the last saved copy | T12 |
-| DONE | T17 | Topic Radar feeds (arXiv, Hacker News, IEEE Spectrum, The Robot Report; Reddit and GitHub activity left out; sample topics when every source is down) | `Core/Services/TrendFeed.cs`, `Tests/TrendFeedTests.cs`, `App/Views/RadarPanel.xaml(.cs)` | Fixture feeds parse to cards; one dead source does not empty the list; Adopt starts an episode | T16 |
-| DONE | T18 | Image generation and media cache (on `gpt-image-1-mini` until `gpt-image-2` is deployed; no mock: without a connection clips keep their title card) | `Core/Services/IImageGen.cs`, `Core/Services/AzureImageGen.cs`, `Core/Services/MediaCache.cs`, `Core/Pipeline/Visuals.cs`, `Tests/MediaCacheTests.cs` | Same request makes zero second calls (criterion 11); host-visible sends the sheet, off-screen does not (criterion 16); a refusal keeps the title card | T12 |
-| DONE | T19 | Host setup, generate buttons, cost confirmation, thumbnails (new episodes get the default 50/20/20/10 mix; panel-sequence and AI-video clips get one still until T20/T21) | `App/Views/HostSetupDialog.xaml(.cs)`, `Core/Pipeline/CostEstimate.cs`, `Tests/CostEstimateTests.cs`, `App/Views/ClipCard.xaml(.cs)`, `App/MainWindow.xaml(.cs)` | Candidates, pick, locked; batch run blocked without confirmation (criterion 12). Not yet run in the app against the paid service | T18 |
-|  | T20 | AI video: live spike, job client, shot planning | `Core/Services/IVideoGen.cs`, `Core/Services/AzureVideoGen.cs`, `Core/Pipeline/ShotPlan.cs`, `Tests/ShotPlanTests.cs` | Shots cover narration, last frame held; timeout/failure falls back to still. **Starts by asking you about the `sora-2` deployment** | T19 |
-| DONE | T21 | Panel sequences, visual mix dialog with re-roll, per-clip picture type | `Core/Pipeline/FfmpegArgs.cs`, `Core/Pipeline/Visuals.cs`, `Core/Pipeline/EpisodeEditor.cs`, `Tests/MixAndPanelsTests.cs`, `App/Views/MixDialog.xaml(.cs)` | Panels cut evenly across narration; sliders must total 100; re-roll keeps the shares; hand-picked kinds survive. Dialog not yet tried in the app | T4, T19 |
-|  | — | **Checkpoint D** | | | |
-| DONE | T22 | Open a saved episode with backup restore, short-episode and clip-length warnings, criteria check | `Core/Pipeline/Durations.cs`, `Core/Services/ProjectStore.cs`, `Tests/ErrorStateTests.cs`, `App/Views/RadarPanel.xaml(.cs)`, `App/ViewModels/MainViewModel.cs` | SPEC section 12 rows covered by tests or noted as open; coverage 99% Pipeline, 100% Models; criteria status reported 2026-10-07 | all but T20 |
+|  | T20 | AI video: live spike, job client, shot planning | `Core/Services/IVideoGen.cs`, `Core/Services/AzureVideoGen.cs`, `Core/Pipeline/ShotPlan.cs`, `Tests/ShotPlanTests.cs` | Shots cover narration, last frame held; timeout/failure falls back to still. **Starts by asking you about the `sora-2` deployment.** Until then an "AI video" clip gets one still | — |
+|  | — | **Checkpoint D** | | | T20 |
 
-## Changes requested after the plan (2026-10-08)
+## Standing notes
 
-| Status | Change | Evidence |
-|---|---|---|
-| DONE | Picture requests wait out rate limits (up to 6 tries) and report failure in plain words | Tests; live batch of 20 pictures finished after the fix |
-| DONE | Topic Radar limited to stories naming both Unitree and R1 | Tests; live feed returned 8 cards, all R1 |
-| DONE | Detailed progress panel (job, exact step, percent, time, one Cancel); one long job at a time | Driven in the app: preview cancelled mid-join, FFmpeg stopped |
-| DONE | Hover tooltips on main controls; annotated guide at docs/screen-guide.png (shows the earlier single-page layout) | Built; tooltips not hovered by hand |
-| DONE | Four-step wizard layout (Topic, Script, Pictures, Export) | Driven in the app through all four steps |
-| DONE | Episode length choice incl. one-clip quick test | Live: topic to finished 47s 1080p video in 115s |
-| DONE | Faster render: clips encoded once in parallel and joined by copying (cross-dissolve replaced by a dip through black) | Same 16-clip episode: about 25 min before, 5 min 36 s after; picture and sound within 0.07 s, no decode errors |
-| NOTE | No long episodes or picture batches on the paid services; use the one-clip quick test for live checks | User instruction 2026-10-08 |
-| DONE | Two-clip episode length; full walk-through of all four steps on live services | 2026-10-08: 77.2 s 1080p30 film, 2316 frames, picture and sound equal length, 0 decode errors, -16.0 LUFS, about 6 cents of pictures |
-| DONE | Second walk-through covering the untested paths: Adopt topic, typed dialogue edit, reorder, visual mix dialog, own footage, preview playback, tooltip | 2026-10-08: 61.8 s 1080p30 film, 1854 frames, 0 decode errors, -16.4 LUFS; own 12 s footage plays in step with narration fitted to 12.8 s |
-| DONE | Bug found and fixed: a typed dialogue edit was lost when clicking straight onto another clip | Retested in the app after the fix |
-| DONE | Move earlier / Move later buttons as a non-drag way to reorder | Driven in the app: swap, no-op at the end, swap back |
-| OPEN | Drag-reorder of clip cards did not respond to three simulated mouse drags; needs trying by hand | Not established whether it is the test or the app |
-| OPEN | Host candidate dialog not exercised in the second run (costs about 5 cents; host already locked) | |
+| Kind | Note |
+|---|---|
+| NOTE | No long episodes or picture batches on the paid services; use the one-clip quick test for live checks (user instruction 2026-10-08) |
+| OPEN | Drag-reorder of clip cards did not respond to simulated mouse drags; needs trying by hand. The Move earlier/later buttons (Alt+Left / Alt+Right) are the dependable route |
+| OPEN | Host candidate dialog not exercised since it was built (costs about 5 cents; host already locked) |
+| OPEN | Not yet tried by hand after the 2026-10-08 audit changes: light theme by eye, the Windows notification when a job ends with the window hidden, button sounds, "Remove unused media" with something to remove, the GitHub Actions workflow (never run) |
+| OPEN | The spend figure counts pictures only. Add script and voice once their prices are confirmed |

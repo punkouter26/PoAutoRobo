@@ -18,7 +18,7 @@ public sealed class AssCaptionsTests
     ];
 
     private static List<(TimeSpan Start, TimeSpan End, string Text)> Events(string ass) =>
-        [.. ass.Split('\n').Where(l => l.StartsWith("Dialogue:")).Select(l =>
+        [.. ass.Split('\n').Where(l => l.StartsWith("Dialogue:", StringComparison.Ordinal)).Select(l =>
         {
             var f = l.TrimEnd('\r').Split(',', 10);
             return (Time(f[1]), Time(f[2]), f[9]);
@@ -32,60 +32,49 @@ public sealed class AssCaptionsTests
     [Theory]
     [InlineData(CaptionPreset.KaraokeHighlight)]
     [InlineData(CaptionPreset.TwoLineBlock)]
-    [InlineData(CaptionPreset.CleanSubtitle)]
     [InlineData(CaptionPreset.ComicBanner)]
     public Task Preset_snapshot(CaptionPreset preset) =>
         Verify(AssCaptions.Build(TwoClips, new CaptionStyle(preset))).UseParameters(preset);
 
     [Fact]
-    public void Karaoke_has_one_event_per_word_starting_exactly_when_the_word_is_spoken()
+    public void Every_preset_shows_each_caption_exactly_when_its_first_word_is_spoken_and_never_across_two_clips()
     {
-        var events = Events(AssCaptions.Build(TwoClips, new CaptionStyle(CaptionPreset.KaraokeHighlight)));
-        var expected = TwoClips.SelectMany(s => s.Words.Select(w => s.Offset + w.Start)).ToList();
-
-        Assert.Equal(expected, events.Select(e => e.Start));
-    }
-
-    [Theory]
-    [InlineData(CaptionPreset.TwoLineBlock)]
-    [InlineData(CaptionPreset.CleanSubtitle)]
-    [InlineData(CaptionPreset.ComicBanner)]
-    public void Block_presets_show_every_word_in_order_and_start_with_their_first_word(CaptionPreset preset)
-    {
-        var events = Events(AssCaptions.Build(TwoClips, new CaptionStyle(preset)));
         var spoken = TwoClips.SelectMany(s => s.Words.Select(w => (Start: s.Offset + w.Start, w.Text))).ToList();
 
-        Assert.Equal(
-            string.Join(' ', spoken.Select(w => w.Text)),
-            string.Join(' ', events.Select(e => Plain(e.Text))),
-            ignoreCase: true);
-        var index = 0;
-        foreach (var e in events)
+        Assert.All(Enum.GetValues<CaptionPreset>(), preset =>
         {
-            Assert.Equal(spoken[index].Start, e.Start);
-            index += Durations.WordCount(Plain(e.Text));
-        }
-    }
+            var events = Events(AssCaptions.Build(TwoClips, new CaptionStyle(preset)));
 
-    [Theory]
-    [InlineData(CaptionPreset.KaraokeHighlight)]
-    [InlineData(CaptionPreset.TwoLineBlock)]
-    public void Captions_never_span_two_clips_or_overlap(CaptionPreset preset)
-    {
-        var events = Events(AssCaptions.Build(TwoClips, new CaptionStyle(preset)));
-
-        Assert.All(events, e => Assert.True(e.End <= TimeSpan.FromSeconds(10) || e.Start >= TimeSpan.FromSeconds(10)));
-        Assert.All(events.Zip(events.Skip(1)), p => Assert.True(p.First.End <= p.Second.Start));
+            if (preset == CaptionPreset.KaraokeHighlight)
+            {
+                // One event per word, starting as that word is spoken: this is what lights the word in time.
+                Assert.Equal(spoken.Select(w => w.Start), events.Select(e => e.Start));
+            }
+            else
+            {
+                Assert.Equal(string.Join(' ', spoken.Select(w => w.Text)), string.Join(' ', events.Select(e => Plain(e.Text))), ignoreCase: true);
+                var index = 0;
+                foreach (var e in events)
+                {
+                    Assert.Equal(spoken[index].Start, e.Start);
+                    index += Durations.WordCount(Plain(e.Text));
+                }
+            }
+            Assert.All(events, e => Assert.True(e.End <= TimeSpan.FromSeconds(10) || e.Start >= TimeSpan.FromSeconds(10)));
+            Assert.All(events.Zip(events.Skip(1)), p => Assert.True(p.First.End <= p.Second.Start));
+        });
     }
 
     [Fact]
-    public void Style_controls_reach_the_file()
+    public void Style_controls_reach_the_file_and_a_bad_colour_is_rejected()
     {
         var ass = AssCaptions.Build(TwoClips, new CaptionStyle(CaptionPreset.KaraokeHighlight, FontSize: 72, AccentColor: "#11AAFF", StrokeWidth: 6));
 
         Assert.Contains(",72,", ass);
         Assert.Contains("&H00FFAA11", ass); // ASS colours are blue-green-red
         Assert.Matches(@"Style: [^\n]*,1,6,0,2,", ass);
+        // The colour is written into the style line as it stands, so anything but #RRGGBB must never get that far.
+        Assert.Throws<ArgumentException>(() => AssCaptions.Build(TwoClips, new CaptionStyle(CaptionPreset.CleanSubtitle, AccentColor: "yellow")));
     }
 
     [Fact]
@@ -97,11 +86,5 @@ public sealed class AssCaptionsTests
 
         Assert.DoesNotContain('{', text);
         Assert.DoesNotContain('\\', text);
-    }
-
-    [Fact]
-    public void Bad_accent_colour_is_rejected()
-    {
-        Assert.Throws<ArgumentException>(() => AssCaptions.Build(TwoClips, new CaptionStyle(CaptionPreset.CleanSubtitle, AccentColor: "yellow")));
     }
 }

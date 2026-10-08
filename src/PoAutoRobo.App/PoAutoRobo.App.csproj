@@ -11,8 +11,6 @@
     <!-- Unpackaged: runs as a plain exe, with the Windows App SDK runtime copied alongside it. -->
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <!-- CS0618: generated XAML type info touches WinUIEx's obsolete WindowEx.Icon; not our code to fix. -->
-    <NoWarn>$(NoWarn);CS0618</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

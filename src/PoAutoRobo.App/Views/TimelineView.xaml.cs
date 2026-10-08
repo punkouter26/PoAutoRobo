@@ -7,19 +7,26 @@ using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using PoAutoRobo.App.ViewModels;
 using PoAutoRobo.Core.Pipeline;
 using Windows.Foundation;
 using Windows.Media.Core;
 using Windows.Media.Playback;
+using Windows.UI;
 
 namespace PoAutoRobo.App.Views;
 
 public sealed partial class TimelineView : UserControl
 {
+    private const int WaveBars = 600;
+
     private readonly MediaPlayer _player = new();
     private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private IReadOnlyList<CaptionCue> _cues = [];
+    private IReadOnlyList<ClipMark> _marks = [];
+    private float[] _peaks = [];
+    private TimeSpan _length; // of the whole preview, from the narration files
     private MainViewModel? _viewModel;
     private bool _updatingScrubber;
 
@@ -44,7 +51,6 @@ public sealed partial class TimelineView : UserControl
                 value.PropertyChanged += OnViewModelChanged;
                 value.ReleasePreview = Release;
             }
-            Bindings.Update();
         }
     }
 
@@ -59,13 +65,53 @@ public sealed partial class TimelineView : UserControl
         }
     }
 
+    // The screen is as large as fits in the space while staying 16:9.
+    private void OnStageSized(object sender, SizeChangedEventArgs e)
+    {
+        Screen.Width = Math.Max(1, Math.Min(e.NewSize.Width, e.NewSize.Height * 16 / 9));
+        Screen.Height = Screen.Width * 9 / 16;
+    }
+
     private void Load()
     {
-        var hasPreview = ViewModel?.Preview is not null;
-        PlayButton.IsEnabled = Scrubber.IsEnabled = hasPreview;
-        if (hasPreview)
-            _player.Source = MediaSource.CreateFromUri(new Uri(ViewModel!.Preview!.VideoPath));
+        var preview = ViewModel?.Preview;
+        PlayButton.IsEnabled = Scrubber.IsEnabled = preview is not null;
+        _marks = preview?.Marks ?? [];
+        _peaks = [];
+        _length = TimeSpan.Zero;
+        if (preview is not null)
+        {
+            _player.Source = MediaSource.CreateFromUri(new Uri(preview.VideoPath));
+            _ = LoadWaveAsync(preview.Marks);
+        }
         Refresh();
+    }
+
+    /// <summary>Reads each clip's narration into one row of bars spanning the preview. Read off the UI thread: it is every sample of every clip.</summary>
+    private async Task LoadWaveAsync(IReadOnlyList<ClipMark> marks)
+    {
+        try
+        {
+            var (peaks, length) = await Task.Run(() =>
+            {
+                var total = marks[^1].Start + WavInfo.Duration(marks[^1].AudioPath);
+                var bars = new float[WaveBars];
+                for (var i = 0; i < marks.Count; i++)
+                {
+                    var from = (int)(marks[i].Start / total * WaveBars);
+                    var to = i + 1 < marks.Count ? (int)(marks[i + 1].Start / total * WaveBars) : WaveBars;
+                    WavInfo.Peaks(marks[i].AudioPath, to - from).CopyTo(bars.AsSpan(from));
+                }
+                return (bars, total);
+            });
+            if (!ReferenceEquals(marks, _marks)) return; // a newer preview has replaced this one
+            (_peaks, _length) = (peaks, length);
+            Wave.Invalidate();
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException or ArgumentException)
+        {
+            // No waveform is drawn; the player and scrubber work without it.
+        }
     }
 
     /// <summary>Lets go of the preview file so a new one can replace it.</summary>
@@ -92,6 +138,7 @@ public sealed partial class TimelineView : UserControl
         _player.PlaybackSession.Position = position;
         TimeText.Text = $"{position:m\\:ss} / {_player.PlaybackSession.NaturalDuration:m\\:ss}"; // the clock only ticks while playing
         Overlay.Invalidate();
+        Wave.Invalidate();
     }
 
     private void Refresh()
@@ -103,6 +150,46 @@ public sealed partial class TimelineView : UserControl
         _updatingScrubber = false;
         TimeText.Text = $"{session.Position:m\\:ss} / {session.NaturalDuration:m\\:ss}";
         Overlay.Invalidate();
+        Wave.Invalidate();
+    }
+
+    private void OnWavePressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (_length <= TimeSpan.Zero || Wave.ActualWidth <= 0) return;
+        Scrubber.Value = e.GetCurrentPoint(Wave).Position.X / Wave.ActualWidth * _length.TotalSeconds; // the scrubber moves the player
+    }
+
+    private void OnDrawWave(CanvasControl sender, CanvasDrawEventArgs args)
+    {
+        if (_peaks.Length == 0 || _length <= TimeSpan.Zero) return;
+        var (width, height) = ((float)sender.ActualWidth, (float)sender.ActualHeight);
+        var session = args.DrawingSession;
+        var ink = ActualTheme == ElementTheme.Light ? Colors.Black : Colors.White;
+        var quiet = Color.FromArgb(90, ink.R, ink.G, ink.B);
+        var accent = (Color)Application.Current.Resources["SystemAccentColor"];
+        var played = (float)(_player.PlaybackSession.Position / _length) * width;
+
+        // The bars sit in the lower part; the clip titles run along the top.
+        const float TitleRoom = 16;
+        var middle = TitleRoom + (height - TitleRoom) / 2;
+        var step = width / _peaks.Length;
+        for (var i = 0; i < _peaks.Length; i++)
+        {
+            var x = i * step;
+            var half = Math.Max(1, _peaks[i] * (height - TitleRoom) / 2);
+            session.DrawLine(x, middle - half, x, middle + half, x <= played ? accent : quiet, Math.Max(1, step - 1));
+        }
+
+        using var format = new CanvasTextFormat { FontSize = 11, WordWrapping = CanvasWordWrapping.NoWrap, TrimmingGranularity = CanvasTextTrimmingGranularity.Character };
+        for (var i = 0; i < _marks.Count; i++)
+        {
+            var x = (float)(_marks[i].Start / _length) * width;
+            var next = i + 1 < _marks.Count ? (float)(_marks[i + 1].Start / _length) * width : width;
+            session.DrawLine(x, 0, x, height, ink, 1);
+            if (next - x > 24)
+                session.DrawText($"{i + 1} · {_marks[i].Title}", new Rect(x + 4, 0, next - x - 8, TitleRoom), ink, format);
+        }
+        session.DrawLine(played, 0, played, height, accent, 2);
     }
 
     private void OnDrawCaption(CanvasControl sender, CanvasDrawEventArgs args)
@@ -154,5 +241,7 @@ public sealed partial class TimelineView : UserControl
     {
         _tick.Stop();
         Overlay.RemoveFromVisualTree(); // Win2D controls must be detached explicitly or they leak
+        Wave.RemoveFromVisualTree();
+        _player.Dispose();
     }
 }

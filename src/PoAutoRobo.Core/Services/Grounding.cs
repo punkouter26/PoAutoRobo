@@ -1,5 +1,7 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Octokit;
+using PoAutoRobo.Core.Models;
 
 namespace PoAutoRobo.Core.Services;
 
@@ -13,7 +15,7 @@ public delegate Task<IReadOnlyList<RepoDocument>> RepoSource(string repo, IReadO
 /// Finds passages in the official repositories that bear on a topic, so the script can quote real names and numbers.
 /// The <see cref="RepoSource"/> seam keeps ranking and caching testable without GitHub.
 /// </summary>
-public sealed class Grounding(RepoSource source, string cacheFolder)
+public sealed partial class Grounding(RepoSource source, string cacheFolder)
 {
     public const int MaxSnippetLength = 1500;
     private const int MaxSnippets = 8;
@@ -130,6 +132,21 @@ public sealed class Grounding(RepoSource source, string cacheFolder)
             .Where(s => s.Length > 0)
             .Select(s => new GroundingSnippet(document.Repo, document.Path, document.Url, s.Length > MaxSnippetLength ? s[..MaxSnippetLength] : s))];
     }
+
+    /// <summary>
+    /// Figures and code-style names in <paramref name="dialogue"/> that appear in none of the <paramref name="sources"/>:
+    /// the things the script was told to take only from the repositories. A plain text check, no model involved.
+    /// </summary>
+    // ponytail: exact text match, so "50 Hz" in the script against "50Hz" in a source is flagged. Normalise spacing if that gets noisy.
+    public static IReadOnlyList<string> UnverifiedClaims(string dialogue, IEnumerable<string> sources)
+    {
+        var known = string.Join('\n', sources);
+        return [.. Claim().Matches(dialogue).Select(m => m.Value).Distinct().Where(claim => !known.Contains(claim, StringComparison.OrdinalIgnoreCase))];
+    }
+
+    // A number of two or more digits or with a decimal point, with any unit joined to it; or a name with an underscore.
+    [GeneratedRegex(@"\b\d+\.\d+\w*|\b\d{2,}\w*|\b[A-Za-z][A-Za-z0-9]*_\w+")]
+    private static partial Regex Claim();
 
     /// <summary>The part of a source file around the first topic word, since the top of a file is usually licence text.</summary>
     private static string Around(string text, IReadOnlyList<string> keywords)

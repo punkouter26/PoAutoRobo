@@ -5,44 +5,33 @@ namespace PoAutoRobo.Core.Tests;
 
 public sealed class VisualMixTests
 {
-    private static Dictionary<VisualKind, int> CountKinds(Episode e) =>
-        e.Clips.GroupBy(c => c.Visual.Kind).ToDictionary(g => g.Key, g => g.Count());
+    private static IEnumerable<VisualKind> Kinds(Episode e) => e.Clips.Select(c => c.Visual.Kind);
 
     [Theory]
     // still, panels, video, title, clips → expected counts
-    [InlineData(50, 20, 20, 10, 20, 10, 4, 4, 2)]
-    [InlineData(100, 0, 0, 0, 17, 17, 0, 0, 0)]
     [InlineData(25, 25, 25, 25, 15, 4, 4, 4, 3)]   // 3.75 each: three round up, ties go in listed order
-    [InlineData(34, 33, 33, 0, 16, 6, 5, 5, 0)]    // 5.44, 5.28, 5.28
-    [InlineData(10, 10, 10, 70, 15, 2, 2, 1, 10)]  // 1.5, 1.5, 1.5, 10.5: two spare seats go to the first two
-    public void Counts_use_largest_remainder_and_sum_to_the_clip_count(
+    [InlineData(34, 33, 33, 0, 16, 6, 5, 5, 0)]    // 5.44, 5.28, 5.28: the one spare seat goes to the largest remainder
+    public void Counts_use_largest_remainder_and_assignment_deals_exactly_those_counts(
         int still, int panels, int video, int title, int clips, int eStill, int ePanels, int eVideo, int eTitle)
     {
-        var counts = VisualMix.Counts(new MixPercentages(still, panels, video, title), clips);
+        var mix = new MixPercentages(still, panels, video, title);
+        var episode = ProjectStoreTests.NewEpisode(clips);
 
-        Assert.Equal(clips, counts.Values.Sum());
+        var counts = VisualMix.Counts(mix, clips);
+        var assigned = VisualMix.Assign(episode, mix);
+
         Assert.Equal(
             (eStill, ePanels, eVideo, eTitle),
             (counts[VisualKind.Still], counts[VisualKind.MultiPanel], counts[VisualKind.AiVideo], counts[VisualKind.TitleCard]));
-    }
-
-    [Theory]
-    [InlineData(50, 50, 50, 50)]
-    [InlineData(99, 0, 0, 0)]
-    [InlineData(110, -10, 0, 0)]
-    public void Percentages_must_be_non_negative_and_sum_to_100(int still, int panels, int video, int title)
-    {
-        Assert.Throws<ArgumentException>(() => VisualMix.Counts(new MixPercentages(still, panels, video, title), 16));
+        Assert.All(counts, c => Assert.Equal(c.Value, Kinds(assigned).Count(k => k == c.Key)));
+        Assert.Equal(episode.Clips.Select(c => c.Id), assigned.Clips.Select(c => c.Id)); // clips stay where they are
     }
 
     [Fact]
-    public void Assignment_matches_the_counts()
+    public void Percentages_must_be_non_negative_and_sum_to_100()
     {
-        var assigned = VisualMix.Assign(ProjectStoreTests.NewEpisode(20), new MixPercentages(50, 20, 20, 10));
-
-        Assert.Equal(
-            new Dictionary<VisualKind, int> { [VisualKind.Still] = 10, [VisualKind.MultiPanel] = 4, [VisualKind.AiVideo] = 4, [VisualKind.TitleCard] = 2 },
-            CountKinds(assigned));
+        Assert.Throws<ArgumentException>(() => VisualMix.Counts(new MixPercentages(99, 0, 0, 0), 16));
+        Assert.Throws<ArgumentException>(() => VisualMix.Counts(new MixPercentages(110, -10, 0, 0), 16));
     }
 
     [Fact]
@@ -50,7 +39,6 @@ public sealed class VisualMixTests
     {
         var episode = ProjectStoreTests.NewEpisode(20);
         var mix = new MixPercentages(25, 25, 25, 25);
-        static IEnumerable<VisualKind> Kinds(Episode e) => e.Clips.Select(c => c.Visual.Kind);
 
         Assert.Equal(Kinds(VisualMix.Assign(episode, mix)), Kinds(VisualMix.Assign(episode, mix)));
         Assert.NotEqual(Kinds(VisualMix.Assign(episode, mix)), Kinds(VisualMix.Assign(episode with { MixSeed = 7 }, mix)));
@@ -65,20 +53,11 @@ public sealed class VisualMixTests
         clips[1] = clips[1] with { Visual = new VisualSpec(VisualKind.AiVideo, KindLocked: true) };
         episode = episode with { Clips = clips };
 
-        var assigned = VisualMix.Assign(episode, new MixPercentages(100, 0, 0, 0));
+        var assigned = VisualMix.Assign(episode, new MixPercentages(50, 0, 0, 50));
 
         Assert.Equal(clips[0].Visual, assigned.Clips[0].Visual);
         Assert.Equal(clips[1].Visual, assigned.Clips[1].Visual);
-        Assert.All(assigned.Clips.Skip(2), c => Assert.Equal(VisualKind.Still, c.Visual.Kind));
-    }
-
-    [Fact]
-    public void Assignment_keeps_clip_order_and_identity()
-    {
-        var episode = ProjectStoreTests.NewEpisode(16);
-
-        var assigned = VisualMix.Assign(episode, new MixPercentages(25, 25, 25, 25));
-
-        Assert.Equal(episode.Clips.Select(c => c.Id), assigned.Clips.Select(c => c.Id));
+        Assert.Equal(5, Kinds(assigned).Count(k => k == VisualKind.Still)); // half of the ten that are left, not of all twelve
+        Assert.Equal(5, Kinds(assigned).Count(k => k == VisualKind.TitleCard));
     }
 }

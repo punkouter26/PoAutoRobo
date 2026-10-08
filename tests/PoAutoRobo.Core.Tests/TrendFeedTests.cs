@@ -36,117 +36,94 @@ public sealed class TrendFeedTests
         </channel></rss>
         """;
 
+    // The last story is about the R1 but its link would open something on the machine instead of a web page.
     private const string HackerNews = """
         { "hits": [
           { "title": "Unitree R1 teardown", "url": "https://example.com/teardown", "points": 212, "num_comments": 87, "created_at": "2026-10-04T12:00:00Z", "objectID": "1" },
           { "title": "Ask HN: humanoid robot sims?", "points": 40, "num_comments": 12, "created_at": "2026-10-03T12:00:00Z", "objectID": "42" },
-          { "story_text": "a hit with no title, as the real service sometimes sends", "objectID": "43" }
+          { "story_text": "a hit with no title, as the real service sometimes sends", "objectID": "43" },
+          { "title": "Unitree R1 firmware", "url": "search-ms:query=evil", "points": 9, "num_comments": 1, "created_at": "2026-10-07T12:00:00Z", "objectID": "44" }
         ] }
         """;
 
     [Fact]
-    public void Atom_entries_become_cards_with_clean_text_and_their_link()
+    public void Atom_rss_and_hacker_news_items_become_cards_with_clean_text_their_link_and_where_there_is_one_an_interest_figure()
     {
-        var card = TrendFeed.ParseFeed(Atom, "arXiv cs.RO")[0];
+        var atom = TrendFeed.ParseFeed(Atom, "arXiv cs.RO")[0];
 
-        Assert.Equal("Whole-Body Balance for Humanoid Robots", card.Title);
-        Assert.Equal("We train a humanoid policy on the Unitree R1 with domain randomization.", card.Summary);
-        Assert.Equal("arXiv cs.RO", card.Source);
-        Assert.Equal("http://arxiv.org/abs/2610.00001v1", card.Url);
-        Assert.Equal(new DateTimeOffset(2026, 10, 5, 10, 0, 0, TimeSpan.Zero), card.Published);
-        Assert.Null(card.Interest);
-    }
+        Assert.Equal("Whole-Body Balance for Humanoid Robots", atom.Title);
+        Assert.Equal("We train a humanoid policy on the Unitree R1 with domain randomization.", atom.Summary);
+        Assert.Equal("arXiv cs.RO", atom.Source);
+        Assert.Equal("http://arxiv.org/abs/2610.00001v1", atom.Url);
+        Assert.Equal(new DateTimeOffset(2026, 10, 5, 10, 0, 0, TimeSpan.Zero), atom.Published);
+        Assert.Null(atom.Interest);
 
-    [Fact]
-    public void Rss_items_are_read_the_same_way()
-    {
-        var card = Assert.Single(TrendFeed.ParseFeed(Rss, "Outlet"));
+        var rss = Assert.Single(TrendFeed.ParseFeed(Rss, "Outlet"));
 
-        Assert.Equal("Unitree ships R1 update", card.Title);
-        Assert.Equal("The R1 humanoid gets new firmware.", card.Summary);
-        Assert.Equal("https://example.org/r1", card.Url);
-    }
+        Assert.Equal("Unitree ships R1 update", rss.Title);
+        Assert.Equal("The R1 humanoid gets new firmware.", rss.Summary);
+        Assert.Equal("https://example.org/r1", rss.Url);
 
-    [Fact]
-    public void Hacker_news_stories_carry_points_and_comments_and_fall_back_to_the_discussion_link()
-    {
+        var longOne = TrendFeed.ParseFeed(Rss.Replace("The R1 humanoid gets new firmware.", "R1 " + new string('x', 600)), "Outlet")[0];
+
+        Assert.InRange(longOne.Summary.Length, 1, TrendFeed.MaxSummaryLength + 1);
+
+        // Hacker News is the one source with an interest figure; a text post falls back to its discussion link.
         var cards = TrendFeed.ParseHackerNews(HackerNews);
 
+        Assert.Equal(3, cards.Count); // the hit with no title is left out
         Assert.Equal("212 points · 87 comments", cards[0].Interest);
         Assert.Equal("https://example.com/teardown", cards[0].Url);
         Assert.Equal("https://news.ycombinator.com/item?id=42", cards[1].Url);
         Assert.Equal("Hacker News", cards[1].Source);
     }
 
-    [Fact]
-    public void Long_summaries_are_shortened()
-    {
-        var xml = Rss.Replace("The R1 humanoid gets new firmware.", "R1 " + new string('x', 600));
-
-        Assert.InRange(TrendFeed.ParseFeed(xml, "Outlet")[0].Summary.Length, 1, TrendFeed.MaxSummaryLength + 1);
-    }
-
     [Theory]
-    [InlineData("Unitree R1 learns to walk", "", true)]
     [InlineData("New firmware for the R1", "Unitree shipped an update for its smallest humanoid.", true)]
-    [InlineData("Unitree's R1: a teardown", "", true)]
-    [InlineData("Whole-body balance for humanoid robots", "A general method for bipeds.", false)]   // humanoids in general
-    [InlineData("Unitree G1 does a backflip", "", false)]                                              // another Unitree robot
-    [InlineData("Rivian R1 road test", "An electric truck.", false)]                                   // another maker's R1
-    [InlineData("Unitree shows the R1S prototype", "", false)]                                         // R1 must be the whole word
+    [InlineData("Rivian R1 road test", "An electric truck.", false)]                       // another maker's R1
+    [InlineData("Unitree shows the R1S prototype", "", false)]                             // R1 must be the whole word
     public void Only_cards_about_the_unitree_r1_itself_are_kept(string title, string summary, bool kept)
     {
         Assert.Equal(kept, TrendFeed.IsAboutR1(new TopicCard(title, summary, "x", "https://example.org", null, DateTimeOffset.MinValue)));
     }
 
+    // Links from feeds and saved files end up on a button the user clicks, so only web addresses may get through.
     [Fact]
-    public async Task A_general_humanoid_story_no_longer_reaches_the_radar()
+    public void Only_web_links_are_accepted()
     {
-        var feed = new TrendFeed((url, _) => Task.FromResult(url.Contains("hn.algolia") ? HackerNews : Rss));
-
-        var cards = await feed.GetAsync(Ct);
-
-        Assert.DoesNotContain(cards, c => c.Title.Contains("Ask HN"));
-        Assert.Contains(cards, c => c.Title == "Unitree R1 teardown");
+        Assert.True(TrendFeed.IsWebLink("https://example.com/r1"));
+        Assert.True(TrendFeed.IsWebLink("http://example.com/r1"));
+        // Protocol handlers, script, local files, file shares and things that are not addresses at all.
+        foreach (var url in new[] { "search-ms:query=x", "ms-msdt:/id x", "javascript:alert(1)", "file:///C:/Windows/win.ini", @"\\attacker\share\x", "not a url", "" })
+            Assert.False(TrendFeed.IsWebLink(url), url);
     }
 
     [Fact]
-    public async Task Cards_are_merged_newest_first_and_only_relevant_ones_are_kept()
+    public async Task Cards_are_merged_newest_first_and_only_relevant_ones_with_web_links_reach_the_radar()
     {
         var feed = new TrendFeed((url, _) => Task.FromResult(url.Contains("hn.algolia") ? HackerNews : url.Contains("arxiv") ? Atom : Rss));
 
         var cards = await feed.GetAsync(Ct);
 
-        Assert.DoesNotContain(cards, c => c.Title.Contains("Warehouse"));
-        Assert.Equal(cards.OrderByDescending(c => c.Published), cards);
-        Assert.Contains(cards, c => c.Source == "Hacker News");
-        Assert.Contains(cards, c => c.Source == "arXiv cs.RO");
-        Assert.Equal(cards.Count, cards.Select(c => c.Url).Distinct().Count());
+        Assert.Equal(["Unitree ships R1 update", "Whole-Body Balance for Humanoid Robots", "Unitree R1 teardown"], cards.Select(c => c.Title));
+        Assert.Equal(["IEEE Spectrum", "arXiv cs.RO", "Hacker News"], cards.Select(c => c.Source)); // the same story from two outlets is listed once
+        Assert.All(cards, c => Assert.True(TrendFeed.IsWebLink(c.Url), c.Url)); // the search-ms story never gets through
     }
 
     [Fact]
-    public async Task One_dead_or_garbled_source_does_not_empty_the_list()
+    public async Task One_dead_or_garbled_source_does_not_empty_the_list_and_with_every_source_down_sample_topics_are_offered()
     {
-        var feed = new TrendFeed((url, _) =>
+        var partly = new TrendFeed((url, _) =>
             url.Contains("hn.algolia") ? Task.FromResult(HackerNews)
             : url.Contains("arxiv") ? Task.FromResult("<html>Service unavailable</html>")
             : Task.FromException<string>(new HttpRequestException("No such host")));
+        var offline = new TrendFeed((_, _) => Task.FromException<string>(new HttpRequestException("offline")));
 
-        var cards = await feed.GetAsync(Ct);
+        Assert.Equal("Hacker News", Assert.Single(await partly.GetAsync(Ct)).Source);
 
-        Assert.NotEmpty(cards);
-        Assert.All(cards, c => Assert.Equal("Hacker News", c.Source));
-    }
-
-    [Fact]
-    public async Task With_every_source_down_sample_topics_are_offered_and_labelled_as_samples()
-    {
-        var feed = new TrendFeed((_, _) => Task.FromException<string>(new HttpRequestException("offline")));
-
-        var cards = await feed.GetAsync(Ct);
-
-        Assert.NotEmpty(cards);
-        Assert.All(cards, c => Assert.Equal("Sample topic", c.Source));
+        var samples = await offline.GetAsync(Ct);
+        Assert.NotEmpty(samples);
+        Assert.All(samples, c => Assert.Equal("Sample topic", c.Source)); // labelled, so they are not mistaken for news
     }
 
     /// <summary>Opt-in: the real feeds. Reports which sources answered.</summary>

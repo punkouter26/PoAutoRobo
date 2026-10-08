@@ -25,7 +25,7 @@ public sealed class EndToEndTests : IDisposable
 
     private static FfmpegRunner Ffmpeg => new(FfmpegRunner.Locate()!);
 
-    private EpisodeBuilder Builder => new(new MockNarrator(), Ffmpeg);
+    private static EpisodeBuilder Builder => new(new MockNarrator(), Ffmpeg);
 
     /// <summary>Mock script cut down to three short clips: a title card, a still image and user footage.</summary>
     private async Task<Episode> ThreeClipEpisodeAsync()
@@ -58,7 +58,7 @@ public sealed class EndToEndTests : IDisposable
         var episode = await ThreeClipEpisodeAsync();
         var progress = new List<RenderProgress>();
 
-        var output = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), new SyncProgress(progress.Add), default);
+        var output = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), new SyncProgress<RenderProgress>(progress.Add), default);
 
         var probe = await Ffmpeg.ProbeAsync(["-v", "error", "-show_entries", "stream=codec_name,width,height,r_frame_rate:format=duration", "-of", "default=nw=1", output], default);
         Assert.Contains("codec_name=h264", probe);
@@ -78,15 +78,22 @@ public sealed class EndToEndTests : IDisposable
         Assert.Equal(progress.Select(p => p.Fraction).Order(), progress.Select(p => p.Fraction)); // never goes backwards
         // Every stage is named in plain words, in order, with which clip it is on.
         var stages = progress.Select(p => p.Activity).Distinct().ToList();
-        Assert.Contains(stages, s => s.StartsWith("Recording the voice for clip 1 of 3"));
-        Assert.Contains(stages, s => s.StartsWith("Drawing clips · 0 of 3 done"));
-        Assert.Contains(stages, s => s.StartsWith("Drawing clips · 3 of 3 done"));
-        Assert.Contains(stages, s => s.StartsWith("Joining the clips"));
-        Assert.True(stages.FindIndex(s => s.StartsWith("Recording")) < stages.FindIndex(s => s.StartsWith("Drawing")));
-        Assert.True(stages.FindLastIndex(s => s.StartsWith("Drawing")) < stages.FindIndex(s => s.StartsWith("Joining")));
-        Assert.Contains(stages, s => s.StartsWith("Drawing") && s.Contains("working on") && s.Contains(episode.Clips[1].Title));
+        Assert.Contains(stages, s => s.StartsWith("Recording the voice for clip 1 of 3", StringComparison.Ordinal));
+        Assert.Contains(stages, s => s.StartsWith("Drawing clips · 0 of 3 done", StringComparison.Ordinal));
+        Assert.Contains(stages, s => s.StartsWith("Drawing clips · 3 of 3 done", StringComparison.Ordinal));
+        Assert.Contains(stages, s => s.StartsWith("Joining the clips", StringComparison.Ordinal));
+        Assert.True(stages.FindIndex(s => s.StartsWith("Recording", StringComparison.Ordinal)) < stages.FindIndex(s => s.StartsWith("Drawing", StringComparison.Ordinal)));
+        Assert.True(stages.FindLastIndex(s => s.StartsWith("Drawing", StringComparison.Ordinal)) < stages.FindIndex(s => s.StartsWith("Joining", StringComparison.Ordinal)));
+        Assert.Contains(stages, s => s.StartsWith("Drawing", StringComparison.Ordinal) && s.Contains("working on", StringComparison.Ordinal) && s.Contains(episode.Clips[1].Title));
         Assert.Equal(1.0, progress[^1].Fraction, precision: 2);
         Assert.Empty(Directory.GetDirectories(Path.Combine(_folder, "export"))); // working folder cleaned up
+
+        // Beside the video, ready to upload with it: a chapter per clip, subtitles and a cover picture.
+        var name = Path.ChangeExtension(output, null);
+        Assert.Equal(episode.Clips.Select(c => c.Title), File.ReadAllLines(name + ".chapters.txt").Select(line => line[(line.IndexOf(' ') + 1)..]));
+        Assert.StartsWith("0:00 ", File.ReadAllText(name + ".chapters.txt"));
+        Assert.StartsWith("1\n00:00:00,000 --> ", File.ReadAllText(name + ".srt"));
+        Assert.True(File.Exists(name + ".thumbnail.png"));
     }
 
     /// <summary>Checkpoint evidence: the whole 16-clip mock episode at 1080p30. Takes minutes, so it is opt-in.</summary>
@@ -139,11 +146,6 @@ public sealed class EndToEndTests : IDisposable
             Ffmpeg.RunAsync(["-i", "does-not-exist.mp4", "out.mp4"], _folder, null, null, default));
 
         Assert.Contains("does-not-exist.mp4", error.Message);
-    }
-
-    private sealed class SyncProgress(Action<RenderProgress> report) : IProgress<RenderProgress>
-    {
-        public void Report(RenderProgress value) => report(value);
     }
 
     private sealed class CountingNarrator : INarrator

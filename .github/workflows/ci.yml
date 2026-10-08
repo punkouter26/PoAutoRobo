@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build:
+    # WinUI 3 and the Windows voice used by the offline narrator only exist on Windows.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build (warnings are errors)
+        run: dotnet build PoAutoRobo.sln --configuration Release
+      # No Azure sign-in here, so everything runs on the mocks. Tests that need FFmpeg skip themselves when it is absent.
+      - name: Test
+        run: dotnet test PoAutoRobo.sln --configuration Release --no-build
+      - name: Formatting
+        run: dotnet format PoAutoRobo.sln --verify-no-changes
+      - name: Known-vulnerable packages
+        shell: pwsh
+        run: |
+          $report = dotnet list PoAutoRobo.sln package --vulnerable --include-transitive | Out-String
+          $report
+          if ($report -match 'has the following vulnerable packages') { exit 1 }

@@ -56,8 +56,8 @@ public sealed partial class FfmpegRunner(string ffmpegPath)
             : throw new FfmpegException("The file's length could not be read.");
     }
 
-    /// <summary>Integrated loudness of a file's audio, in LUFS.</summary>
-    public async Task<double> MeasureLoudnessAsync(string path, CancellationToken ct)
+    /// <summary>Integrated loudness of a file's audio, in LUFS. Only the end-to-end test measures this, so it is not public.</summary>
+    internal async Task<double> MeasureLoudnessAsync(string path, CancellationToken ct)
     {
         var (_, _, log) = await StartAsync(
             ffmpegPath, ["-hide_banner", "-nostdin", "-nostats", "-i", path, "-af", "ebur128", "-f", "null", "-"],

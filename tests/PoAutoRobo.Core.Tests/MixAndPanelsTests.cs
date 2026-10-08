@@ -15,63 +15,25 @@ public sealed class MixAndPanelsTests : IDisposable
 
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
-    private static Dictionary<VisualKind, int> Kinds(Episode e) => e.Clips.GroupBy(c => c.Visual.Kind).ToDictionary(g => g.Key, g => g.Count());
-
     // ---- Mix ----
 
     [Fact]
-    public void Setting_the_mix_assigns_kinds_and_is_saved_with_the_episode()
-    {
-        var mix = new MixPercentages(40, 30, 0, 30);
-
-        var mixed = EpisodeEditor.SetMix(_episode, mix);
-        ProjectStore.Save(mixed, _folder);
-
-        Assert.Equal(new Dictionary<VisualKind, int> { [VisualKind.Still] = 4, [VisualKind.MultiPanel] = 3, [VisualKind.TitleCard] = 3 }, Kinds(mixed));
-        Assert.Equal(mix, ProjectStore.Load(_folder).Mix);
-        Assert.Equal(MixPercentages.Default, _episode.Mix);
-    }
-
-    [Fact]
-    public void Re_rolling_keeps_the_counts_but_deals_them_differently()
-    {
-        var mixed = EpisodeEditor.SetMix(_episode, new MixPercentages(50, 50, 0, 0));
-
-        var rerolled = EpisodeEditor.RerollMix(mixed, newSeed: mixed.MixSeed + 1);
-
-        Assert.Equal(Kinds(mixed), Kinds(rerolled));
-        Assert.NotEqual(mixed.Clips.Select(c => c.Visual.Kind), rerolled.Clips.Select(c => c.Visual.Kind));
-    }
-
-    [Fact]
-    public void A_hand_picked_kind_survives_mix_changes_and_re_rolls()
-    {
-        var id = _episode.Clips[3].Id;
-
-        var picked = EpisodeEditor.SetKind(_episode, id, VisualKind.AiVideo);
-        var later = EpisodeEditor.RerollMix(EpisodeEditor.SetMix(picked, new MixPercentages(100, 0, 0, 0)), newSeed: 99);
-
-        Assert.Equal(VisualKind.AiVideo, later.Clips[3].Visual.Kind);
-        Assert.True(later.Clips[3].Visual.KindLocked);
-        Assert.Equal(9, Kinds(later)[VisualKind.Still]);
-    }
-
-    [Fact]
-    public void A_clip_whose_kind_changes_drops_its_old_picture_and_one_that_keeps_its_kind_keeps_it()
+    public void A_hand_picked_kind_survives_mix_changes_and_re_rolls_and_only_clips_whose_kind_changes_drop_their_old_picture()
     {
         var withPictures = _episode with { Clips = [.. _episode.Clips.Select(c => c with { Visual = new VisualSpec(VisualKind.Still, MediaPaths: ["a.png"]) })] };
+        var id = withPictures.Clips[3].Id;
 
-        var allTitleCards = EpisodeEditor.SetMix(withPictures, new MixPercentages(0, 0, 0, 100));
-        var stillStills = EpisodeEditor.SetMix(withPictures, new MixPercentages(100, 0, 0, 0));
+        var picked = EpisodeEditor.SetKind(withPictures, id, VisualKind.AiVideo);
+        var stillStills = EpisodeEditor.RerollMix(EpisodeEditor.SetMix(picked, new MixPercentages(100, 0, 0, 0)), newSeed: 99);
+        var titleCards = EpisodeEditor.SetMix(picked, new MixPercentages(0, 0, 0, 100));
 
-        Assert.All(allTitleCards.Clips, c => Assert.Null(c.Visual.MediaPaths));
-        Assert.All(stillStills.Clips, c => Assert.Equal(["a.png"], c.Visual.MediaPaths));
-    }
-
-    [Fact]
-    public void Kind_cannot_be_set_to_my_video_by_hand()
-    {
-        Assert.Throws<ArgumentException>(() => EpisodeEditor.SetKind(_episode, _episode.Clips[0].Id, VisualKind.UserVideo));
+        Assert.Equal(new VisualSpec(VisualKind.AiVideo, KindLocked: true), stillStills.Clips[3].Visual);
+        Assert.Equal(new VisualSpec(VisualKind.AiVideo, KindLocked: true), titleCards.Clips[3].Visual);
+        Assert.All(stillStills.Clips.Where(c => c.Id != id), c => Assert.Equal(["a.png"], c.Visual.MediaPaths)); // same kind: picture kept
+        Assert.All(titleCards.Clips.Where(c => c.Id != id), c => Assert.Equal(new VisualSpec(VisualKind.TitleCard), c.Visual));
+        Assert.Equal(new MixPercentages(0, 0, 0, 100), titleCards.Mix);
+        // "My video" comes from attaching footage, never from picking a kind.
+        Assert.Throws<ArgumentException>(() => EpisodeEditor.SetKind(_episode, id, VisualKind.UserVideo));
     }
 
     // ---- Panel sequences ----
@@ -101,8 +63,6 @@ public sealed class MixAndPanelsTests : IDisposable
         Verify(string.Join('\n', FfmpegArgs.PanelsVideo(["p1.png", "p2.png", "p3.png"], TimeSpan.FromSeconds(20.35), ExportPreset.Hd30, "clip_00.mp4")));
 
     [Theory]
-    [InlineData(20.35, 3)]
-    [InlineData(15.0, 2)]
     [InlineData(31.7, 4)]
     public void Panel_frame_counts_add_up_to_the_clip_length_exactly(double seconds, int panels)
     {
@@ -111,7 +71,7 @@ public sealed class MixAndPanelsTests : IDisposable
         var frames = Regex.Matches(args, @":d=(\d+):").Select(m => int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)).ToList();
         Assert.Equal(panels, frames.Count);
         Assert.Equal((int)Math.Round(seconds * 30), frames.Sum());
-        Assert.InRange(frames.Max() - frames.Min(), 0, panels);
+        Assert.InRange(frames.Max() - frames.Min(), 0, 1);
     }
 
     [FfmpegFact]

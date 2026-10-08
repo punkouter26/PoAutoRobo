@@ -1,4 +1,5 @@
 using Azure;
+using Azure.Core;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 
@@ -11,11 +12,11 @@ public interface ISecretSource
 }
 
 /// <summary>Reads secrets from Azure Key Vault as the signed-in Azure user. Nothing is written to disk.</summary>
-public sealed class KeyVaultSecretSource(Uri vault) : ISecretSource
+public sealed class KeyVaultSecretSource(Uri vault, TokenCredential credential) : ISecretSource
 {
     public static readonly Uri DefaultVault = new("https://kv-poshared.vault.azure.net/");
 
-    private readonly SecretClient _client = new(vault, new DefaultAzureCredential());
+    private readonly SecretClient _client = new(vault, credential);
 
     public async Task<string?> GetAsync(string name, CancellationToken ct)
     {
@@ -31,10 +32,19 @@ public sealed class KeyVaultSecretSource(Uri vault) : ISecretSource
 }
 
 /// <summary>Connection details for the live services. Held in memory only; never saved with an episode.</summary>
-/// <param name="Endpoint">The Azure AI services resource. One resource and key serve script, voice, images and video.</param>
-public sealed record AppSettings(Uri? Endpoint, string? ApiKey, string? GitHubToken)
+/// <param name="Endpoint">The Azure AI services resource. One resource serves script, voice, images and video.</param>
+public sealed record AppSettings(Uri? Endpoint, string? GitHubToken)
 {
-    public static readonly AppSettings Offline = new(null, null, null);
+    /// <summary>The account signed in with <c>az login</c>. Asking only the CLI is much quicker than trying every sign-in source in turn.</summary>
+    public static readonly TokenCredential SignedInUser = new AzureCliCredential();
+
+    public static readonly AppSettings Offline = new(null, null);
+
+    /// <summary>Every request to the AI resource is signed as this user, so the app never holds the resource's key.</summary>
+    public TokenCredential Credential { get; init; } = SignedInUser;
+
+    /// <summary>True when script, voice and pictures run for real. They share one resource, so they are live or simulated together.</summary>
+    public bool IsLive => Endpoint is not null;
 
     public string ChatDeployment { get; init; } = "gpt-5.4";
     public string FastChatDeployment { get; init; } = "gpt-5.4-mini";
@@ -51,10 +61,9 @@ public sealed record AppSettings(Uri? Endpoint, string? ApiKey, string? GitHubTo
         try
         {
             // Fetched together: each is a separate round trip made before the window can appear.
-            var (endpoint, apiKey, gitHub) = (Get("AzureOpenAI--Endpoint"), Get("AzureOpenAI--ApiKey"), Get("GitHub--PAT"));
-            await Task.WhenAll(endpoint, apiKey, gitHub);
-            return new AppSettings(
-                Uri.TryCreate(await endpoint, UriKind.Absolute, out var uri) ? uri : null, await apiKey, await gitHub);
+            var (endpoint, gitHub) = (Get("AzureOpenAI--Endpoint"), Get("GitHub--PAT"));
+            await Task.WhenAll(endpoint, gitHub);
+            return new AppSettings(Uri.TryCreate(await endpoint, UriKind.Absolute, out var uri) ? uri : null, await gitHub);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -68,7 +77,5 @@ public sealed record AppSettings(Uri? Endpoint, string? ApiKey, string? GitHubTo
 
     // Records print every property by default; secrets must never reach a log or an error message.
     public override string ToString() =>
-        $"AppSettings {{ Endpoint = {Endpoint}, ApiKey = {Mask(ApiKey)}, GitHubToken = {Mask(GitHubToken)} }}";
-
-    private static string Mask(string? secret) => secret is null ? "(none)" : "(set)";
+        $"AppSettings {{ Endpoint = {Endpoint}, GitHubToken = {(GitHubToken is null ? "(none)" : "(set)")} }}";
 }

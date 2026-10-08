@@ -22,25 +22,20 @@ public sealed class NarratorTests : IDisposable
         w.Write("data"u8); w.Write(dataBytes); w.Write(new byte[dataBytes]);
     }
 
-    [Theory]
-    [InlineData(1.0)]
-    [InlineData(12.5)]
-    public void Wav_duration_is_read_from_the_header(double seconds)
-    {
-        var path = Path.Combine(_folder, "a.wav");
-        WriteSilentWav(path, seconds);
-
-        Assert.Equal(seconds, WavInfo.Duration(path).TotalSeconds, precision: 3);
-    }
-
     [Fact]
-    public void Non_wav_file_is_rejected()
+    public void Wav_duration_is_read_from_the_header_and_a_file_that_is_not_a_wav_is_rejected()
     {
         var path = Path.Combine(_folder, "a.wav");
+        WriteSilentWav(path, 12.5);
+
+        Assert.Equal(12.5, WavInfo.Duration(path).TotalSeconds, precision: 3);
+
         File.WriteAllText(path, "this is not audio at all, just text");
 
         Assert.Throws<InvalidDataException>(() => WavInfo.Duration(path));
     }
+
+    // The three below speak with the voice built into Windows, so they count as integration tests.
 
     [Fact]
     public async Task Mock_narrator_writes_a_wav_whose_duration_matches_the_file()

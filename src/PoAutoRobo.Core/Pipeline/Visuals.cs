@@ -14,6 +14,16 @@ public sealed class Visuals(IImageGen images, MediaCache cache, string character
 
     public bool HasSheet => File.Exists(characterSheetPath);
 
+    /// <summary>Called each time a picture is really made (and so paid for), not when a saved one is reused.</summary>
+    public Action? PictureMade { get; init; }
+
+    private Task<string> CachedAsync(ImageRequest request, string reference, CancellationToken ct) =>
+        cache.GetOrCreateAsync([model, request.Size, request.Prompt, reference], ".png", async scratch =>
+        {
+            await images.GenerateAsync(request, scratch, ct);
+            PictureMade?.Invoke();
+        });
+
     /// <summary>Makes several different takes on the host for the user to choose between. Nothing is locked yet.</summary>
     public async Task<IReadOnlyList<string>> CandidateSheetsAsync(int count, CancellationToken ct)
     {
@@ -23,7 +33,7 @@ public sealed class Visuals(IImageGen images, MediaCache cache, string character
             // The take number is part of the prompt, so each is a separate request and a separate cached file.
             var request = new ImageRequest(
                 $"{Style} Character design sheet, take {i}: front view, side view and three-quarter view of one character on a plain white background. {HostInWords}", null);
-            candidates.Add(await cache.GetOrCreateAsync([model, request.Size, request.Prompt, ""], ".png", scratch => images.GenerateAsync(request, scratch, ct)));
+            candidates.Add(await CachedAsync(request, "", ct));
         }
         return candidates;
     }
@@ -77,10 +87,7 @@ public sealed class Visuals(IImageGen images, MediaCache cache, string character
             : [request.Prompt];
         var paths = new List<string>();
         foreach (var prompt in prompts)
-        {
-            var panel = request with { Prompt = prompt };
-            paths.Add(await cache.GetOrCreateAsync([model, panel.Size, panel.Prompt, reference], ".png", scratch => images.GenerateAsync(panel, scratch, ct)));
-        }
+            paths.Add(await CachedAsync(request with { Prompt = prompt }, reference, ct));
         return paths;
     }
 }

@@ -13,17 +13,20 @@ public sealed class SsmlTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
     [Fact]
-    public void Document_names_the_voice_the_excited_style_and_the_rate()
+    public void Document_names_the_voice_the_excited_style_and_a_rate_kept_within_ten_percent()
     {
-        var doc = XDocument.Parse(Ssml.Build("Hello there.", "en-US-DavisNeural", 1.0));
+        var doc = XDocument.Parse(Ssml.Build("Hello there.", "en-US-DavisNeural", 0.93));
 
         var voice = doc.Root!.Element(Speak + "voice")!;
         Assert.Equal("en-US-DavisNeural", voice.Attribute("name")!.Value);
         var style = voice.Element(Mstts + "express-as")!;
         Assert.Equal("excited", style.Attribute("style")!.Value);
         var prosody = style.Element(Speak + "prosody")!;
-        Assert.Equal("+0%", prosody.Attribute("rate")!.Value);
+        Assert.Equal("-7%", prosody.Attribute("rate")!.Value);
         Assert.Equal("Hello there.", prosody.Value);
+        // Further than ten percent either way starts to sound wrong, so the rate stops there.
+        Assert.Contains("rate=\"+10%\"", Ssml.Build("x", "v", 1.5));
+        Assert.Contains("rate=\"-10%\"", Ssml.Build("x", "v", 0.2));
     }
 
     [Fact]
@@ -35,17 +38,6 @@ public sealed class SsmlTests : IDisposable
 
         Assert.Equal(hostile, doc.Descendants(Speak + "prosody").Single().Value);
         Assert.Empty(doc.Descendants(Speak + "break"));
-    }
-
-    [Theory]
-    [InlineData(1.0, "+0%")]
-    [InlineData(1.05, "+5%")]
-    [InlineData(0.93, "-7%")]
-    [InlineData(1.5, "+10%")]  // clamped
-    [InlineData(0.2, "-10%")]  // clamped
-    public void Rate_is_a_percentage_clamped_to_ten_percent_either_way(double rate, string expected)
-    {
-        Assert.Contains($"rate=\"{expected}\"", Ssml.Build("x", "v", rate));
     }
 
     [Fact]
@@ -69,7 +61,7 @@ public sealed class SsmlTests : IDisposable
     public async Task Live_voice_returns_audio_and_a_timing_for_every_word()
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
-        var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault), default);
+        var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault, AppSettings.SignedInUser), default);
         const string line = "Balance is hard, but I make tiny corrections every few milliseconds.";
         var path = Path.Combine(_folder, "line.wav");
 

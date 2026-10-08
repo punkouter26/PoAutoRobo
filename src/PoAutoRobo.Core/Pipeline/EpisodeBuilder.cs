@@ -5,7 +5,11 @@ using PoAutoRobo.Core.Services;
 namespace PoAutoRobo.Core.Pipeline;
 
 /// <summary>A quick low-resolution render for the preview player, plus the word timings its caption overlay draws from.</summary>
-public sealed record Preview(string VideoPath, IReadOnlyList<CaptionSegment> Segments);
+/// <param name="Marks">Where each clip starts, with its narration file, for the waveform under the player.</param>
+public sealed record Preview(string VideoPath, IReadOnlyList<CaptionSegment> Segments, IReadOnlyList<ClipMark> Marks);
+
+/// <summary>One clip's place on the finished timeline.</summary>
+public sealed record ClipMark(string Title, TimeSpan Start, string AudioPath);
 
 /// <summary>Where a render has got to: what it is doing in plain words, and how far through the whole job it is (0 to 1).</summary>
 public sealed record RenderProgress(string Activity, double Fraction);
@@ -21,8 +25,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
     {
         ct.ThrowIfCancellationRequested();
         var text = clip.Active.Dialogue;
-        var key = MediaCache.TextHash(FormattableString.Invariant($"{narrator.GetType().Name}|{clip.NarrationRate:0.###}|{text}"))[..16];
-        var audio = Path.Combine(folder, "audio", $"{clip.Id:N}-{key}.wav");
+        var audio = AudioPath(clip, text, folder);
         var words = Path.ChangeExtension(audio, ".words.json");
 
         // One narration at a time. Two requests for the same line (an edit being applied while Audition is pressed)
@@ -45,13 +48,66 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
 
     private readonly SemaphoreSlim _narrationGate = new(1, 1);
 
+    private string AudioPath(Clip clip, string text, string folder)
+    {
+        var key = MediaCache.TextHash(FormattableString.Invariant($"{narrator.GetType().Name}|{clip.NarrationRate:0.###}|{text}"))[..16];
+        return Path.Combine(folder, "audio", $"{clip.Id:N}-{key}.wav");
+    }
+
+    /// <summary>How long the clip's narration really runs, once it has been recorded; null until then.</summary>
+    public TimeSpan? MeasuredDuration(Clip clip, string folder)
+    {
+        var audio = AudioPath(clip, clip.Active.Dialogue, folder);
+        try
+        {
+            // The word timings are written last, so their presence means the recording is whole.
+            return File.Exists(Path.ChangeExtension(audio, ".words.json")) ? WavInfo.Duration(audio) : null;
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Narration, pictures and imported footage in the episode folder that no clip uses any more: recordings of
+    /// earlier wording, replaced pictures. Narration for every depth a clip has is kept.
+    /// </summary>
+    public IReadOnlyList<string> UnusedMedia(Episode episode, string folder)
+    {
+        var kept = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var clip in episode.Clips)
+        {
+            foreach (var script in clip.Scripts.Values)
+            {
+                var audio = AudioPath(clip, script.Dialogue, folder);
+                kept.Add(audio);
+                kept.Add(Path.ChangeExtension(audio, ".words.json"));
+            }
+            foreach (var path in (clip.Visual.MediaPaths ?? []).Append(clip.Visual.UserVideoPath).OfType<string>())
+                kept.Add(Path.GetFullPath(path, folder));
+        }
+        return [.. new[] { "audio", "images", "imports" }
+            .Select(name => Path.Combine(folder, name))
+            .Where(Directory.Exists)
+            .SelectMany(Directory.GetFiles)
+            .Where(file => !kept.Contains(file))];
+    }
+
     public Task<TimeSpan> ProbeDurationAsync(string path, CancellationToken ct) => ffmpeg.ProbeDurationAsync(path, ct);
 
     /// <returns>Path of the finished video in the episode's export folder.</returns>
     public async Task<string> ExportAsync(Episode episode, string folder, ExportPreset preset, CaptionStyle captions, IProgress<RenderProgress>? progress, CancellationToken ct)
     {
         var output = Path.Combine(folder, "export", $"{ProjectStore.Slug(episode.Title)}-{preset.Height}p{preset.Fps}.mp4");
-        await RenderAsync(episode, folder, preset, captions, output, progress, ct);
+        var (segments, marks) = await RenderAsync(episode, folder, preset, captions, output, progress, ct);
+
+        // Beside the video, ready to upload with it: chapter list, subtitles and a cover picture.
+        var name = Path.ChangeExtension(output, null);
+        await File.WriteAllTextAsync(name + ".chapters.txt", PublishPack.Chapters(marks.Select(m => (m.Start, m.Title))), ct);
+        await File.WriteAllTextAsync(name + ".srt", PublishPack.Srt(segments), ct);
+        if (episode.Clips.SelectMany(c => c.Visual.MediaPaths ?? []).FirstOrDefault(p => p.EndsWith(".png", StringComparison.OrdinalIgnoreCase) && File.Exists(p)) is { } cover)
+            File.Copy(cover, name + ".thumbnail.png", overwrite: true);
         return output;
     }
 
@@ -59,10 +115,11 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
     public async Task<Preview> PreviewAsync(Episode episode, string folder, IProgress<RenderProgress>? progress, CancellationToken ct)
     {
         var output = Path.Combine(folder, "export", "preview.mp4");
-        return new Preview(output, await RenderAsync(episode, folder, Draft, null, output, progress, ct));
+        var (segments, marks) = await RenderAsync(episode, folder, Draft, null, output, progress, ct);
+        return new Preview(output, segments, marks);
     }
 
-    private async Task<IReadOnlyList<CaptionSegment>> RenderAsync(
+    private async Task<(IReadOnlyList<CaptionSegment> Segments, IReadOnlyList<ClipMark> Marks)> RenderAsync(
         Episode episode, string folder, ExportPreset preset, CaptionStyle? captions, string output, IProgress<RenderProgress>? progress, CancellationToken ct)
     {
         // The job has three stages. Their shares of the bar are rough but fixed, so it only ever moves forward.
@@ -133,7 +190,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
 
             File.Move(partial, output, overwrite: true);
             progress?.Report(new RenderProgress("Done", 1));
-            return segments;
+            return (segments, [.. narrations.Select((n, i) => new ClipMark(episode.Clips[i].Title, slots[i].Start, n.AudioPath))]);
         }
         finally
         {
@@ -163,7 +220,6 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         clip.Visual.Kind == VisualKind.MultiPanel
             ? [.. (clip.Visual.MediaPaths ?? []).Where(p => File.Exists(p) && !VideoExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)).Select(Path.GetFullPath)]
             : [];
-
 
     /// <summary>Reports on the calling thread; <see cref="Progress{T}"/> would post to a context and reorder values.</summary>
     private sealed class Relay(Action<double> report) : IProgress<double>

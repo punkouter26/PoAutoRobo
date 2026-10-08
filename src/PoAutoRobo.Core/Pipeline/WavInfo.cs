@@ -36,5 +36,27 @@ public static class WavInfo
         throw new InvalidDataException($"{path} has no audio data.");
     }
 
+    /// <summary>
+    /// The loudest sample in each of <paramref name="count"/> equal stretches of the file, 0 to 1, for drawing a waveform.
+    /// Empty when the file is not 16-bit sound, which is all the narrators write.
+    /// </summary>
+    public static float[] Peaks(string path, int count)
+    {
+        var bytes = File.ReadAllBytes(path);
+        // ponytail: looks for the first "data" tag instead of walking the chunks. A WAV with that word in an earlier
+        // chunk would draw a wrong waveform; walk the chunks as Duration does if that ever happens.
+        var data = bytes.AsSpan().IndexOf("data"u8);
+        if (count <= 0 || bytes.Length < 44 || BitConverter.ToInt16(bytes, 34) != 16 || data < 0)
+            return [];
+        var samples = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, short>(bytes.AsSpan(data + 8, (bytes.Length - data - 8) & ~1));
+        var peaks = new float[count];
+        for (var i = 0; i < samples.Length; i++)
+        {
+            var bucket = (int)((long)i * count / samples.Length);
+            peaks[bucket] = Math.Max(peaks[bucket], Math.Abs(samples[i] / 32768f));
+        }
+        return peaks;
+    }
+
     private static string Tag(BinaryReader reader) => Encoding.ASCII.GetString(reader.ReadBytes(4));
 }

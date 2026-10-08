@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PoAutoRobo UI changes 2026-10-08</title>
+<style>
+body{font:15px/1.5 "Segoe UI",sans-serif;margin:0;padding:24px;background:#f4f5f7;color:#1b1b1f}
+h1{font-size:22px;margin:0 0 4px} p{margin:0 0 16px;color:#555}
+section{background:#fff;border-radius:8px;padding:16px;margin:0 0 20px;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+h2{font-size:17px;margin:0 0 12px}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+figure{margin:0} figcaption{font-weight:600;margin-bottom:6px}
+img{width:100%;height:auto;border:1px solid #ccd;border-radius:4px}
+ol{margin:12px 0 0;padding-left:20px}
+</style></head><body>
+<h1>PoAutoRobo: before and after the 2026-10-08 audit changes</h1>
+<p>Both at the minimum window size (960 by 600). "Before" was captured on a dark Windows theme with the old fixed dark app theme; "After" follows the system setting, which was light at capture time. The numbered notes under each pair list what changed on that step.</p>
+<section><h2>1 · Topic</h2><div class='pair'><figure><figcaption>Before</figcaption><img src='before-1-topic.png' alt='Before: 1 · Topic'></figure><figure><figcaption>After</figcaption><img src='after-1-topic.png' alt='After: 1 · Topic'></figure></div><ol><li>Two columns: start something new on the left, saved work and the radar on the right; no scrolling to reach the radar</li><li>Saved-episode library with thumbnail, clip count and running time replaces the drop-down of folder names; each has Open, Make a copy, Show in File Explorer, Delete</li><li>Header carries Undo, Redo, sound switch and a menu; the footer with Back/Next is gone</li><li>The app now follows the Windows light or dark setting</li></ol></section>
+<section><h2>2 · Script</h2><div class='pair'><figure><figcaption>Before</figcaption><img src='before-2-script.png' alt='Before: 2 · Script'></figure><figure><figcaption>After</figcaption><img src='after-2-script.png' alt='After: 2 · Script'></figure></div><ol><li>Compact cards: depth and voice-only shown as badges, so three fit across where two did</li><li>Depth selector, sources list and inline dialogue warnings moved into the inspector</li><li>Move earlier/later are arrow buttons beside the clip title (Alt+Left / Alt+Right)</li><li>Header line shows clip count, measured running time and picture spend</li><li>"Record all voices" button; result messages now appear on every step</li></ol></section>
+<section><h2>3 · Pictures</h2><div class='pair'><figure><figcaption>Before</figcaption><img src='before-3-pictures.png' alt='Before: 3 · Pictures'></figure><figure><figcaption>After</figcaption><img src='after-3-pictures.png' alt='After: 3 · Pictures'></figure></div><ol><li>Host on/off switch moved from each card into the inspector</li><li>A spinner covers a card while its picture is being drawn</li><li>Single-clip Generate is disabled while a batch runs</li></ol></section>
+<section><h2>4 · Export</h2><div class='pair'><figure><figcaption>Before</figcaption><img src='before-4-export.png' alt='Before: 4 · Export'></figure><figure><figcaption>After</figcaption><img src='after-4-export.png' alt='After: 4 · Export'></figure></div><ol><li>Preview scales with the window; the page no longer scrolls at the minimum size</li><li>Waveform with a mark and title at each clip start; click to jump</li><li>Captions, preview and master-video controls sit in one panel beside the preview</li><li>"Show in folder" appears after a render, which now also writes chapters, subtitles and a thumbnail</li></ol></section>
+</body></html>

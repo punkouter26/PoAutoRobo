@@ -33,6 +33,8 @@ public sealed partial class InspectorView : UserControl
         _player.Play();
     }
 
+    private void OnUnloaded(object sender, RoutedEventArgs e) => _player.Dispose();
+
     private void OnVideoDragOver(object sender, DragEventArgs e)
     {
         if (e.DataView.Contains(StandardDataFormats.StorageItems))

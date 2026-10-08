@@ -27,17 +27,21 @@ public partial class App : Application
 
         // ponytail: the window appears after the vault answers (a second or two). Show it first if that ever feels slow.
         var settings = await LoadSettingsAsync();
-        var plan = ServiceSelector.Plan(settings);
-        IScriptWriter writer = plan.Live ? AzureScriptWriter.Create(settings) : new MockScriptWriter();
-        INarrator narrator = plan.Live ? new AzureNarrator(settings) : new MockNarrator();
-        var offline = plan.Simulated.Count == 0
+        IScriptWriter writer = settings.IsLive ? AzureScriptWriter.Create(settings) : new MockScriptWriter();
+        INarrator narrator = settings.IsLive ? new AzureNarrator(settings) : new MockNarrator();
+        var offline = settings.IsLive
             ? null
-            : $"{string.Join(" and ", plan.Simulated)} simulated. {settings.LoadError ?? "The key vault has no key for your Azure AI resource."}";
+            : $"Script and voice simulated. {settings.LoadError ?? "The key vault has no address for your Azure AI resource."}";
 
         var appData = Path.GetDirectoryName(WindowStateFile)!;
-        IImageGen? images = plan.Live ? new AzureImageGen(settings, AzureImageGen.NewHttpClient()) : null;
+        IImageGen? images = settings.IsLive ? new AzureImageGen(settings, AzureImageGen.NewHttpClient()) : null;
+        var price = CostEstimate.PriceOf(settings.ImageDeployment);
         Func<string, Visuals>? visualsFor = images is null ? null : folder =>
-            new Visuals(images, new MediaCache(Path.Combine(folder, "images")), Path.Combine(appData, "host", "sheet.png"), settings.ImageDeployment);
+            new Visuals(images, new MediaCache(Path.Combine(folder, "images")), Path.Combine(appData, "host", "sheet.png"), settings.ImageDeployment)
+            {
+                // Each picture really made is added to the episode's running cost, when its price is known.
+                PictureMade = price is { } dollars ? () => SpendLog.Add(folder, "picture", dollars) : null,
+            };
         var grounding = Grounding.Create(settings.GitHubToken, Path.Combine(appData, "grounding"));
         var ffmpeg = FfmpegRunner.Locate();
         var builder = new EpisodeBuilder(narrator, new FfmpegRunner(ffmpeg ?? "ffmpeg.exe"));
@@ -56,7 +60,7 @@ public partial class App : Application
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         try
         {
-            return await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault), timeout.Token);
+            return await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault, AppSettings.SignedInUser), timeout.Token);
         }
         catch (OperationCanceledException)
         {

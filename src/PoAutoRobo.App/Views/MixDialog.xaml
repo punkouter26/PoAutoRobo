@@ -15,7 +15,7 @@
         <Slider x:Name="VideoSlider" Header="AI video: short generated shots" Maximum="100" StepFrequency="5" ValueChanged="OnChanged" />
         <Slider x:Name="TitleSlider" Header="Title card: text only, no cost" Maximum="100" StepFrequency="5" ValueChanged="OnChanged" />
         <TextBlock x:Name="TotalText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-        <TextBlock TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+        <TextBlock Style="{StaticResource QuietText}"
                    Text="Re-roll keeps the current shares and deals them to different clips." />
     </StackPanel>
 </ContentDialog>
