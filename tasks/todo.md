@@ -43,4 +43,5 @@ Every task: failing test first, then code, `dotnet test`, `dotnet build`, one co
 | DONE | Hover tooltips on main controls; annotated guide at docs/screen-guide.png (shows the earlier single-page layout) | Built; tooltips not hovered by hand |
 | DONE | Four-step wizard layout (Topic, Script, Pictures, Export) | Driven in the app through all four steps |
 | DONE | Episode length choice incl. one-clip quick test | Live: topic to finished 47s 1080p video in 115s |
-| OPEN | Full-episode master render is slow (about 25 min for 12.5 min of video) | Measured once |
+| DONE | Faster render: clips encoded once in parallel and joined by copying (cross-dissolve replaced by a dip through black) | Same 16-clip episode: about 25 min before, 5 min 36 s after; picture and sound within 0.07 s, no decode errors |
+| NOTE | No long episodes or picture batches on the paid services; use the one-clip quick test for live checks | User instruction 2026-10-08 |

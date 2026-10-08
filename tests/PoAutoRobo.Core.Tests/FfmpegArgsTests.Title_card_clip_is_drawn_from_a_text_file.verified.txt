@@ -3,7 +3,7 @@ lavfi
 -i
 color=c=0x101828:s=1920x1080:r=30
 -vf
-drawtext=textfile=title_02.txt:fontfile=title-font.ttf:fontcolor=white:fontsize=h/12:x=(w-text_w)/2:y=(h-text_h)/2,format=yuv420p
+drawtext=textfile=title_02.txt:fontfile=title-font.ttf:fontcolor=white:fontsize=h/12:x=(w-text_w)/2:y=(h-text_h)/2,fade=t=in:st=0:d=0.250,fade=t=out:st=14.750:d=0.250,format=yuv420p
 -t
 15.000
 -an
@@ -12,6 +12,12 @@ libx264
 -preset
 veryfast
 -crf
-16
+18
+-pix_fmt
+yuv420p
+-r
+30
+-video_track_timescale
+90000
 -y
 clip_02.mp4

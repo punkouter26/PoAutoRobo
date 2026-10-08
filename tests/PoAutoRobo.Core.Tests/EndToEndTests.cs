@@ -79,12 +79,12 @@ public sealed class EndToEndTests : IDisposable
         // Every stage is named in plain words, in order, with which clip it is on.
         var stages = progress.Select(p => p.Activity).Distinct().ToList();
         Assert.Contains(stages, s => s.StartsWith("Recording the voice for clip 1 of 3"));
-        Assert.Contains(stages, s => s.StartsWith("Drawing clip 1 of 3"));
-        Assert.Contains(stages, s => s.StartsWith("Drawing clip 3 of 3"));
+        Assert.Contains(stages, s => s.StartsWith("Drawing clips · 0 of 3 done"));
+        Assert.Contains(stages, s => s.StartsWith("Drawing clips · 3 of 3 done"));
         Assert.Contains(stages, s => s.StartsWith("Joining the clips"));
         Assert.True(stages.FindIndex(s => s.StartsWith("Recording")) < stages.FindIndex(s => s.StartsWith("Drawing")));
         Assert.True(stages.FindLastIndex(s => s.StartsWith("Drawing")) < stages.FindIndex(s => s.StartsWith("Joining")));
-        Assert.Contains(episode.Clips[1].Title, stages.First(s => s.StartsWith("Drawing clip 2 of 3")));
+        Assert.Contains(stages, s => s.StartsWith("Drawing") && s.Contains("working on") && s.Contains(episode.Clips[1].Title));
         Assert.Equal(1.0, progress[^1].Fraction, precision: 2);
         Assert.Empty(Directory.GetDirectories(Path.Combine(_folder, "export"))); // working folder cleaned up
     }

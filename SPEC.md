@@ -149,7 +149,7 @@ public interface INarrator
 
 **Captions.** Four presets (Karaoke Highlight, Two-Line Block, Clean Subtitle, Comic Banner) with font size, accent colour and stroke width. Rendered as an ASS subtitle file from word timings and burned in by FFmpeg.
 
-**Export.** H.264 MP4 with AAC audio; 1920×1080 or 3840×2160; 30 or 60 fps. Narration is loudness-normalised to −16 LUFS, with 150ms crossfades at clip joins and 0.5s visual transitions.
+**Export.** H.264 MP4 with AAC audio; 1920×1080 or 3840×2160; 30 or 60 fps. Narration is loudness-normalised to −16 LUFS with 150ms crossfades at clip joins. Each clip fades up from black and back down over 0.25s, which reads as a brief dip between clips. Clips are encoded once each, several in parallel, with their captions burned in, and then joined by copying; a cross-dissolve was dropped on 2026-10-08 because it forced a second encode of the whole episode (about 25 minutes for a full episode, against about 5.5 now).
 
 **Topic Radar.** Refreshes on launch and on demand. Sources: arXiv, Hacker News, IEEE Spectrum and The Robot Report. A card is shown only if it names both "Unitree" and "R1" (as a whole word); general humanoid news, other Unitree robots and other makers' R1 products are dropped. Hacker News cards show points and comments; the others have no interest figure. Reddit (refuses anonymous readers) and GitHub activity (commit titles are not topics) are not used.
 

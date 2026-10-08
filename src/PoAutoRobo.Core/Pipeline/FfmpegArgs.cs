@@ -12,22 +12,28 @@ public sealed record ExportPreset(int Width, int Height, int Fps)
 
 public enum ClipSource { TitleCard, Image, Video }
 
-/// <summary>Where a clip sits on the episode timeline, and how long its picture must run to cover the dissolve.</summary>
+/// <summary>Where a clip sits on the episode timeline, and how long its picture runs.</summary>
 public sealed record Slot(TimeSpan Start, TimeSpan VideoLength);
 
-/// <summary>Builds FFmpeg command lines. Pure functions, so the exact arguments are snapshot-tested.</summary>
+/// <summary>
+/// Builds FFmpeg command lines. Pure functions, so the exact arguments are snapshot-tested.
+/// Each clip is encoded once, complete with its captions and fades, and the finished clips are then joined by
+/// copying. Encoding the whole episode a second time to join it took several times longer than everything else.
+/// </summary>
 public static class FfmpegArgs
 {
     public static readonly TimeSpan AudioCrossfade = TimeSpan.FromMilliseconds(150);
-    public static readonly TimeSpan Dissolve = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>Each clip fades up from black and back down over this long, which reads as a dip between clips.</summary>
+    public static readonly TimeSpan Fade = TimeSpan.FromMilliseconds(250);
     public const double TargetLufs = -16;
 
     /// <summary>Font the title card reads from the working folder. This FFmpeg build has no font lookup by name.</summary>
     public const string TitleFontFile = "title-font.ttf";
 
     /// <summary>
-    /// Narration drives the timeline. Each join overlaps the audio by <see cref="AudioCrossfade"/>, and every picture
-    /// but the last runs <see cref="Dissolve"/> longer so it can fade into the next without shifting sync.
+    /// Narration drives the timeline. Each join overlaps the audio by <see cref="AudioCrossfade"/>, and each picture
+    /// runs exactly its share, so the pictures laid end to end stay in step with the sound.
     /// </summary>
     public static IReadOnlyList<Slot> Timeline(IReadOnlyList<TimeSpan> narration)
     {
@@ -35,17 +41,17 @@ public static class FfmpegArgs
         var start = TimeSpan.Zero;
         for (var i = 0; i < narration.Count; i++)
         {
-            var last = i == narration.Count - 1;
-            var share = last ? narration[i] : narration[i] - AudioCrossfade;
-            slots.Add(new Slot(start, last ? share : share + Dissolve));
+            var share = i == narration.Count - 1 ? narration[i] : narration[i] - AudioCrossfade;
+            slots.Add(new Slot(start, share));
             start += share;
         }
         return slots;
     }
 
-    /// <summary>Renders one clip's picture (no sound) at the export size and frame rate.</summary>
+    /// <summary>Renders one finished clip picture (no sound): sized, faded, and with its captions burned in.</summary>
     /// <param name="input">Image or video path, or for a title card the text file holding the title.</param>
-    public static IReadOnlyList<string> ClipVideo(ClipSource source, string input, TimeSpan length, ExportPreset preset, string output)
+    /// <param name="captionsFile">Caption file timed from the start of this clip, read from the working folder; null for none.</param>
+    public static IReadOnlyList<string> ClipVideo(ClipSource source, string input, TimeSpan length, ExportPreset preset, string output, string? captionsFile = null)
     {
         var (w, h, fps) = preset;
         var frames = (int)Math.Round(length.TotalSeconds * fps);
@@ -57,18 +63,18 @@ public static class FfmpegArgs
             // Oversampling before zoompan avoids the visible stair-stepping it has at native size.
             ClipSource.Image =>
                 $"scale={2 * w}:{2 * h}:force_original_aspect_ratio=increase,crop={2 * w}:{2 * h}," +
-                $"zoompan=z='1+0.08*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps},format=yuv420p",
+                $"zoompan=z='1+0.08*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}",
             ClipSource.Video =>
                 $"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,fps={fps}," +
-                $"tpad=stop_mode=clone:stop_duration={Seconds(length)},format=yuv420p",
+                $"tpad=stop_mode=clone:stop_duration={Seconds(length)}",
             // ponytail: one centred line, no wrapping. Clip titles are short; wrap here if they stop being so.
-            _ => $"drawtext=textfile={input}:fontfile={TitleFontFile}:fontcolor=white:fontsize=h/12:x=(w-text_w)/2:y=(h-text_h)/2,format=yuv420p",
+            _ => $"drawtext=textfile={input}:fontfile={TitleFontFile}:fontcolor=white:fontsize=h/12:x=(w-text_w)/2:y=(h-text_h)/2",
         };
-        return [.. inputArgs, "-vf", filter, "-t", Seconds(length), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-y", output];
+        return [.. inputArgs, "-vf", filter + Finish(length, captionsFile), "-t", Seconds(length), "-an", .. Encode(preset), "-y", output];
     }
 
     /// <summary>Renders a panel sequence: each picture gets an equal share of the clip, with its own pan and zoom.</summary>
-    public static IReadOnlyList<string> PanelsVideo(IReadOnlyList<string> images, TimeSpan length, ExportPreset preset, string output)
+    public static IReadOnlyList<string> PanelsVideo(IReadOnlyList<string> images, TimeSpan length, ExportPreset preset, string output, string? captionsFile = null)
     {
         var (w, h, fps) = preset;
         var total = (int)Math.Round(length.TotalSeconds * fps);
@@ -80,49 +86,53 @@ public static class FfmpegArgs
                 $"[{i}:v]scale={2 * w}:{2 * h}:force_original_aspect_ratio=increase,crop={2 * w}:{2 * h}," +
                 $"zoompan=z='1+0.08*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}[p{i}]");
         }
-        graph.Add($"{string.Concat(images.Select((_, i) => $"[p{i}]"))}concat=n={images.Count}:v=1:a=0,format=yuv420p[v]");
+        graph.Add($"{string.Concat(images.Select((_, i) => $"[p{i}]"))}concat=n={images.Count}:v=1:a=0{Finish(length, captionsFile)}[v]");
         return
         [
             .. images.SelectMany(path => new[] { "-i", path }),
             "-filter_complex", string.Join(';', graph), "-map", "[v]",
-            "-t", Seconds(length), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-y", output,
+            "-t", Seconds(length), "-an", .. Encode(preset), "-y", output,
         ];
     }
 
-    /// <summary>Joins the clip pictures and narration into the finished file.</summary>
-    public static IReadOnlyList<string> Master(
-        IReadOnlyList<string> videos, IReadOnlyList<string> audios, IReadOnlyList<Slot> slots,
-        string? captionsFile, ExportPreset preset, string output)
+    /// <summary>The last filters on every clip: captions over the picture, then the fades over both.</summary>
+    private static string Finish(TimeSpan length, string? captionsFile) =>
+        (captionsFile is null ? "" : $",ass={captionsFile}") +
+        $",fade=t=in:st=0:d={Seconds(Fade)},fade=t=out:st={Seconds(length - Fade)}:d={Seconds(Fade)},format=yuv420p";
+
+    // Identical for every clip: the join copies the pictures, which only works when they are encoded the same way.
+    // ponytail: software x264 only. A native (not emulated) FFmpeg build is the bigger win on ARM machines.
+    private static string[] Encode(ExportPreset preset) =>
+    [
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+        "-r", preset.Fps.ToString(CultureInfo.InvariantCulture), "-video_track_timescale", "90000",
+    ];
+
+    /// <summary>The text of the list file <see cref="Join"/> reads: one finished clip per line, in running order.</summary>
+    public static string ClipList(IEnumerable<string> clips) =>
+        string.Concat(clips.Select(path => $"file '{path.Replace("'", @"'\''")}'\n"));
+
+    /// <summary>Joins the finished clips by copying their pictures, and lays the crossfaded, levelled narration under them.</summary>
+    public static IReadOnlyList<string> Join(string clipListFile, IReadOnlyList<string> audios, string output)
     {
-        var n = videos.Count;
         var graph = new List<string>();
-
-        var picture = "[0:v]";
-        for (var i = 1; i < n; i++)
-        {
-            graph.Add($"{picture}[{i}:v]xfade=transition=fade:duration={Seconds(Dissolve)}:offset={Seconds(slots[i].Start)}[v{i}]");
-            picture = $"[v{i}]";
-        }
-        graph.Add($"{picture}{(captionsFile is null ? "null" : $"ass={captionsFile}")}[vout]");
-
-        for (var i = 0; i < n; i++)
-            graph.Add($"[{n + i}:a]aformat=sample_rates=48000:channel_layouts=stereo[s{i}]");
+        for (var i = 0; i < audios.Count; i++)
+            graph.Add($"[{i + 1}:a]aformat=sample_rates=48000:channel_layouts=stereo[s{i}]");
         var sound = "[s0]";
-        for (var i = 1; i < n; i++)
+        for (var i = 1; i < audios.Count; i++)
         {
             graph.Add($"{sound}[s{i}]acrossfade=d={Seconds(AudioCrossfade)}[a{i}]");
             sound = $"[a{i}]";
         }
         graph.Add($"{sound}loudnorm=I={TargetLufs.ToString(CultureInfo.InvariantCulture)}:TP=-1.5:LRA=11,aresample=48000[aout]");
 
-        // ponytail: software x264 only. Add a hardware encoder choice if 4K60 exports are too slow.
         return
         [
-            .. videos.Concat(audios).SelectMany(path => new[] { "-i", path }),
+            "-f", "concat", "-safe", "0", "-i", clipListFile,
+            .. audios.SelectMany(path => new[] { "-i", path }),
             "-filter_complex", string.Join(';', graph),
-            "-map", "[vout]", "-map", "[aout]",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-r", preset.Fps.ToString(CultureInfo.InvariantCulture),
-            "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-y", output,
+            "-map", "0:v", "-map", "[aout]",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-y", output,
         ];
     }
 

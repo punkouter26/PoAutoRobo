@@ -65,7 +65,7 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
         Episode episode, string folder, ExportPreset preset, CaptionStyle? captions, string output, IProgress<RenderProgress>? progress, CancellationToken ct)
     {
         // The job has three stages. Their shares of the bar are rough but fixed, so it only ever moves forward.
-        const double VoiceShare = 0.10, DrawShare = 0.45;
+        const double VoiceShare = 0.10, DrawShare = 0.80; // drawing is nearly all of the work now; the join only copies
         var count = episode.Clips.Count;
         var narrations = new List<Narration>(count);
         for (var i = 0; i < count; i++)
@@ -82,37 +82,53 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
         Directory.CreateDirectory(Path.GetDirectoryName(output)!);
         try
         {
-            // Each clip is rendered to its own file first, so the final join stays a simple, fast graph.
-            var pictures = new List<string>(count);
-            for (var i = 0; i < count; i++)
+            // Every clip is encoded once, finished (captions and fades included), several at a time. The join then only
+            // copies them, so the slow work is spread across the processor's cores and nothing is encoded twice.
+            File.Copy(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeuib.ttf"), Path.Combine(work, FfmpegArgs.TitleFontFile), overwrite: true);
+            var pictures = Enumerable.Range(0, count).Select(i => $"clip_{i:00}.mp4").ToList();
+            var done = new double[count];      // how far each clip has got, 0 to 1
+            var inHand = new SortedSet<int>();
+            var gate = new object();
+            void ReportDrawing()
             {
-                var (source, input) = PictureFor(episode.Clips[i]);
+                // Called under the lock, so reports leave in order and the bar never steps backwards.
+                var finished = done.Count(d => d >= 1);
+                var names = inHand.Count == 0 ? "" : " · working on: " + string.Join(", ", inHand.Select(i => episode.Clips[i].Title));
+                progress?.Report(new RenderProgress($"Drawing clips · {finished} of {count} done{names}", VoiceShare + DrawShare * done.Sum() / count));
+            }
+            lock (gate) ReportDrawing();
+
+            var workers = Math.Clamp(Environment.ProcessorCount / 3, 1, 4);
+            await Parallel.ForEachAsync(Enumerable.Range(0, count), new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = ct }, async (i, token) =>
+            {
+                var clip = episode.Clips[i];
+                var (source, input) = PictureFor(clip);
                 if (source == ClipSource.TitleCard)
                 {
                     input = $"title_{i:00}.txt"; // read by name from the working folder, which avoids filter-path escaping
-                    await File.WriteAllTextAsync(Path.Combine(work, input), episode.Clips[i].Title, ct);
-                    File.Copy(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeuib.ttf"), Path.Combine(work, FfmpegArgs.TitleFontFile), overwrite: true);
+                    await File.WriteAllTextAsync(Path.Combine(work, input), clip.Title, token);
                 }
-                var index = i;
-                var drawing = $"Drawing clip {i + 1} of {count} · {episode.Clips[i].Title}";
-                var clipProgress = progress is null ? null : new Relay(p => progress.Report(new RenderProgress(drawing, VoiceShare + DrawShare * (index + p) / count)));
-                pictures.Add(Path.Combine(work, $"clip_{i:00}.mp4"));
-                var panels = PanelsFor(episode.Clips[i]);
+                string? captionFile = null;
+                if (captions is not null)
+                {
+                    captionFile = $"captions_{i:00}.ass"; // timed from the start of this clip
+                    await File.WriteAllTextAsync(Path.Combine(work, captionFile), AssCaptions.Build([new CaptionSegment(TimeSpan.Zero, narrations[i].Words)], captions), token);
+                }
+                var panels = PanelsFor(clip);
                 var args = panels.Count > 1
-                    ? FfmpegArgs.PanelsVideo(panels, slots[i].VideoLength, preset, pictures[i])
-                    : FfmpegArgs.ClipVideo(source, input, slots[i].VideoLength, preset, pictures[i]);
-                await ffmpeg.RunAsync(args, work, slots[i].VideoLength, clipProgress, ct);
-            }
+                    ? FfmpegArgs.PanelsVideo(panels, slots[i].VideoLength, preset, pictures[i], captionFile)
+                    : FfmpegArgs.ClipVideo(source, input, slots[i].VideoLength, preset, pictures[i], captionFile);
 
-            if (captions is not null)
-                await File.WriteAllTextAsync(Path.Combine(work, "captions.ass"), AssCaptions.Build(segments, captions), ct);
+                lock (gate) { inHand.Add(i); ReportDrawing(); }
+                await ffmpeg.RunAsync(args, work, slots[i].VideoLength, new Relay(p => { lock (gate) { done[i] = Math.Min(p, 0.99); ReportDrawing(); } }), token);
+                lock (gate) { done[i] = 1; inHand.Remove(i); ReportDrawing(); }
+            });
 
+            await File.WriteAllTextAsync(Path.Combine(work, "clips.txt"), FfmpegArgs.ClipList(pictures), ct);
             var total = slots[^1].Start + slots[^1].VideoLength;
-            const string Joining = "Joining the clips, adding captions and levelling the sound";
-            var masterProgress = progress is null ? null : new Relay(p => progress.Report(new RenderProgress(Joining, VoiceShare + DrawShare + (1 - VoiceShare - DrawShare) * p)));
-            await ffmpeg.RunAsync(
-                FfmpegArgs.Master(pictures, [.. narrations.Select(n => n.AudioPath)], slots, captions is null ? null : "captions.ass", preset, partial),
-                work, total, masterProgress, ct);
+            const string Joining = "Joining the clips and levelling the sound";
+            var joinProgress = progress is null ? null : new Relay(p => progress.Report(new RenderProgress(Joining, VoiceShare + DrawShare + (1 - VoiceShare - DrawShare) * p)));
+            await ffmpeg.RunAsync(FfmpegArgs.Join("clips.txt", [.. narrations.Select(n => n.AudioPath)], partial), work, total, joinProgress, ct);
 
             File.Move(partial, output, overwrite: true);
             progress?.Report(new RenderProgress("Done", 1));

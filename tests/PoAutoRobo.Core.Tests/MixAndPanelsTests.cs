@@ -129,5 +129,8 @@ public sealed class MixAndPanelsTests : IDisposable
         await ffmpeg.RunAsync(FfmpegArgs.PanelsVideo(panels, TimeSpan.FromSeconds(3), new ExportPreset(640, 360, 30), output), _folder, null, null, Ct);
 
         Assert.Equal(3.0, (await ffmpeg.ProbeDurationAsync(output, Ct)).TotalSeconds, precision: 1);
+        var captioned = string.Join(' ', FfmpegArgs.PanelsVideo(panels, TimeSpan.FromSeconds(3), ExportPreset.Hd30, output, "captions_00.ass"));
+        Assert.Contains("ass=captions_00.ass", captioned);
+        Assert.Contains("fade=t=out:st=2.750", captioned);
     }
 }

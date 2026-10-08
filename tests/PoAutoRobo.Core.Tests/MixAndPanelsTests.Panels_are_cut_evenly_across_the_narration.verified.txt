@@ -5,7 +5,7 @@ p2.png
 -i
 p3.png
 -filter_complex
-[0:v]scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,zoompan=z='1+0.08*on/204':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=204:s=1920x1080:fps=30[p0];[1:v]scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,zoompan=z='1+0.08*on/203':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=203:s=1920x1080:fps=30[p1];[2:v]scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,zoompan=z='1+0.08*on/203':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=203:s=1920x1080:fps=30[p2];[p0][p1][p2]concat=n=3:v=1:a=0,format=yuv420p[v]
+[0:v]scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,zoompan=z='1+0.08*on/204':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=204:s=1920x1080:fps=30[p0];[1:v]scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,zoompan=z='1+0.08*on/203':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=203:s=1920x1080:fps=30[p1];[2:v]scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,zoompan=z='1+0.08*on/203':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=203:s=1920x1080:fps=30[p2];[p0][p1][p2]concat=n=3:v=1:a=0,fade=t=in:st=0:d=0.250,fade=t=out:st=20.100:d=0.250,format=yuv420p[v]
 -map
 [v]
 -t
@@ -16,6 +16,12 @@ libx264
 -preset
 veryfast
 -crf
-16
+18
+-pix_fmt
+yuv420p
+-r
+30
+-video_track_timescale
+90000
 -y
 clip_00.mp4
