@@ -17,23 +17,24 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
     {
         var narrations = new List<Narration>(episode.Clips.Count);
         foreach (var clip in episode.Clips)
-        {
-            ct.ThrowIfCancellationRequested();
-            var text = clip.Active.Dialogue;
-            var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{narrator.GetType().Name}|{text}")))[..16];
-            var audio = Path.Combine(folder, "audio", $"{clip.Id:N}-{key}.wav");
-            var words = Path.ChangeExtension(audio, ".words.json");
-
-            if (File.Exists(audio) && File.Exists(words))
-            {
-                narrations.Add(new Narration(audio, WavInfo.Duration(audio), JsonSerializer.Deserialize<List<WordTiming>>(await File.ReadAllTextAsync(words, ct))!));
-                continue;
-            }
-            var narration = await narrator.SynthesizeAsync(text, audio, 1.0, ct);
-            await File.WriteAllTextAsync(words, JsonSerializer.Serialize(narration.Words), ct);
-            narrations.Add(narration);
-        }
+            narrations.Add(await NarrateClipAsync(clip, folder, ct));
         return narrations;
+    }
+
+    public async Task<Narration> NarrateClipAsync(Clip clip, string folder, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var text = clip.Active.Dialogue;
+        var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{narrator.GetType().Name}|{text}")))[..16];
+        var audio = Path.Combine(folder, "audio", $"{clip.Id:N}-{key}.wav");
+        var words = Path.ChangeExtension(audio, ".words.json");
+
+        if (File.Exists(audio) && File.Exists(words))
+            return new Narration(audio, WavInfo.Duration(audio), JsonSerializer.Deserialize<List<WordTiming>>(await File.ReadAllTextAsync(words, ct))!);
+
+        var narration = await narrator.SynthesizeAsync(text, audio, 1.0, ct);
+        await File.WriteAllTextAsync(words, JsonSerializer.Serialize(narration.Words), ct);
+        return narration;
     }
 
     /// <returns>Path of the finished video in the episode's export folder.</returns>

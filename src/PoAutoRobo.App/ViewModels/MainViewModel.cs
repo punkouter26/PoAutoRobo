@@ -13,9 +13,12 @@ public partial class MainViewModel : ObservableObject
     private readonly IScriptWriter _scriptWriter;
     private bool _syncingClips;
 
-    public MainViewModel(IScriptWriter scriptWriter)
+    private readonly EpisodeBuilder _builder;
+
+    public MainViewModel(IScriptWriter scriptWriter, EpisodeBuilder builder)
     {
         _scriptWriter = scriptWriter;
+        _builder = builder;
         Clips.CollectionChanged += OnClipsChanged;
     }
 
@@ -33,7 +36,55 @@ public partial class MainViewModel : ObservableObject
     public partial Episode? Episode { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelection))]
+    [NotifyCanExecuteChangedFor(nameof(AuditionCommand))]
     public partial ClipViewModel? SelectedClip { get; set; }
+
+    /// <summary>The dialogue box's text while it is being typed; applied to the clip when the box loses focus.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DraftStats))]
+    public partial string DraftDialogue { get; set; } = "";
+
+    public bool HasSelection => SelectedClip is not null;
+
+    public string DraftStats =>
+        $"{DraftDialogue.Length} characters · about {Durations.Estimate(DraftDialogue).TotalSeconds:0} s";
+
+    /// <summary>Set by the view that owns the audio player.</summary>
+    public Action<string>? PlayAudio { get; set; }
+
+    partial void OnSelectedClipChanged(ClipViewModel? value) => DraftDialogue = value?.Dialogue ?? "";
+
+    [RelayCommand]
+    private async Task ApplyDialogueAsync(CancellationToken ct)
+    {
+        if (Episode is null || SelectedClip is not { } clip || DraftDialogue.Trim() == clip.Dialogue) return;
+        try
+        {
+            var updated = await EpisodeEditor.EditDialogueAsync(Episode, clip.Id, DraftDialogue, _scriptWriter, ct);
+            Edit(_ => updated);
+            await _builder.NarrateClipAsync(clip.Clip, EpisodeFolder!, ct); // new words are spoken straight away
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            ErrorMessage = e.Message;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(HasSelection))]
+    private async Task AuditionAsync(CancellationToken ct)
+    {
+        try
+        {
+            await ApplyDialogueAsync(ct);
+            var narration = await _builder.NarrateClipAsync(SelectedClip!.Clip, EpisodeFolder!, ct);
+            PlayAudio?.Invoke(narration.AudioPath);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            ErrorMessage = e.Message;
+        }
+    }
 
     [ObservableProperty]
     public partial string? ErrorMessage { get; set; }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.UI.Xaml;
 using PoAutoRobo.App.ViewModels;
+using PoAutoRobo.Core.Pipeline;
 using PoAutoRobo.Core.Services;
 using WinUIEx;
 
@@ -21,7 +22,7 @@ public partial class App : Application
         var windowState = LoadWindowState();
         WindowManager.PersistenceStorage = windowState;
 
-        _window = new MainWindow(new MainViewModel(new MockScriptWriter()));
+        _window = new MainWindow(new MainViewModel(new MockScriptWriter(), new EpisodeBuilder(new MockNarrator(), new FfmpegRunner(FfmpegRunner.Locate() ?? "ffmpeg.exe"))));
         _window.Closed += (_, _) =>
         {
             Directory.CreateDirectory(Path.GetDirectoryName(WindowStateFile)!);

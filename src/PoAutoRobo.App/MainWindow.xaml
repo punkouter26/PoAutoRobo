@@ -66,8 +66,10 @@
             </GridView.ItemTemplate>
         </GridView>
 
-        <!-- Clip inspector and timeline arrive in later tasks -->
-        <Border Grid.Row="2" Grid.Column="2" Background="{ThemeResource LayerFillColorDefaultBrush}" />
+        <!-- Clip inspector; the timeline row below arrives in T11 -->
+        <Border Grid.Row="2" Grid.Column="2" Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <views:InspectorView ViewModel="{x:Bind ViewModel}" />
+        </Border>
         <Border Grid.Row="3" Grid.ColumnSpan="3" Background="{ThemeResource LayerFillColorDefaultBrush}" />
     </Grid>
 </winex:WindowEx>

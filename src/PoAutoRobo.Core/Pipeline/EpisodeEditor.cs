@@ -1,4 +1,5 @@
 using PoAutoRobo.Core.Models;
+using PoAutoRobo.Core.Services;
 
 namespace PoAutoRobo.Core.Pipeline;
 
@@ -20,6 +21,30 @@ public static class EpisodeEditor
 
     public static Episode SetHostVisible(Episode episode, Guid clipId, bool visible) =>
         Update(episode, clipId, clip => clip with { HostVisible = visible });
+
+    /// <summary>
+    /// Replaces the active tier's dialogue. Narration follows the text on the next narrate pass; the picture is only
+    /// marked stale when the model says the core action, tool or subject changed, and is never regenerated here.
+    /// </summary>
+    public static async Task<Episode> EditDialogueAsync(Episode episode, Guid clipId, string dialogue, IScriptWriter writer, CancellationToken ct)
+    {
+        dialogue = dialogue.Trim();
+        if (dialogue.Length == 0)
+            throw new ArgumentException("Dialogue cannot be empty.", nameof(dialogue));
+        var clip = episode.Clips.FirstOrDefault(c => c.Id == clipId)
+            ?? throw new ArgumentException($"No clip {clipId} in this episode.", nameof(clipId));
+        var before = clip.Active.Dialogue;
+        if (dialogue == before)
+            return episode;
+
+        // ponytail: a clip with no picture yet keeps its old visual prompt after a core change; picture requests add the dialogue (T18).
+        var stale = clip.Visual.Stale || (HasGeneratedMedia(clip) && await writer.CoreChangedAsync(before, dialogue, ct));
+        return Update(episode, clipId, c => c with
+        {
+            Scripts = c.Scripts.ToDictionary(s => s.Key, s => s.Key == c.ActiveTier ? s.Value with { Dialogue = dialogue } : s.Value),
+            Visual = c.Visual with { Stale = stale },
+        });
+    }
 
     internal static Episode Update(Episode episode, Guid clipId, Func<Clip, Clip> change)
     {
