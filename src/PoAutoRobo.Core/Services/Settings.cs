@@ -40,6 +40,9 @@ public sealed record AppSettings(Uri? Endpoint, string? ApiKey, string? GitHubTo
     public string FastChatDeployment { get; init; } = "gpt-5.4-mini";
     public string Voice { get; init; } = "en-US-DavisNeural";
 
+    /// <summary>Change to "gpt-image-2" once that deployment exists; it holds a character's look better.</summary>
+    public string ImageDeployment { get; init; } = "gpt-image-1-mini";
+
     /// <summary>Why the vault could not be read, in words fit to show the user.</summary>
     public string? LoadError { get; init; }
 

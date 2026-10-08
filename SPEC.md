@@ -29,7 +29,7 @@ Users: robotics researchers, developers and content creators working alone on th
 | MVVM | CommunityToolkit.Mvvm | 8.4.2 |
 | Script LLM | Azure OpenAI via `Azure.AI.OpenAI` 2.1.0, JSON-schema structured outputs; a full episode takes about two minutes | deployment `gpt-5.4`; `gpt-5.4-mini` for drift checks |
 | Narration | Azure AI Speech SDK through the same AI services resource and key as the script; SSML `express-as` excited style, `WordBoundary` events | `Microsoft.CognitiveServices.Speech` 1.52.0, voice `en-US-DavisNeural` |
-| Images | Azure OpenAI image edit endpoint with character sheet as reference | deployment `gpt-image-2` (fallback `gpt-image-1-mini`) |
+| Images | Azure OpenAI image REST API (`2025-04-01-preview`): edit endpoint with the character sheet as reference, generation endpoint otherwise | deployment `gpt-image-1-mini` today; switch to `gpt-image-2` once deployed |
 | Video | Sora 2, Azure OpenAI v1 API, async job + poll, `input_reference` | deployment `sora-2`, 1280×720 |
 | Assembly | FFmpeg CLI as a child process | 7.x or later (built and tested on 9.0.1), on PATH or downloaded on first run |
 | Credentials | Read from Azure Key Vault `kv-poshared` at startup as the signed-in Azure user; held in memory only | `Azure.Security.KeyVault.Secrets` 4.11.2, `Azure.Identity` 1.21.0 |
@@ -157,7 +157,7 @@ Each external service has a mock chosen automatically when its credentials or bi
 |---|---|
 | ScriptWriter | Canned 16-clip R1 balancing episode with all three tiers |
 | Narrator | Windows built-in voice, word timings spread evenly |
-| ImageGen | Locally rendered title card |
+| ImageGen | None needed: a clip with no picture renders as a title card |
 | VideoGen | Falls back to a still |
 | TrendFeed | Bundled sample cards |
 | Grounding | Last saved copy of each repository; with none, the script is written without snippets |
