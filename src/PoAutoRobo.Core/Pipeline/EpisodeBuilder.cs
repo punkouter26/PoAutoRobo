@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using PoAutoRobo.Core.Models;
 using PoAutoRobo.Core.Services;
 
@@ -36,20 +35,32 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
         var audio = Path.Combine(folder, "audio", $"{clip.Id:N}-{key}.wav");
         var words = Path.ChangeExtension(audio, ".words.json");
 
-        if (File.Exists(audio) && File.Exists(words))
-            return new Narration(audio, WavInfo.Duration(audio), JsonSerializer.Deserialize<List<WordTiming>>(await File.ReadAllTextAsync(words, ct))!);
+        // One narration at a time. Two requests for the same line (an edit being applied while Audition is pressed)
+        // would otherwise both write the same file; the second now waits and finds the first one's result.
+        await _narrationGate.WaitAsync(ct);
+        try
+        {
+            if (File.Exists(audio) && File.Exists(words))
+                return new Narration(audio, WavInfo.Duration(audio), JsonSerializer.Deserialize<List<WordTiming>>(await File.ReadAllTextAsync(words, ct))!);
 
-        var narration = await narrator.SynthesizeAsync(text, audio, clip.NarrationRate, ct);
-        await File.WriteAllTextAsync(words, JsonSerializer.Serialize(narration.Words), ct);
-        return narration;
+            var narration = await narrator.SynthesizeAsync(text, audio, clip.NarrationRate, ct);
+            await File.WriteAllTextAsync(words, JsonSerializer.Serialize(narration.Words), ct);
+            return narration;
+        }
+        finally
+        {
+            _narrationGate.Release();
+        }
     }
+
+    private readonly SemaphoreSlim _narrationGate = new(1, 1);
 
     public Task<TimeSpan> ProbeDurationAsync(string path, CancellationToken ct) => ffmpeg.ProbeDurationAsync(path, ct);
 
     /// <returns>Path of the finished video in the episode's export folder.</returns>
     public async Task<string> ExportAsync(Episode episode, string folder, ExportPreset preset, CaptionStyle captions, IProgress<RenderProgress>? progress, CancellationToken ct)
     {
-        var output = Path.Combine(folder, "export", $"{Slug(episode.Title)}-{preset.Height}p{preset.Fps}.mp4");
+        var output = Path.Combine(folder, "export", $"{ProjectStore.Slug(episode.Title)}-{preset.Height}p{preset.Fps}.mp4");
         await RenderAsync(episode, folder, preset, captions, output, progress, ct);
         return output;
     }
@@ -163,14 +174,6 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
             ? [.. (clip.Visual.MediaPaths ?? []).Where(p => File.Exists(p) && !VideoExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)).Select(Path.GetFullPath)]
             : [];
 
-    public static string Slug(string title)
-    {
-        var slug = NonSlug().Replace(title.ToLowerInvariant(), "-").Trim('-');
-        return slug.Length == 0 ? "episode" : slug;
-    }
-
-    [GeneratedRegex("[^a-z0-9]+")]
-    private static partial Regex NonSlug();
 
     /// <summary>Reports on the calling thread; <see cref="Progress{T}"/> would post to a context and reorder values.</summary>
     private sealed class Relay(Action<double> report) : IProgress<double>

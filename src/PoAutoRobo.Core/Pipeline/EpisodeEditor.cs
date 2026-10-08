@@ -53,6 +53,23 @@ public static class EpisodeEditor
     public static Episode RemoveVideo(Episode episode, Guid clipId) =>
         Update(episode, clipId, c => c with { NarrationRate = 1.0, Visual = new VisualSpec(VisualKind.TitleCard) });
 
+    // Attaches finished pictures to the clip they were drawn for, as that clip is now. Drawing takes a while, so the
+    // clip may have moved on: footage or a different picture type wins and the pictures are dropped; changed words
+    // keep the pictures but mark them out of date.
+    public static Episode ApplyPicture(Episode episode, Clip requested, IReadOnlyList<string> paths)
+    {
+        var current = episode.Clips.FirstOrDefault(c => c.Id == requested.Id);
+        if (current is null || current.Visual.Kind != requested.Visual.Kind || current.Visual.UserVideoPath is not null)
+            return episode;
+        var stillDescribesIt = current.Active == requested.Active && current.HostVisible == requested.HostVisible;
+        return Update(episode, requested.Id, c => c with { Visual = c.Visual with { MediaPaths = paths, Stale = !stillDescribesIt } });
+    }
+
+    // Swaps in one changed clip and leaves the rest of the episode as it is now, so a slow change to one clip
+    // cannot undo edits made to the others while it was in progress.
+    public static Episode ReplaceClip(Episode episode, Clip clip) =>
+        episode.Clips.Any(c => c.Id == clip.Id) ? Update(episode, clip.Id, _ => clip) : episode;
+
     public static Episode SetMix(Episode episode, MixPercentages mix) => VisualMix.Assign(episode with { Mix = mix }, mix);
 
     /// <summary>Same proportions, dealt to different clips.</summary>

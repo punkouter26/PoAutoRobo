@@ -57,6 +57,13 @@ public sealed class Visuals(IImageGen images, MediaCache cache, string character
     {
         var clip = episode.Clips.FirstOrDefault(c => c.Id == clipId)
             ?? throw new ArgumentException($"No clip {clipId} in this episode.", nameof(clipId));
+        return EpisodeEditor.ApplyPicture(episode, clip, await DrawAsync(clip, ct));
+    }
+
+    // Draws the pictures for one clip and returns their files. The caller attaches them with
+    // EpisodeEditor.ApplyPicture against the episode as it is by then.
+    public async Task<IReadOnlyList<string>> DrawAsync(Clip clip, CancellationToken ct)
+    {
         var request = RequestFor(clip);
         var reference = request.ReferencePath is null ? "" : MediaCache.ContentHash(request.ReferencePath);
 
@@ -69,6 +76,6 @@ public sealed class Visuals(IImageGen images, MediaCache cache, string character
             var panel = request with { Prompt = prompt };
             paths.Add(await cache.GetOrCreateAsync([model, panel.Size, panel.Prompt, reference], ".png", scratch => images.GenerateAsync(panel, scratch, ct)));
         }
-        return EpisodeEditor.SetVisual(episode, clipId, clip.Visual with { MediaPaths = paths, Stale = false });
+        return paths;
     }
 }

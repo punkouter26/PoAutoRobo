@@ -167,6 +167,11 @@ public partial class MainViewModel : ObservableObject
     public async Task OpenEpisodeAsync(string folder)
     {
         ErrorMessage = null;
+        if (IsWorking)
+        {
+            ErrorMessage = "Wait for the job in progress to finish, or cancel it, before opening another episode.";
+            return;
+        }
         try
         {
             Episode episode;
@@ -198,7 +203,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial int LengthIndex { get; set; }
 
-    private bool CanCreateEpisode => !string.IsNullOrWhiteSpace(TopicInput);
+    // Not while a long job runs: it works on the current episode and must not have it swapped from under it.
+    private bool CanCreateEpisode => !string.IsNullOrWhiteSpace(TopicInput) && !IsWorking;
 
     [RelayCommand(CanExecute = nameof(CanCreateEpisode))]
     private async Task CreateEpisodeAsync(CancellationToken ct)
@@ -213,7 +219,7 @@ public partial class MainViewModel : ObservableObject
                 Snippets.Add(snippet);
             OnPropertyChanged(nameof(SnippetsHeading));
             var episode = VisualMix.Assign(await _scriptWriter.WriteEpisodeAsync(topic, grounding, Lengths[Math.Clamp(LengthIndex, 0, Lengths.Length - 1)], ct), MixPercentages.Default);
-            EpisodeFolder = Path.Combine(EpisodesRoot, EpisodeBuilder.Slug(episode.Title));
+            EpisodeFolder = ProjectStore.NewFolder(EpisodesRoot, episode.Title); // never on top of an earlier episode
             ProjectStore.Save(episode, EpisodeFolder);
             Show(episode);
         }
@@ -230,11 +236,16 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var updated = change(Episode);
+            var shownDialogue = SelectedClip?.Dialogue;
             ProjectStore.Save(updated, EpisodeFolder);
             Episode = updated;
             foreach (var card in Clips)
                 card.Clip = updated.Clips.First(c => c.Id == card.Id);
             Renumber();
+            // The dialogue box holds a copy of the selected clip's words. When an edit changes those words (a depth
+            // switch, fitted footage), refresh the copy, or leaving the box would write the old words over the new.
+            if (SelectedClip is { } selected && selected.Dialogue != shownDialogue)
+                DraftDialogue = selected.Dialogue;
         }
         catch (Exception e) when (e is ArgumentException or IOException)
         {
@@ -300,8 +311,10 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var updated = await EpisodeEditor.EditDialogueAsync(Episode, clip.Id, DraftDialogue, _scriptWriter, ct);
-            Edit(_ => updated);
-            await _builder.NarrateClipAsync(clip.Clip, EpisodeFolder!, ct); // new words are spoken straight away
+            // The drift check above can take a moment; apply only this clip so edits made meanwhile are kept.
+            var changed = updated.Clips.First(c => c.Id == clip.Id);
+            Edit(e => EpisodeEditor.ReplaceClip(e, changed));
+            await _builder.NarrateClipAsync(changed, EpisodeFolder!, ct); // new words are spoken straight away
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -334,6 +347,11 @@ public partial class MainViewModel : ObservableObject
     {
         if (Episode is null || SelectedClip is not { } card) return;
         ErrorMessage = null;
+        if (!FfmpegAvailable)
+        {
+            ErrorMessage = "FFmpeg is needed to read your video. Install it, then restart the app.";
+            return;
+        }
         FitMessage = "Fitting the narration to your video…";
         try
         {
@@ -343,13 +361,13 @@ public partial class MainViewModel : ObservableObject
                 async (text, rate, c) => (await _builder.NarrateClipAsync(EpisodeEditor.WithDialogue(clip, text) with { NarrationRate = rate }, EpisodeFolder!, c)).Duration,
                 ct);
 
-            var copy = Path.Combine(EpisodeFolder!, "imports", Path.GetFileName(path));
+            // Named for the clip as well as the file, so two different videos called "take.mp4" cannot overwrite each other.
+            var copy = Path.Combine(EpisodeFolder!, "imports", $"{clip.Id:N}-{Path.GetFileName(path)}");
             Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
             if (!string.Equals(Path.GetFullPath(path), copy, StringComparison.OrdinalIgnoreCase))
                 File.Copy(path, copy, overwrite: true);
 
             Edit(e => EpisodeEditor.AttachVideo(e, clip.Id, copy, fit));
-            DraftDialogue = fit.Dialogue;
             FitMessage = fit.WithinTolerance
                 ? $"Video {length:m\\:ss} · narration fitted to {fit.Duration.TotalSeconds:0.0} s"
                 : $"Closest fit is {Math.Abs(fit.Gap.TotalSeconds):0.0} s too {(fit.Gap > TimeSpan.Zero ? "short" : "long")}. Edit the dialogue to close the gap.";
@@ -358,7 +376,7 @@ public partial class MainViewModel : ObservableObject
         {
             FitMessage = null;
         }
-        catch (Exception e) when (e is ArgumentOutOfRangeException or FfmpegException or IOException or InvalidDataException or InvalidOperationException)
+        catch (Exception e) // the top of a user action: anything that went wrong is shown, never left to crash the app
         {
             FitMessage = null;
             ErrorMessage = e is ArgumentOutOfRangeException ? "Footage must be between 5 seconds and 2 minutes long." : e.Message;
@@ -415,9 +433,14 @@ public partial class MainViewModel : ObservableObject
             {
                 if (ct.IsCancellationRequested) break;
                 var done = made + failures.Count;
-                ReportActivity($"Drawing the picture for clip {done + 1} of {total} · {Episode!.Clips.First(c => c.Id == id).Title}", (double)done / total);
+                var title = Episode?.Clips.FirstOrDefault(c => c.Id == id)?.Title ?? "";
+                ReportActivity($"Drawing the picture for clip {done + 1} of {total} · {title}", (double)done / total);
                 if (await GenerateOneAsync(id, ct) is { } failure) failures.Add(failure); else made++;
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped by the user part-way through a picture; that clip is not counted as made.
         }
         finally
         {
@@ -432,25 +455,38 @@ public partial class MainViewModel : ObservableObject
     private async Task GeneratePictureAsync(CancellationToken ct)
     {
         ErrorMessage = null;
-        if (SelectedClip is { } card && await GenerateOneAsync(card.Id, ct) is { } failure)
-            ErrorMessage = failure;
-    }
-
-    /// <returns>Null on success, otherwise why this clip has no picture.</returns>
-    private async Task<string?> GenerateOneAsync(Guid clipId, CancellationToken ct)
-    {
         try
         {
-            var updated = await CurrentVisuals!.GenerateAsync(Episode!, clipId, ct);
-            // Only this clip's picture is applied, so edits made while it was being drawn are kept.
-            Edit(e => EpisodeEditor.SetVisual(e, clipId, updated.Clips.First(c => c.Id == clipId).Visual));
-            return null;
+            if (SelectedClip is { } card && await GenerateOneAsync(card.Id, ct) is { } failure)
+                ErrorMessage = failure;
         }
         catch (OperationCanceledException)
         {
+        }
+    }
+
+    /// <returns>Null on success, otherwise why this clip has no picture.</returns>
+    /// <exception cref="OperationCanceledException">The user stopped it.</exception>
+    private async Task<string?> GenerateOneAsync(Guid clipId, CancellationToken ct)
+    {
+        if (Episode?.Clips.FirstOrDefault(c => c.Id == clipId) is not { } clip)
+            return "This clip is no longer in the episode.";
+        try
+        {
+            var paths = await CurrentVisuals!.DrawAsync(clip, ct);
+            // Attached to the clip as it is now: footage, a new picture type or changed words since the request win.
+            Edit(e => EpisodeEditor.ApplyPicture(e, clip, paths));
             return null;
         }
-        catch (Exception e) when (e is InvalidOperationException or HttpRequestException or IOException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            return "The picture service took too long to answer."; // a timeout, not the user: this clip was not made
+        }
+        catch (Exception e)
         {
             return e.Message;
         }
@@ -470,7 +506,7 @@ public partial class MainViewModel : ObservableObject
         catch (OperationCanceledException)
         {
         }
-        catch (Exception e) when (e is InvalidOperationException or HttpRequestException or IOException)
+        catch (Exception e)
         {
             ErrorMessage = e.Message;
         }
@@ -576,7 +612,7 @@ public partial class MainViewModel : ObservableObject
         {
             StatusMessage = "Cancelled.";
         }
-        catch (Exception e) when (e is FfmpegException or IOException)
+        catch (Exception e) // a render also narrates and reads files, so many things can fail; show them all
         {
             ErrorMessage = e.Message;
         }
@@ -592,7 +628,7 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>True while a preview, a render or a batch of pictures is running. Only one runs at a time.</summary>
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(CancelActivityCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(CancelActivityCommand), nameof(CreateEpisodeCommand))]
     public partial bool IsWorking { get; set; }
 
     /// <summary>What the job is, e.g. "Rendering the master video (1080p, 30 fps)".</summary>

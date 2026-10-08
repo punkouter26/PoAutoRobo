@@ -45,6 +45,27 @@ public static class ProjectStore
                 .OrderByDescending(folder => File.GetLastWriteTimeUtc(Path.Combine(folder, FileName)))]
             : [];
 
+    private const int MaxFolderName = 60;
+
+    // A file-system-safe name from a title: lower-case letters and digits joined by hyphens, capped in length.
+    public static string Slug(string title)
+    {
+        var slug = System.Text.RegularExpressions.Regex.Replace(title.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
+        if (slug.Length > MaxFolderName - 4) // leaves room for a "-999" suffix
+            slug = slug[..(MaxFolderName - 4)].Trim('-');
+        return slug.Length == 0 ? "episode" : slug;
+    }
+
+    // A folder for a new episode that does not collide with one already saved under the same title.
+    public static string NewFolder(string root, string title)
+    {
+        var slug = Slug(title);
+        var folder = Path.Combine(root, slug);
+        for (var n = 2; Directory.Exists(folder); n++)
+            folder = Path.Combine(root, $"{slug}-{n}");
+        return folder;
+    }
+
     private static Episode Read(string path)
     {
         try
