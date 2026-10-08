@@ -95,7 +95,7 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
         return (isVideo ? ClipSource.Video : ClipSource.Image, Path.GetFullPath(path));
     }
 
-    private static string Slug(string title)
+    public static string Slug(string title)
     {
         var slug = NonSlug().Replace(title.ToLowerInvariant(), "-").Trim('-');
         return slug.Length == 0 ? "episode" : slug;

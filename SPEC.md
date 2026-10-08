@@ -25,8 +25,8 @@ Users: robotics researchers, developers and content creators working alone on th
 | Area | Choice | Version / ID |
 |---|---|---|
 | Runtime | .NET | 10 (LTS) |
-| UI | WinUI 3, pure XAML, unpackaged | Windows App SDK 2.5.1 |
-| MVVM | CommunityToolkit.Mvvm | latest stable at scaffold |
+| UI | WinUI 3, pure XAML, unpackaged | Windows App SDK 2.5.1, WinUIEx 2.9.3; built for the machine's own architecture (x64 or ARM64) |
+| MVVM | CommunityToolkit.Mvvm | 8.4.2 |
 | Script LLM | Azure OpenAI via `Azure.AI.OpenAI`, JSON-schema structured outputs | deployment `gpt-5.4`; `gpt-5.4-mini` for drift checks |
 | Narration | Azure AI Speech SDK, SSML `express-as`, `WordBoundary` events | `Microsoft.CognitiveServices.Speech`, latest stable at scaffold |
 | Images | Azure OpenAI image edit endpoint with character sheet as reference | deployment `gpt-image-2` (fallback `gpt-image-1-mini`) |
