@@ -1,0 +1,78 @@
+using PoAutoRobo.Core.Models;
+using PoAutoRobo.Core.Pipeline;
+
+namespace PoAutoRobo.Core.Services;
+
+/// <summary>Offline stand-in used when no Azure OpenAI credentials are configured.</summary>
+public sealed class MockScriptWriter : IScriptWriter
+{
+    private static readonly (string Title, string Pose)[] Outline =
+    [
+        ("Meet the R1", "waving at the camera"),
+        ("Why balance is hard", "wobbling on one foot with arms out"),
+        ("Joints and actuators", "holding a virtual torque wrench"),
+        ("Sensing the body", "tapping the side of its head"),
+        ("The control loop", "pointing at a looping arrow diagram"),
+        ("Simulation first", "standing beside a simulation viewport"),
+        ("Building the scene", "placing blocks on a virtual floor"),
+        ("Observations", "holding up a clipboard of numbers"),
+        ("Actions", "flexing one knee"),
+        ("Reward design", "pointing at a whiteboard of reward terms"),
+        ("Training runs", "watching a row of tiny robots"),
+        ("Reading the curves", "tracing a rising graph with one finger"),
+        ("Domain randomization", "juggling floor tiles of different textures"),
+        ("Sim to real", "stepping out of a screen onto a lab floor"),
+        ("First real test", "standing confidently with a safety harness"),
+        ("What to try next", "giving a thumbs up"),
+    ];
+
+    private const string Filler = "That is the idea in a nutshell, and it is worth saying again in a slightly different way so it really sticks.";
+
+    public Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, CancellationToken ct)
+    {
+        var clips = Outline.Select(o => new Clip(
+            Guid.NewGuid(), o.Title, Tier.B,
+            Enum.GetValues<Tier>().ToDictionary(t => t, t => Script(topic, o.Title, o.Pose, t)),
+            new VisualSpec(VisualKind.TitleCard), HostVisible: true)).ToList();
+        return Task.FromResult(new Episode(topic, topic, clips, MixSeed: Random.Shared.Next()));
+    }
+
+    private static TierScript Script(string topic, string title, string pose, Tier tier)
+    {
+        var subject = title.ToLowerInvariant();
+        var dialogue = tier switch
+        {
+            Tier.A => $"Okay, {subject}! Picture yourself standing on a moving bus without holding on. Your body keeps making tiny corrections so you stay upright, and you never even think about it. The R1 has to learn that same trick from scratch, and this part of {topic} is where it starts to click.",
+            Tier.B => $"Next up, {subject}. In practice this is where you set up the workflow: pick the task, check the observation and action spaces, and decide which reward terms matter most. Small changes here ripple through training, so keep one variable moving at a time, log everything, and compare against your last good run before you trust the result for {topic}.",
+            _ => $"Now the deep end of {subject}. The policy outputs joint position targets that a low-level proportional-derivative loop tracks at a much higher rate than the policy itself runs. Frame transforms take base-frame velocities and gravity into the observation vector, and torque limits clip what the actuators can deliver. Every one of those details shapes how {topic} behaves once the controller leaves simulation and meets real hardware.",
+        };
+        var look = tier switch
+        {
+            Tier.A => "friendly everyday analogy scene",
+            Tier.B => "practical workflow diagram",
+            _ => "detailed control-systems schematic",
+        };
+        return new TierScript(dialogue, $"Comic panel about {subject}: {look}, host {pose}.", pose);
+    }
+
+    // ponytail: word-overlap heuristic stands in for the model's judgement; the real check is AzureScriptWriter.
+    public Task<bool> CoreChangedAsync(string oldDialogue, string newDialogue, CancellationToken ct)
+    {
+        var before = ContentWords(oldDialogue);
+        var after = ContentWords(newDialogue);
+        var shared = before.Intersect(after).Count();
+        return Task.FromResult(shared * 2 < Math.Max(before.Count, after.Count));
+    }
+
+    private static HashSet<string> ContentWords(string text) =>
+        [.. Durations.SplitWords(text).Select(w => w.Trim('.', ',', '!', '?', ';', ':').ToLowerInvariant()).Where(w => w.Length > 3)];
+
+    public Task<string> RewriteToLengthAsync(string dialogue, int targetWords, CancellationToken ct)
+    {
+        var words = Durations.SplitWords(dialogue).ToList();
+        var filler = Durations.SplitWords(Filler);
+        for (var i = 0; words.Count < targetWords; i++)
+            words.Add(filler[i % filler.Length]);
+        return Task.FromResult(string.Join(' ', words.Take(targetWords)));
+    }
+}
