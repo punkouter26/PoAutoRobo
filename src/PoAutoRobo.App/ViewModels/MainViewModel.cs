@@ -111,8 +111,40 @@ public partial class MainViewModel : ObservableObject
         get
         {
             if (Episode is null) return "";
-            var total = TimeSpan.FromTicks(Episode.Clips.Sum(c => Durations.Estimate(c.Active.Dialogue).Ticks));
-            return $"Runtime {total:m\\:ss} · target 3–10 min";
+            var total = Durations.Total(Episode);
+            return Durations.IsShort(total) ? $"Runtime {total:m\\:ss} · shorter than the 3 minute target" : $"Runtime {total:m\\:ss} · target 3–10 min";
+        }
+    }
+
+    /// <summary>Saved episodes, newest first, for the Open list.</summary>
+    public IReadOnlyList<string> SavedEpisodes() => ProjectStore.ListEpisodes(EpisodesRoot);
+
+    /// <summary>Reopens a saved episode. Works with no connection: it is a plain file read.</summary>
+    public async Task OpenEpisodeAsync(string folder)
+    {
+        ErrorMessage = null;
+        try
+        {
+            Episode episode;
+            try
+            {
+                episode = ProjectStore.Load(folder);
+            }
+            catch (InvalidDataException) when (File.Exists(Path.Combine(folder, ProjectStore.FileName + ".bak")))
+            {
+                if (Confirm is null || !await Confirm("This episode's file is damaged", "Restore it from the copy saved just before the last change?", "Restore"))
+                    return;
+                episode = ProjectStore.RestoreBackup(folder);
+            }
+            EpisodeFolder = folder;
+            Snippets.Clear();
+            OnPropertyChanged(nameof(SnippetsHeading));
+            Show(episode);
+            StatusMessage = $"Opened {episode.Title}.";
+        }
+        catch (InvalidDataException e)
+        {
+            ErrorMessage = e.Message;
         }
     }
 
@@ -293,7 +325,7 @@ public partial class MainViewModel : ObservableObject
     // ---- Pictures ----
 
     /// <summary>Set by the window: asks the user to approve something that costs money. True means go ahead.</summary>
-    public Func<string, string, Task<bool>>? Confirm { get; set; }
+    public Func<string, string, string, Task<bool>>? Confirm { get; set; }
 
     public bool PicturesAvailable => _visualsFor is not null;
 
@@ -319,7 +351,7 @@ public partial class MainViewModel : ObservableObject
             StatusMessage = estimate.Summary;
             return;
         }
-        if (Confirm is null || !await Confirm("Generate pictures?", estimate.Summary + " Pictures you already have are reused at no cost."))
+        if (Confirm is null || !await Confirm("Generate pictures?", estimate.Summary + " Pictures you already have are reused at no cost.", "Generate"))
             return;
 
         var failures = new List<string>();

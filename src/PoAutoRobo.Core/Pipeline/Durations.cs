@@ -20,6 +20,22 @@ public static class Durations
 
     public static int TargetWords(TimeSpan duration) => (int)Math.Round(duration.TotalMinutes * WordsPerMinute);
 
+    /// <summary>Shortest episode the format aims for. Shorter ones are flagged, never blocked.</summary>
+    public static readonly TimeSpan MinEpisode = TimeSpan.FromMinutes(3);
+
+    /// <summary>Estimated running time of the episode as currently set (each clip's active tier).</summary>
+    public static TimeSpan Total(Episode episode) =>
+        TimeSpan.FromTicks(episode.Clips.Sum(c => Estimate(c.Active.Dialogue).Ticks));
+
+    public static bool IsShort(TimeSpan total) => total < MinEpisode;
+
+    /// <summary>Plain-words warning when a clip's active dialogue runs outside 15 to 60 seconds; null when it is fine.</summary>
+    public static string? Warning(Clip clip)
+    {
+        var duration = Estimate(clip.Active.Dialogue);
+        return duration < Min ? "Shorter than 15 seconds" : duration > Max ? "Longer than 60 seconds" : null;
+    }
+
     public static IEnumerable<(Guid ClipId, Tier Tier)> OutOfRange(Episode episode) =>
         from clip in episode.Clips
         from script in clip.Scripts.OrderBy(s => s.Key)

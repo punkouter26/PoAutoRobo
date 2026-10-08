@@ -37,6 +37,14 @@ public static class ProjectStore
         return episode;
     }
 
+    /// <summary>Episode folders directly under <paramref name="root"/>, most recently saved first.</summary>
+    public static IReadOnlyList<string> ListEpisodes(string root) =>
+        Directory.Exists(root)
+            ? [.. Directory.GetDirectories(root)
+                .Where(folder => File.Exists(Path.Combine(folder, FileName)))
+                .OrderByDescending(folder => File.GetLastWriteTimeUtc(Path.Combine(folder, FileName)))]
+            : [];
+
     private static Episode Read(string path)
     {
         try

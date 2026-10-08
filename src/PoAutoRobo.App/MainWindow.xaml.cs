@@ -16,14 +16,14 @@ public sealed partial class MainWindow : WindowEx
 
     public MainViewModel ViewModel { get; }
 
-    private async Task<bool> ConfirmAsync(string title, string message)
+    private async Task<bool> ConfirmAsync(string title, string message, string action)
     {
         var dialog = new ContentDialog
         {
             XamlRoot = Content.XamlRoot,
             Title = title,
             Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
-            PrimaryButtonText = "Generate",
+            PrimaryButtonText = action,
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
         };

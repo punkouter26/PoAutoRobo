@@ -20,6 +20,21 @@ public sealed partial class RadarPanel : UserControl
         }
     }
 
+    // Built each time it opens, so episodes created this session appear.
+    private void OnSavedEpisodesOpening(object? sender, object e)
+    {
+        SavedEpisodesMenu.Items.Clear();
+        var folders = ViewModel?.SavedEpisodes() ?? [];
+        foreach (var folder in folders)
+        {
+            var item = new MenuFlyoutItem { Text = Path.GetFileName(folder) };
+            item.Click += async (_, _) => await ViewModel!.OpenEpisodeAsync(folder);
+            SavedEpisodesMenu.Items.Add(item);
+        }
+        if (folders.Count == 0)
+            SavedEpisodesMenu.Items.Add(new MenuFlyoutItem { Text = "No saved episodes yet", IsEnabled = false });
+    }
+
     private void OnAdoptTopic(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
         if (sender is Button { Tag: PoAutoRobo.Core.Services.TopicCard card })

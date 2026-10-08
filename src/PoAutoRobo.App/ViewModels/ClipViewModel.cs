@@ -8,7 +8,7 @@ namespace PoAutoRobo.App.ViewModels;
 public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edit) : ObservableObject
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Heading), nameof(DurationText), nameof(KindText), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(IsStale), nameof(HasUserVideo), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath))]
+    [NotifyPropertyChangedFor(nameof(Heading), nameof(DurationText), nameof(KindText), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(IsStale), nameof(HasUserVideo), nameof(DurationWarning), nameof(HasDurationWarning), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath))]
     public partial Clip Clip { get; set; } = clip;
 
     [ObservableProperty]
@@ -20,6 +20,11 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
     public string Heading => $"{Number} · {Clip.Title}";
 
     public string DurationText => $"{Durations.Estimate(Clip.Active.Dialogue).TotalSeconds:0} s";
+
+    /// <summary>Set when the dialogue runs outside 15 to 60 seconds. A flag only: the clip still exports.</summary>
+    public string? DurationWarning => Durations.Warning(Clip);
+
+    public bool HasDurationWarning => DurationWarning is not null;
 
     public string Dialogue => Clip.Active.Dialogue;
 

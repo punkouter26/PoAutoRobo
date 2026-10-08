@@ -212,7 +212,7 @@ Each external service has a mock chosen automatically when its credentials or bi
 | Tier text outside 15–60s | Clip flagged; export still allowed |
 | Content filter blocks an image or video | Clip keeps its title card and shows the reason |
 | Sora job fails or times out (10 min) | Clip falls back to a still; error shown on the card |
-| Rate limit (429) | Retry with backoff up to 3 times, then surface it |
+| Rate limit (429) | Script calls retry once, then the error is shown. Changed from three retries: each retry of a long script call is paid for |
 | GitHub rate limit without a token | Use cached snippets; prompt to add a token |
 | Feed source unreachable | Skip that source; show the rest |
 | Conformance cannot hit the target | Keep the closest attempt and show the gap |

@@ -16,6 +16,11 @@
                            Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
+            <DropDownButton x:Name="OpenEpisodeButton" Content="Open a saved episode" HorizontalAlignment="Stretch">
+                <DropDownButton.Flyout>
+                    <MenuFlyout x:Name="SavedEpisodesMenu" Opening="OnSavedEpisodesOpening" Placement="Bottom" />
+                </DropDownButton.Flyout>
+            </DropDownButton>
             <Grid>
                 <TextBlock Text="Topic radar" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
                 <Button x:Name="RefreshTopicsButton" HorizontalAlignment="Right" Padding="8" Command="{x:Bind ViewModel.RefreshTopicsCommand}" AutomationProperties.Name="Refresh topics">

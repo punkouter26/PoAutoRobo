@@ -19,6 +19,8 @@
             </Border>
         </Grid>
         <TextBlock Text="{x:Bind Card.Heading, Mode=OneWay}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+        <TextBlock Text="{x:Bind Card.DurationWarning, Mode=OneWay}" Visibility="{x:Bind Card.HasDurationWarning, Mode=OneWay}"
+                   Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
         <controls:Segmented SelectedIndex="{x:Bind Card.TierIndex, Mode=TwoWay}" HorizontalAlignment="Stretch"
                             AutomationProperties.Name="Depth of explanation">
             <controls:SegmentedItem Content="A" ToolTipService.ToolTip="Accessible: everyday analogies" />
