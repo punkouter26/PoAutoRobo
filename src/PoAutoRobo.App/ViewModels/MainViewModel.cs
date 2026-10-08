@@ -197,9 +197,9 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private static readonly EpisodeLength[] Lengths = [EpisodeLength.Full, EpisodeLength.Short, EpisodeLength.QuickTest];
+    private static readonly EpisodeLength[] Lengths = [EpisodeLength.Full, EpisodeLength.Short, EpisodeLength.TwoClips, EpisodeLength.QuickTest];
 
-    // Length of the next episode: 0 full (15 to 20 clips), 1 short (5 clips), 2 quick test (1 clip).
+    // Length of the next episode: 0 full (15 to 20 clips), 1 short (5 clips), 2 two clips, 3 quick test (1 clip).
     [ObservableProperty]
     public partial int LengthIndex { get; set; }
 

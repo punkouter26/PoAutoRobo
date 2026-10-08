@@ -88,7 +88,9 @@ public sealed partial class TimelineView : UserControl
     private void OnScrub(object sender, RangeBaseValueChangedEventArgs e)
     {
         if (_updatingScrubber) return;
-        _player.PlaybackSession.Position = TimeSpan.FromSeconds(e.NewValue);
+        var position = TimeSpan.FromSeconds(e.NewValue);
+        _player.PlaybackSession.Position = position;
+        TimeText.Text = $"{position:m\\:ss} / {_player.PlaybackSession.NaturalDuration:m\\:ss}"; // the clock only ticks while playing
         Overlay.Invalidate();
     }
 
@@ -117,7 +119,9 @@ public sealed partial class TimelineView : UserControl
         using var format = new CanvasTextFormat
         {
             FontFamily = look.Font,
-            FontSize = look.FontSize * scale,
+            // The export measures font size by line height, this by letter height; 0.75 makes the preview match the
+            // finished video for Segoe UI. Adjust here if the two ever look different.
+            FontSize = look.FontSize * scale * 0.75f,
             FontWeight = FontWeights.Bold,
             HorizontalAlignment = CanvasHorizontalAlignment.Center,
             WordWrapping = CanvasWordWrapping.NoWrap,

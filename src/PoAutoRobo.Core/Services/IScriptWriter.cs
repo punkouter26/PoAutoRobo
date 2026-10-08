@@ -9,6 +9,7 @@ public sealed record EpisodeLength
 {
     public static readonly EpisodeLength Full = new(15, 20);
     public static readonly EpisodeLength Short = new(5, 5);
+    public static readonly EpisodeLength TwoClips = new(2, 2);
     public static readonly EpisodeLength QuickTest = new(1, 1);
 
     public EpisodeLength(int minClips, int maxClips)

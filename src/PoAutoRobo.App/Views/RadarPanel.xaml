@@ -12,6 +12,7 @@
                       ToolTipService.ToolTip="How many clips to write. Quick test makes a single clip of about 30 seconds, so you can try every step and render in a minute or two.">
                 <ComboBoxItem Content="Full episode · 15 to 20 clips, about 10 minutes" />
                 <ComboBoxItem Content="Short · 5 clips, about 3 minutes" />
+                <ComboBoxItem Content="Two clips · about 1 minute" />
                 <ComboBoxItem Content="Quick test · 1 clip, about 30 seconds" />
             </ComboBox>
             <Button x:Name="CreateEpisodeButton" ToolTipService.ToolTip="Read the official repositories and write the script on this topic. A full episode takes about two minutes; a quick test a few seconds." Content="Create episode" Style="{ThemeResource AccentButtonStyle}"

@@ -28,6 +28,7 @@ public sealed class ScriptRulesTests
 
     [Theory]
     [InlineData(1, 1, 1)]     // quick test: one clip, about half a minute
+    [InlineData(2, 2, 2)]     // two clips
     [InlineData(5, 5, 5)]     // short
     [InlineData(15, 20, 16)]  // full
     public async Task Mock_episode_can_be_as_short_as_one_clip(int min, int max, int expected)
@@ -43,6 +44,7 @@ public sealed class ScriptRulesTests
     {
         Assert.Equal((15, 20), (EpisodeLength.Full.MinClips, EpisodeLength.Full.MaxClips));
         Assert.Equal((5, 5), (EpisodeLength.Short.MinClips, EpisodeLength.Short.MaxClips));
+        Assert.Equal((2, 2), (EpisodeLength.TwoClips.MinClips, EpisodeLength.TwoClips.MaxClips));
         Assert.Equal((1, 1), (EpisodeLength.QuickTest.MinClips, EpisodeLength.QuickTest.MaxClips));
     }
 
