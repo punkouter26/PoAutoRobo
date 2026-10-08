@@ -41,6 +41,22 @@ public sealed partial class TrendFeed(FetchText fetch)
         return new TrendFeed((url, ct) => http.GetStringAsync(url, ct));
     }
 
+    private const string FrontPage = "https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=20";
+
+    /// <summary>What people are reading today, on any subject, for episodes that are not about the R1. Empty when the source is down.</summary>
+    public async Task<IReadOnlyList<TopicCard>> GetGeneralAsync(CancellationToken ct)
+    {
+        try
+        {
+            return [.. ParseHackerNews(await fetch(FrontPage, ct)).Where(c => IsWebLink(c.Url)).Take(MaxCards)];
+        }
+        catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException or InvalidOperationException or KeyNotFoundException or FormatException)
+        {
+            ct.ThrowIfCancellationRequested();
+            return [];
+        }
+    }
+
     public async Task<IReadOnlyList<TopicCard>> GetAsync(CancellationToken ct)
     {
         var batches = await Task.WhenAll(Sources.Select(async source =>

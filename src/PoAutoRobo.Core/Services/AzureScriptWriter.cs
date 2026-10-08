@@ -57,7 +57,7 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
         });
     }
 
-    public async Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<int>? clipsWritten = null)
+    public async Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<int>? clipsWritten = null, Subject subject = Subject.UnitreeR1)
     {
         var prompt = new StringBuilder().AppendLine($"Number of clips: {length.InWords}.").AppendLine().Append(Fenced("topic", "", Capped(topic)));
         foreach (var snippet in grounding)
@@ -74,13 +74,14 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
                 clipsWritten.Report(written = count);
         };
 
-        var draft = await Ask<EpisodeDto>(settings.ChatDeployment, ScriptSchemas.System, prompt.ToString(), "episode", ScriptSchemas.Episode, watch, ct);
+        var system = subject == Subject.General ? ScriptSchemas.GeneralSystem : ScriptSchemas.System;
+        var draft = await Ask<EpisodeDto>(settings.ChatDeployment, system, prompt.ToString(), "episode", ScriptSchemas.Episode, watch, ct);
         // Too many clips are simply trimmed below. Only too few is worth paying for a second script.
         if (draft.Clips.Count < length.MinClips)
         {
             prompt.AppendLine().AppendLine($"Your last answer had {draft.Clips.Count} clips. Return {length.InWords}.");
             soFar.Clear();
-            draft = await Ask<EpisodeDto>(settings.ChatDeployment, ScriptSchemas.System, prompt.ToString(), "episode", ScriptSchemas.Episode, watch, ct);
+            draft = await Ask<EpisodeDto>(settings.ChatDeployment, system, prompt.ToString(), "episode", ScriptSchemas.Episode, watch, ct);
         }
         if (draft.Clips.Count < length.MinClips)
             throw new InvalidDataException($"The script came back with only {draft.Clips.Count} clips. Please try again.");
@@ -89,17 +90,17 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
             Guid.NewGuid(), c.Title, Tier.B,
             new Dictionary<Tier, TierScript> { [Tier.B] = new(c.B.Dialogue, c.B.VisualPrompt, c.B.Pose) },
             new VisualSpec(VisualKind.TitleCard), HostVisible: true)).ToList();
-        return new Episode(draft.Title, topic, clips, MixSeed: Random.Shared.Next());
+        return new Episode(draft.Title, topic, clips, MixSeed: Random.Shared.Next()) { Subject = subject };
     }
 
-    public async Task<TierScript> WriteTierAsync(string topic, Clip clip, Tier tier, CancellationToken ct)
+    public async Task<TierScript> WriteTierAsync(string topic, Clip clip, Tier tier, CancellationToken ct, Subject subject = Subject.UnitreeR1)
     {
         var request = new StringBuilder()
             .AppendLine($"Depth to write: {tier.ToString().ToLowerInvariant()}")
             .AppendLine($"Clip title: {clip.Title}").AppendLine()
             .Append(Fenced("topic", "", Capped(topic))).AppendLine()
             .Append(Fenced("existing", $" depth=\"{clip.ActiveTier.ToString().ToLowerInvariant()}\"", clip.Active.Dialogue));
-        var script = await Ask<TierDto>(settings.FastChatDeployment, ScriptSchemas.TierSystem, request.ToString(), "tier", ScriptSchemas.Tier, null, ct);
+        var script = await Ask<TierDto>(settings.FastChatDeployment, subject == Subject.General ? ScriptSchemas.GeneralTierSystem : ScriptSchemas.TierSystem, request.ToString(), "tier", ScriptSchemas.Tier, null, ct);
         return new TierScript(script.Dialogue, script.VisualPrompt, script.Pose);
     }
 

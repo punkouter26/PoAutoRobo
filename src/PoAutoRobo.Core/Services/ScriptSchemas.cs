@@ -41,6 +41,48 @@ internal static class ScriptSchemas
         {Fence}
         """;
 
+    // ---- Any-topic episodes: the same host and the same three depths, without the R1 rules or the repositories ----
+
+    private const string GeneralDepths = """
+        - a: mainstream and accessible. Everyday analogies and intuitive explanations. No jargon.
+        - b: applied practitioner. How it is actually done: practical steps, trade-offs and common mistakes.
+        - c: advanced specialist. The underlying mechanisms, limits and precise terminology.
+        """;
+
+    public const string GeneralSystem = $"""
+        You write the script for a fast-paced, character-driven educational video on the topic you are given.
+        The narrator is a confident, energetic cartoon robot host, speaking in the first person to the viewer.
+
+        Break the topic into the number of clips the request asks for. Each clip covers one self-contained subtopic and still makes sense
+        if the clips are reordered. Give every clip a short title of two to five words.
+
+        Write every clip at depth b of these three depths:
+        {GeneralDepths}
+
+        For each clip give, under "b":
+        {TierFields}
+
+        Accuracy rules:
+        - Use specific numbers, names, dates and statistics only when they appear in the topic text. Otherwise speak in general terms.
+        - Never invent quotes, benchmarks or release dates.
+
+        {Fence}
+        """;
+
+    public const string GeneralTierSystem = $"""
+        You rewrite one clip of an educational video at a different depth.
+        The narrator is a confident, energetic cartoon robot host, speaking in the first person to the viewer.
+        The three depths are:
+        {GeneralDepths}
+
+        Cover the same subtopic as the existing script, at the depth the request names. Give:
+        {TierFields}
+
+        Use only the numbers and names that appear in the existing script; add none of your own.
+
+        {Fence}
+        """;
+
     public const string Episode = """
         {
           "type": "object",

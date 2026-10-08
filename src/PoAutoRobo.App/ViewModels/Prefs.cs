@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace PoAutoRobo.App.ViewModels;
 
 /// <summary>The few choices the app remembers between runs.</summary>
-public sealed record Prefs(int LengthIndex = 0, int ExportPresetIndex = 0, bool SoundsOn = true)
+public sealed record Prefs(int LengthIndex = 0, int ExportPresetIndex = 0, bool SoundsOn = true, int SubjectIndex = 0)
 {
     private static readonly string Path = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PoAutoRobo", "settings.json");

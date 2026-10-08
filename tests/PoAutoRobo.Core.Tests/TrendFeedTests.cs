@@ -99,6 +99,18 @@ public sealed class TrendFeedTests
     }
 
     [Fact]
+    public async Task For_any_topic_episodes_the_radar_shows_popular_stories_unfiltered_but_still_only_web_links_and_nothing_when_the_source_is_down()
+    {
+        var feed = new TrendFeed((_, _) => Task.FromResult(HackerNews));
+
+        var cards = await feed.GetGeneralAsync(Ct);
+
+        Assert.Contains(cards, c => c.Title == "Ask HN: humanoid robot sims?"); // not about the R1, and kept
+        Assert.DoesNotContain(cards, c => c.Title == "Unitree R1 firmware");    // its link is not a web address
+        Assert.Empty(await new TrendFeed((_, _) => throw new HttpRequestException("down")).GetGeneralAsync(Ct));
+    }
+
+    [Fact]
     public async Task Cards_are_merged_newest_first_and_only_relevant_ones_with_web_links_reach_the_radar()
     {
         var feed = new TrendFeed((url, _) => Task.FromResult(url.Contains("hn.algolia") ? HackerNews : url.Contains("arxiv") ? Atom : Rss));

@@ -34,6 +34,7 @@ public partial class MainViewModel : ObservableObject
         LengthIndex = Math.Clamp(prefs.LengthIndex, 0, LengthChoices.Length - 1);
         ExportPresetIndex = Math.Clamp(prefs.ExportPresetIndex, 0, ExportChoices.Length - 1);
         SoundsOn = prefs.SoundsOn;
+        SubjectIndex = Math.Clamp(prefs.SubjectIndex, 0, SubjectChoices.Length - 1);
         Clips.CollectionChanged += OnClipsChanged;
         RefreshLibrary();
     }
@@ -48,6 +49,12 @@ public partial class MainViewModel : ObservableObject
         new("Short · 5 clips, about 3 minutes", EpisodeLength.Short),
         new("Two clips · about 1 minute", EpisodeLength.TwoClips),
         new("Quick test · 1 clip, about 30 seconds", EpisodeLength.QuickTest),
+    ];
+
+    public Choice<Subject>[] SubjectChoices { get; } =
+    [
+        new("Unitree R1 · grounded in the official repositories", Subject.UnitreeR1),
+        new("Any topic · written from what you type", Subject.General),
     ];
 
     public Choice<ExportPreset>[] ExportChoices { get; } =
@@ -104,13 +111,29 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial bool SoundsOn { get; set; }
 
+    /// <summary>What the next episode is about, as an index into <see cref="SubjectChoices"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RadarHeading))]
+    public partial int SubjectIndex { get; set; }
+
+    private Subject NextSubject => SubjectChoices[Math.Clamp(SubjectIndex, 0, SubjectChoices.Length - 1)].Value;
+
+    public string RadarHeading => NextSubject == Subject.General ? "Topic radar · popular today" : "Topic radar · Unitree R1";
+
+    // The radar follows the subject: R1 stories for R1 episodes, today's popular stories otherwise.
+    partial void OnSubjectIndexChanged(int value)
+    {
+        SavePrefs();
+        RefreshTopicsCommand.Execute(null);
+    }
+
     partial void OnLengthIndexChanged(int value) => SavePrefs();
 
     partial void OnExportPresetIndexChanged(int value) => SavePrefs();
 
     partial void OnSoundsOnChanged(bool value) => SavePrefs();
 
-    private void SavePrefs() => new Prefs(LengthIndex, ExportPresetIndex, SoundsOn).Save();
+    private void SavePrefs() => new Prefs(LengthIndex, ExportPresetIndex, SoundsOn, SubjectIndex).Save();
 
     // ---- Steps ----
 
@@ -155,10 +178,16 @@ public partial class MainViewModel : ObservableObject
 
     public ObservableCollection<TopicCard> Topics { get; } = [];
 
+    private int _radarRequest;
+
     [RelayCommand]
     private async Task RefreshTopicsAsync(CancellationToken ct)
     {
-        var cards = await _trendFeed.GetAsync(ct); // never throws for a dead source; falls back to sample topics
+        // Never throws for a dead source. R1 falls back to sample topics; the general list is simply empty.
+        // Switching subject asks again while an earlier answer may still be on its way; only the newest one is shown.
+        var request = ++_radarRequest;
+        var cards = NextSubject == Subject.General ? await _trendFeed.GetGeneralAsync(ct) : await _trendFeed.GetAsync(ct);
+        if (request != _radarRequest) return;
         Topics.Clear();
         foreach (var card in cards)
             Topics.Add(card);
@@ -323,12 +352,18 @@ public partial class MainViewModel : ObservableObject
         IsCreating = true;
         try
         {
-            ReportActivity("Reading the official repositories", 0.02);
-            var grounding = await _grounding.FindAsync(topic, ct);
+            // Only R1 episodes are grounded: the repositories have nothing to say about other subjects.
+            var subject = NextSubject;
+            IReadOnlyList<GroundingSnippet> grounding = [];
+            if (subject == Subject.UnitreeR1)
+            {
+                ReportActivity("Reading the official repositories", 0.02);
+                grounding = await _grounding.FindAsync(topic, ct);
+            }
             ReportActivity("Writing the script", 0.1);
             var of = length.MinClips == length.MaxClips ? $"{length.MaxClips}" : $"up to {length.MaxClips}";
             var written = new Progress<int>(n => ReportActivity($"Written {n} of {of} clips", 0.1 + 0.9 * Math.Min(1.0, (double)n / length.MaxClips)));
-            var episode = VisualMix.Assign(await _scriptWriter.WriteEpisodeAsync(topic, grounding, length, ct, written), MixPercentages.Default);
+            var episode = VisualMix.Assign(await _scriptWriter.WriteEpisodeAsync(topic, grounding, length, ct, written, subject), MixPercentages.Default);
             EpisodeFolder = ProjectStore.NewFolder(EpisodesRoot, episode.Title); // never on top of an earlier episode
             ProjectStore.Save(episode, EpisodeFolder);
             ProjectStore.SaveSnippets(grounding, EpisodeFolder);
@@ -518,7 +553,7 @@ public partial class MainViewModel : ObservableObject
         card.IsBusy = true;
         await Guard(async () =>
         {
-            var script = await _scriptWriter.WriteTierAsync(episode.Topic, card.Clip, tier, CancellationToken.None);
+            var script = await _scriptWriter.WriteTierAsync(episode.Topic, card.Clip, tier, CancellationToken.None, episode.Subject);
             // The episode may have been closed or swapped while the depth was being written.
             Edit(e => e.Clips.Any(c => c.Id == card.Id) ? EpisodeEditor.SetTier(EpisodeEditor.AddTier(e, card.Id, tier, script), card.Id, tier) : e);
         });

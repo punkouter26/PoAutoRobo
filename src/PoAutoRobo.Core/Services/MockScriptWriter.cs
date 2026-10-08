@@ -28,16 +28,16 @@ public sealed class MockScriptWriter : IScriptWriter
 
     private const string Filler = "That is the idea in a nutshell, and it is worth saying again in a slightly different way so it really sticks.";
 
-    public Task<TierScript> WriteTierAsync(string topic, Clip clip, Tier tier, CancellationToken ct) =>
+    public Task<TierScript> WriteTierAsync(string topic, Clip clip, Tier tier, CancellationToken ct, Subject subject = Subject.UnitreeR1) =>
         Task.FromResult(Script(topic, clip.Title, clip.Active.Pose, tier));
 
-    public Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<int>? clipsWritten = null)
+    public Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<int>? clipsWritten = null, Subject subject = Subject.UnitreeR1)
     {
         var clips = Outline.Take(Math.Clamp(Outline.Length, length.MinClips, length.MaxClips)).Select(o => new Clip(
             Guid.NewGuid(), o.Title, Tier.B,
             Enum.GetValues<Tier>().ToDictionary(t => t, t => Script(topic, o.Title, o.Pose, t)),
             new VisualSpec(VisualKind.TitleCard), HostVisible: true)).ToList();
-        return Task.FromResult(new Episode(topic, topic, clips, MixSeed: Random.Shared.Next()));
+        return Task.FromResult(new Episode(topic, topic, clips, MixSeed: Random.Shared.Next()) { Subject = subject });
     }
 
     private static TierScript Script(string topic, string title, string pose, Tier tier)
