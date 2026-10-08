@@ -1,3 +1,5 @@
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using PoAutoRobo.App.ViewModels;
 using WinUIEx;
 
@@ -9,9 +11,27 @@ public sealed partial class MainWindow : WindowEx
     {
         ViewModel = viewModel;
         InitializeComponent();
+        ViewModel.Confirm = ConfirmAsync;
     }
 
     public MainViewModel ViewModel { get; }
+
+    private async Task<bool> ConfirmAsync(string title, string message)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = title,
+            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+            PrimaryButtonText = "Generate",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    private async void OnHostSetup(object sender, RoutedEventArgs e) =>
+        await new Views.HostSetupDialog(ViewModel) { XamlRoot = Content.XamlRoot }.ShowAsync();
 
     // Instance method on purpose: the generated x:Bind code calls it through the window.
     public bool HasText(string? text) => !string.IsNullOrEmpty(text);

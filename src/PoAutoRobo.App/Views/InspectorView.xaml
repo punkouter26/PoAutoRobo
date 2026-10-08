@@ -18,6 +18,8 @@
                 <Run Text="{x:Bind ViewModel.SelectedClip.Pose, Mode=OneWay}" />
             </TextBlock>
         </Border>
+        <Button x:Name="GeneratePictureButton" Content="Generate picture" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.GeneratePictureCommand}" />
+        <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.GeneratePictureCommand.IsRunning, Mode=OneWay}" />
         <Button x:Name="AuditionButton" Content="Audition audio" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.AuditionCommand}" />
         <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.AuditionCommand.IsRunning, Mode=OneWay}" />
 

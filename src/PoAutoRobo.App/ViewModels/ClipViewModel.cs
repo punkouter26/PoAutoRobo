@@ -8,7 +8,7 @@ namespace PoAutoRobo.App.ViewModels;
 public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edit) : ObservableObject
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Heading), nameof(DurationText), nameof(KindText), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(IsStale), nameof(HasUserVideo))]
+    [NotifyPropertyChangedFor(nameof(Heading), nameof(DurationText), nameof(KindText), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(IsStale), nameof(HasUserVideo), nameof(ThumbnailPath))]
     public partial Clip Clip { get; set; } = clip;
 
     [ObservableProperty]
@@ -26,6 +26,10 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
     public string Pose => Clip.Active.Pose;
 
     public bool IsStale => Clip.Visual.Stale;
+
+    /// <summary>The clip's generated picture, when it has one that is still on disk.</summary>
+    public string? ThumbnailPath =>
+        Clip.Visual.MediaPaths?.FirstOrDefault() is { } path && path.EndsWith(".png", StringComparison.OrdinalIgnoreCase) && File.Exists(path) ? path : null;
 
     public bool HasUserVideo => Clip.Visual.Kind == VisualKind.UserVideo;
 

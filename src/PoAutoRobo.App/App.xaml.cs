@@ -34,10 +34,14 @@ public partial class App : Application
             ? null
             : $"{string.Join(" and ", plan.Simulated)} simulated. {settings.LoadError ?? "The key vault has no key for your Azure AI resource."}";
 
+        var appData = Path.GetDirectoryName(WindowStateFile)!;
+        IImageGen? images = plan.ScriptLive ? new AzureImageGen(settings, AzureImageGen.NewHttpClient()) : null;
+        Func<string, Visuals>? visualsFor = images is null ? null : folder =>
+            new Visuals(images, new MediaCache(Path.Combine(folder, "images")), Path.Combine(appData, "host", "sheet.png"), settings.ImageDeployment);
         var grounding = Grounding.Create(settings.GitHubToken, Path.Combine(Path.GetDirectoryName(WindowStateFile)!, "grounding"));
         var ffmpeg = FfmpegRunner.Locate();
         var builder = new EpisodeBuilder(narrator, new FfmpegRunner(ffmpeg ?? "ffmpeg.exe"));
-        _window = new MainWindow(new MainViewModel(writer, builder, grounding, TrendFeed.Create(), ffmpegAvailable: ffmpeg is not null, offline));
+        _window = new MainWindow(new MainViewModel(writer, builder, grounding, TrendFeed.Create(), visualsFor, settings.ImageDeployment, ffmpegAvailable: ffmpeg is not null, offline));
         _window.Closed += (_, _) =>
         {
             Directory.CreateDirectory(Path.GetDirectoryName(WindowStateFile)!);

@@ -53,6 +53,9 @@ public static class EpisodeEditor
     public static Episode RemoveVideo(Episode episode, Guid clipId) =>
         Update(episode, clipId, c => c with { NarrationRate = 1.0, Visual = new VisualSpec(VisualKind.TitleCard) });
 
+    /// <summary>Replaces one clip's picture settings, leaving any edits made to the rest of the episode meanwhile.</summary>
+    public static Episode SetVisual(Episode episode, Guid clipId, VisualSpec visual) => Update(episode, clipId, c => c with { Visual = visual });
+
     /// <summary>The clip with its active tier saying <paramref name="dialogue"/>; the other tiers are untouched.</summary>
     public static Clip WithDialogue(Clip clip, string dialogue) => clip with
     {

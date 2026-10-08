@@ -1,0 +1,31 @@
+<ContentDialog
+    x:Class="PoAutoRobo.App.Views.HostSetupDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:PoAutoRobo.App.Views"
+    Title="Choose your host"
+    PrimaryButtonText="Use selected"
+    CloseButtonText="Close"
+    DefaultButton="Primary"
+    IsPrimaryButtonEnabled="False"
+    PrimaryButtonClick="OnUseSelected">
+    <StackPanel Width="620" Spacing="12">
+        <TextBlock TextWrapping="Wrap"
+                   Text="The host is the cartoon robot that presents every episode. Pick one design and it is kept for all future pictures, so the character always looks the same." />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button x:Name="MakeCandidatesButton" Content="Make 3 candidates" Style="{ThemeResource AccentButtonStyle}" Command="{x:Bind ViewModel.MakeHostCandidatesCommand}" />
+            <Button Content="Cancel" Command="{x:Bind ViewModel.MakeHostCandidatesCancelCommand}" Visibility="{x:Bind ViewModel.MakeHostCandidatesCommand.IsRunning, Mode=OneWay}" />
+            <Button Content="Use my own image…" Click="OnPickOwn" />
+        </StackPanel>
+        <TextBlock Text="Making candidates creates 3 pictures (about $0.05)." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.MakeHostCandidatesCommand.IsRunning, Mode=OneWay}" />
+        <GridView x:Name="Candidates" ItemsSource="{x:Bind ViewModel.HostCandidates}" SelectionMode="Single" SelectionChanged="OnSelectionChanged" MaxHeight="300">
+            <GridView.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                    <Image Width="290" Height="193" Stretch="UniformToFill" Source="{x:Bind local:ClipCard.ToImage((x:String))}" />
+                </DataTemplate>
+            </GridView.ItemTemplate>
+        </GridView>
+        <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+    </StackPanel>
+</ContentDialog>

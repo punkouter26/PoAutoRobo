@@ -17,14 +17,18 @@ public partial class MainViewModel : ObservableObject
     private readonly EpisodeBuilder _builder;
     private readonly Grounding _grounding;
     private readonly TrendFeed _trendFeed;
+    private readonly Func<string, Visuals>? _visualsFor; // null when there is no Azure connection
+    private readonly string _imageModel;
     private bool _syncingClips;
 
-    public MainViewModel(IScriptWriter scriptWriter, EpisodeBuilder builder, Grounding grounding, TrendFeed trendFeed, bool ffmpegAvailable, string? offlineMessage)
+    public MainViewModel(IScriptWriter scriptWriter, EpisodeBuilder builder, Grounding grounding, TrendFeed trendFeed, Func<string, Visuals>? visualsFor, string imageModel, bool ffmpegAvailable, string? offlineMessage)
     {
         _scriptWriter = scriptWriter;
         _builder = builder;
         _grounding = grounding;
         _trendFeed = trendFeed;
+        _visualsFor = visualsFor;
+        _imageModel = imageModel;
         FfmpegAvailable = ffmpegAvailable;
         OfflineMessage = offlineMessage;
         Clips.CollectionChanged += OnClipsChanged;
@@ -87,7 +91,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EpisodeTitle), nameof(RuntimeText), nameof(ClipCountText), nameof(HasEpisode), nameof(Captions),
         nameof(CaptionPresetIndex), nameof(CaptionFontSize), nameof(CaptionStroke), nameof(CaptionAccent))]
-    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(BuildPreviewCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand))]
     public partial Episode? Episode { get; set; }
 
     [ObservableProperty]
@@ -126,7 +130,7 @@ public partial class MainViewModel : ObservableObject
             foreach (var snippet in grounding)
                 Snippets.Add(snippet);
             OnPropertyChanged(nameof(SnippetsHeading));
-            var episode = await _scriptWriter.WriteEpisodeAsync(topic, grounding, ct);
+            var episode = VisualMix.Assign(await _scriptWriter.WriteEpisodeAsync(topic, grounding, ct), MixPercentages.Default);
             EpisodeFolder = Path.Combine(EpisodesRoot, EpisodeBuilder.Slug(episode.Title));
             ProjectStore.Save(episode, EpisodeFolder);
             Show(episode);
@@ -187,7 +191,7 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection))]
-    [NotifyCanExecuteChangedFor(nameof(AuditionCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AuditionCommand), nameof(GeneratePictureCommand))]
     public partial ClipViewModel? SelectedClip { get; set; }
 
     /// <summary>The dialogue box's text while it is being typed; applied to the clip when the box loses focus.</summary>
@@ -284,6 +288,114 @@ public partial class MainViewModel : ObservableObject
         if (SelectedClip is not { } card) return;
         Edit(e => EpisodeEditor.RemoveVideo(e, card.Id));
         FitMessage = null;
+    }
+
+    // ---- Pictures ----
+
+    /// <summary>Set by the window: asks the user to approve something that costs money. True means go ahead.</summary>
+    public Func<string, string, Task<bool>>? Confirm { get; set; }
+
+    public bool PicturesAvailable => _visualsFor is not null;
+
+    /// <summary>Folder for host candidates made before any episode exists.</summary>
+    private static string HostFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PoAutoRobo", "host");
+
+    public ObservableCollection<string> HostCandidates { get; } = [];
+
+    private Visuals? CurrentVisuals => _visualsFor?.Invoke(EpisodeFolder ?? HostFolder);
+
+    private bool CanGenerateAll => HasEpisode && PicturesAvailable;
+
+    private bool CanGeneratePicture => HasSelection && PicturesAvailable;
+
+    /// <summary>Pictures are only ever made on an explicit request, and a batch only after the cost is confirmed.</summary>
+    [RelayCommand(CanExecute = nameof(CanGenerateAll), IncludeCancelCommand = true)]
+    private async Task GenerateAllAsync(CancellationToken ct)
+    {
+        var estimate = CostEstimate.For(Episode!, _imageModel);
+        ErrorMessage = null;
+        if (estimate.NothingToDo)
+        {
+            StatusMessage = estimate.Summary;
+            return;
+        }
+        if (Confirm is null || !await Confirm("Generate pictures?", estimate.Summary + " Pictures you already have are reused at no cost."))
+            return;
+
+        var failures = new List<string>();
+        var made = 0;
+        foreach (var id in estimate.ClipIds)
+        {
+            if (ct.IsCancellationRequested) break;
+            if (await GenerateOneAsync(id, ct) is { } failure) failures.Add(failure); else made++;
+            RenderProgress = 100.0 * (made + failures.Count) / estimate.Pictures;
+        }
+        RenderProgress = 0;
+        StatusMessage = ct.IsCancellationRequested ? $"Stopped after {made} pictures." : $"Made {made} pictures.";
+        if (failures.Count > 0)
+            ErrorMessage = $"{failures.Count} clips kept their title card. {failures[0]}";
+    }
+
+    [RelayCommand(CanExecute = nameof(CanGeneratePicture))]
+    private async Task GeneratePictureAsync(CancellationToken ct)
+    {
+        ErrorMessage = null;
+        if (SelectedClip is { } card && await GenerateOneAsync(card.Id, ct) is { } failure)
+            ErrorMessage = failure;
+    }
+
+    /// <returns>Null on success, otherwise why this clip has no picture.</returns>
+    private async Task<string?> GenerateOneAsync(Guid clipId, CancellationToken ct)
+    {
+        try
+        {
+            var updated = await CurrentVisuals!.GenerateAsync(Episode!, clipId, ct);
+            // Only this clip's picture is applied, so edits made while it was being drawn are kept.
+            Edit(e => EpisodeEditor.SetVisual(e, clipId, updated.Clips.First(c => c.Id == clipId).Visual));
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        catch (Exception e) when (e is InvalidOperationException or HttpRequestException or IOException)
+        {
+            return e.Message;
+        }
+    }
+
+    [RelayCommand(IncludeCancelCommand = true)]
+    private async Task MakeHostCandidatesAsync(CancellationToken ct)
+    {
+        ErrorMessage = null;
+        try
+        {
+            var candidates = await CurrentVisuals!.CandidateSheetsAsync(3, ct);
+            HostCandidates.Clear();
+            foreach (var path in candidates)
+                HostCandidates.Add(path);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception e) when (e is InvalidOperationException or HttpRequestException or IOException)
+        {
+            ErrorMessage = e.Message;
+        }
+    }
+
+    /// <summary>Locks a picture (a candidate or the user's own file) as the host for every episode.</summary>
+    public void LockHost(string path)
+    {
+        try
+        {
+            CurrentVisuals?.LockSheet(path);
+            StatusMessage = "Host locked. New pictures will use this character.";
+        }
+        catch (IOException e)
+        {
+            ErrorMessage = e.Message;
+        }
     }
 
     // ---- Captions ----
