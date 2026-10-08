@@ -11,8 +11,10 @@
                     Visibility="{x:Bind Card.IsStale, Mode=OneWay}">
                 <TextBlock Text="Out of date" Style="{ThemeResource CaptionTextBlockStyle}" />
             </Border>
-            <TextBlock Text="{x:Bind Card.KindText, Mode=OneWay}" Margin="8" VerticalAlignment="Bottom"
-                       Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Border Margin="8" Padding="6,2" CornerRadius="4" HorizontalAlignment="Left" VerticalAlignment="Bottom" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                    ToolTipService.ToolTip="This clip&#39;s picture type. Change it in the inspector or with Visual mix.">
+                <TextBlock Text="{x:Bind Card.KindText, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" />
+            </Border>
             <Border Margin="8" Padding="6,2" CornerRadius="4" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                     Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
                 <TextBlock Text="{x:Bind Card.DurationText, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" />
@@ -27,7 +29,7 @@
             <controls:SegmentedItem Content="B" ToolTipService.ToolTip="Applied: developer workflow" />
             <controls:SegmentedItem Content="C" ToolTipService.ToolTip="Advanced: systems engineering" />
         </controls:Segmented>
-        <ToggleSwitch IsOn="{x:Bind Card.HostVisible, Mode=TwoWay}" OnContent="Host visible" OffContent="Off-screen voiceover"
+        <ToggleSwitch ToolTipService.ToolTip="On: the host appears in this clip&#39;s picture. Off: a full-frame diagram, with the host heard but not seen." IsOn="{x:Bind Card.HostVisible, Mode=TwoWay}" OnContent="Host visible" OffContent="Off-screen voiceover"
                       AutomationProperties.Name="Host on screen" />
     </StackPanel>
 </UserControl>

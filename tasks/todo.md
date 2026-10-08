@@ -32,3 +32,15 @@ Every task: failing test first, then code, `dotnet test`, `dotnet build`, one co
 | DONE | T21 | Panel sequences, visual mix dialog with re-roll, per-clip picture type | `Core/Pipeline/FfmpegArgs.cs`, `Core/Pipeline/Visuals.cs`, `Core/Pipeline/EpisodeEditor.cs`, `Tests/MixAndPanelsTests.cs`, `App/Views/MixDialog.xaml(.cs)` | Panels cut evenly across narration; sliders must total 100; re-roll keeps the shares; hand-picked kinds survive. Dialog not yet tried in the app | T4, T19 |
 |  | — | **Checkpoint D** | | | |
 | DONE | T22 | Open a saved episode with backup restore, short-episode and clip-length warnings, criteria check | `Core/Pipeline/Durations.cs`, `Core/Services/ProjectStore.cs`, `Tests/ErrorStateTests.cs`, `App/Views/RadarPanel.xaml(.cs)`, `App/ViewModels/MainViewModel.cs` | SPEC section 12 rows covered by tests or noted as open; coverage 99% Pipeline, 100% Models; criteria status reported 2026-10-07 | all but T20 |
+
+## Changes requested after the plan (2026-10-08)
+
+| Status | Change | Evidence |
+|---|---|---|
+| DONE | Picture requests wait out rate limits (up to 6 tries) and report failure in plain words | Tests; live batch of 20 pictures finished after the fix |
+| DONE | Topic Radar limited to stories naming both Unitree and R1 | Tests; live feed returned 8 cards, all R1 |
+| DONE | Detailed progress panel (job, exact step, percent, time, one Cancel); one long job at a time | Driven in the app: preview cancelled mid-join, FFmpeg stopped |
+| DONE | Hover tooltips on main controls; annotated guide at docs/screen-guide.png (shows the earlier single-page layout) | Built; tooltips not hovered by hand |
+| DONE | Four-step wizard layout (Topic, Script, Pictures, Export) | Driven in the app through all four steps |
+| DONE | Episode length choice incl. one-clip quick test | Live: topic to finished 47s 1080p video in 115s |
+| OPEN | Full-episode master render is slow (about 25 min for 12.5 min of video) | Measured once |

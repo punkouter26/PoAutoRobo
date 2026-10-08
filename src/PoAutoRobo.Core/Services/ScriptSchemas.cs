@@ -7,7 +7,7 @@ internal static class ScriptSchemas
         You write the script for a fast-paced, character-driven educational video about the Unitree R1 EDU humanoid robot.
         The narrator is a confident, energetic cartoon version of the R1 itself, speaking in the first person to the viewer.
 
-        Break the topic into between 15 and 20 clips. Each clip covers one self-contained subtopic and still makes sense
+        Break the topic into the number of clips the request asks for. Each clip covers one self-contained subtopic and still makes sense
         if the clips are reordered. Give every clip a short title of two to five words.
 
         Write every clip at three depths:

@@ -20,6 +20,10 @@ Users: robotics researchers, developers and content creators working alone on th
 8. **Preview and export.** Scrub the master timeline with captions, pick a caption preset, export 1080p or 4K at 30 or 60 fps.
 9. **Reopen later.** Open the project folder and continue offline with everything already generated.
 
+### Layout
+
+The app is a four-step wizard, one page at a time, with Back/Next and a one-line hint of what to do on each: **1 Topic** (own topic, length, Topic Radar, open a saved episode), **2 Script** (clip deck, depth, dialogue, audition), **3 Pictures** (host, visual mix, generate pictures, own video), **4 Export** (captions, preview, master video). This replaced the single four-pane page on 2026-10-08. A progress panel at the top shows any long job's name, exact step (for example "Drawing clip 7 of 16"), percentage, time spent and time left, with one Cancel button; only one long job runs at a time. Main controls carry hover tooltips.
+
 ## 3. Tech stack
 
 | Area | Choice | Version / ID |
@@ -123,7 +127,7 @@ public interface INarrator
 
 ## 7. Behaviour rules
 
-**Decomposition.** 15–20 clips. Estimated clip duration is word count ÷ 165 wpm, replaced by the real audio duration once synthesized. Each tier's text must land in 15–60s.
+**Decomposition.** A full episode is 15–20 clips. At creation the user can instead choose Short (5 clips) or Quick test (1 clip, about 30 seconds) to try the whole workflow in a couple of minutes. Estimated clip duration is word count ÷ 165 wpm, replaced by the real audio duration once synthesized. Each tier's text must land in 15–60s.
 
 **Grounding.** Fixed repo list: `unitreerobotics/unitree_sdk2`, `unitree_sdk2_python`, `unitree_rl_lab`, `unitree_rl_mjlab`, `unitree_mujoco`, `isaac-sim/IsaacLab`, `google-deepmind/mujoco`. Fetch READMEs, docs and matching source via GitHub code search, rank by keyword overlap with the topic, pass the top snippets into the prompt with their URLs. The script prompt states that `unitree_rl_lab` does not list R1 (Go2, H1, G1-29dof only) and that R1 training is supported in `unitree_rl_mjlab`.
 
@@ -147,7 +151,7 @@ public interface INarrator
 
 **Export.** H.264 MP4 with AAC audio; 1920×1080 or 3840×2160; 30 or 60 fps. Narration is loudness-normalised to −16 LUFS, with 150ms crossfades at clip joins and 0.5s visual transitions.
 
-**Topic Radar.** Refreshes on launch and on demand. Sources: arXiv cs.RO, Hacker News, IEEE Spectrum and The Robot Report, filtered to humanoid and Unitree topics. Hacker News cards show points and comments; the others have no interest figure. Reddit (refuses anonymous readers) and GitHub activity (commit titles are not topics) are not used.
+**Topic Radar.** Refreshes on launch and on demand. Sources: arXiv, Hacker News, IEEE Spectrum and The Robot Report. A card is shown only if it names both "Unitree" and "R1" (as a whole word); general humanoid news, other Unitree robots and other makers' R1 products are dropped. Hacker News cards show points and comments; the others have no interest figure. Reddit (refuses anonymous readers) and GitHub activity (commit titles are not topics) are not used.
 
 ## 8. Mock fallbacks
 

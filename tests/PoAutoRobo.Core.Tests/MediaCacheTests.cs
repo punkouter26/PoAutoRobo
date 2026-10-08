@@ -177,6 +177,64 @@ public sealed class MediaCacheTests : IDisposable
         Assert.False(File.Exists(output));
     }
 
+    private sealed class Scripted(params (HttpStatusCode Status, string Body, string? RetryAfter)[] replies) : HttpMessageHandler
+    {
+        private readonly Queue<(HttpStatusCode Status, string Body, string? RetryAfter)> _replies = new(replies);
+        public int Requests { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Requests++;
+            var (status, body, retryAfter) = _replies.Count > 1 ? _replies.Dequeue() : _replies.Peek();
+            var response = new HttpResponseMessage(status) { Content = new StringContent(body) };
+            if (retryAfter is not null) response.Headers.TryAddWithoutValidation("Retry-After", retryAfter);
+            return Task.FromResult(response);
+        }
+    }
+
+    private const string RateLimited = """{ "error": { "code": "429", "message": "Your requests to gpt-image-1-mini in East US 2 have exceeded the call rate limit for your current AIServices S0 pricing tier. Please retry after 2 seconds." } }""";
+
+    [Fact]
+    public async Task A_rate_limit_is_waited_out_for_as_long_as_the_service_asks_and_then_the_picture_is_made()
+    {
+        var handler = new Scripted((HttpStatusCode.TooManyRequests, RateLimited, "7"), (HttpStatusCode.TooManyRequests, RateLimited, null), (HttpStatusCode.OK, Reply([5, 5]), null));
+        var waits = new List<TimeSpan>();
+        var images = new AzureImageGen(Live, new HttpClient(handler)) { Delay = (wait, _) => { waits.Add(wait); return Task.CompletedTask; } };
+        var output = Path.Combine(_folder, "out.png");
+
+        await images.GenerateAsync(new ImageRequest("Host pointing", _sheet), output, Ct);
+
+        Assert.Equal([5, 5], File.ReadAllBytes(output));
+        Assert.Equal(3, handler.Requests);
+        Assert.Equal(TimeSpan.FromSeconds(7), waits[0]);         // what the service asked for
+        Assert.True(waits[1] >= TimeSpan.FromSeconds(5));        // a sensible wait when it does not say
+    }
+
+    [Fact]
+    public async Task A_rate_limit_that_never_clears_gives_up_with_a_plain_message_and_no_service_jargon()
+    {
+        var handler = new Scripted((HttpStatusCode.TooManyRequests, RateLimited, "1"));
+        var images = new AzureImageGen(Live, new HttpClient(handler)) { Delay = (_, _) => Task.CompletedTask };
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => images.GenerateAsync(new ImageRequest("x", null), Path.Combine(_folder, "out.png"), Ct));
+
+        Assert.Equal(AzureImageGen.MaxAttempts, handler.Requests);
+        Assert.Contains("busy", error.Message);
+        Assert.DoesNotContain("gpt-image", error.Message);
+        Assert.DoesNotContain("S0", error.Message);
+    }
+
+    [Fact]
+    public async Task Other_failures_are_not_retried()
+    {
+        var handler = new Scripted((HttpStatusCode.BadRequest, """{ "error": { "message": "Your request was rejected by the safety system." } }""", null));
+        var images = new AzureImageGen(Live, new HttpClient(handler)) { Delay = (_, _) => Task.CompletedTask };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => images.GenerateAsync(new ImageRequest("x", null), Path.Combine(_folder, "out.png"), Ct));
+
+        Assert.Equal(1, handler.Requests);
+    }
+
     /// <summary>Opt-in: one real low-cost picture, then a second using the first as its reference.</summary>
     [Fact]
     [Trait("Category", "Live")]

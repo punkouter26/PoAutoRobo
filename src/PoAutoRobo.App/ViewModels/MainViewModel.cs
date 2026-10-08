@@ -61,6 +61,50 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Set by the view that owns the preview player; it must let go of the file before a new preview is written.</summary>
     public Action? ReleasePreview { get; set; }
 
+    // ---- Wizard steps ----
+
+    private static readonly string[] StepHints =
+    [
+        "Step 1 of 4 · Pick the one topic for this episode: type your own, adopt a story, or open an episode you saved earlier.",
+        "Step 2 of 4 · Shape the script: drag clips into order, choose each clip's depth (A, B or C), then edit and audition the dialogue.",
+        "Step 3 of 4 · Add the pictures: choose your host, set the visual mix, generate the pictures, or drop in your own video.",
+        "Step 4 of 4 · Finish: choose the caption style, watch a preview, then render the master video.",
+    ];
+
+    /// <summary>Which page is showing: 0 Topic, 1 Script, 2 Pictures, 3 Export.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTopicStep), nameof(IsScriptStep), nameof(IsPicturesStep), nameof(IsExportStep), nameof(IsDeckStep), nameof(StepHint), nameof(NextLabel))]
+    [NotifyCanExecuteChangedFor(nameof(NextStepCommand), nameof(PreviousStepCommand))]
+    public partial int Step { get; set; }
+
+    public bool IsTopicStep => Step == 0;
+    public bool IsScriptStep => Step == 1;
+    public bool IsPicturesStep => Step == 2;
+    public bool IsExportStep => Step == 3;
+
+    /// <summary>Script and Pictures both work on the clip deck.</summary>
+    public bool IsDeckStep => Step is 1 or 2;
+
+    public string StepHint => StepHints[Math.Clamp(Step, 0, 3)];
+
+    public string NextLabel => Step switch { 0 => "Next: script", 1 => "Next: pictures", 2 => "Next: export", _ => "Next" };
+
+    // The later pages have nothing to show until there is an episode.
+    partial void OnStepChanged(int value)
+    {
+        if (value > 0 && !HasEpisode) Step = 0;
+    }
+
+    private bool CanGoNext => HasEpisode && Step < 3;
+
+    private bool CanGoBack => Step > 0;
+
+    [RelayCommand(CanExecute = nameof(CanGoNext))]
+    private void NextStep() => Step++;
+
+    [RelayCommand(CanExecute = nameof(CanGoBack))]
+    private void PreviousStep() => Step--;
+
     // ---- Topic radar ----
 
     public ObservableCollection<TopicCard> Topics { get; } = [];
@@ -91,7 +135,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EpisodeTitle), nameof(RuntimeText), nameof(ClipCountText), nameof(HasEpisode), nameof(Captions),
         nameof(CaptionPresetIndex), nameof(CaptionFontSize), nameof(CaptionStroke), nameof(CaptionAccent))]
-    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(NextStepCommand))]
     public partial Episode? Episode { get; set; }
 
     [ObservableProperty]
@@ -104,7 +148,7 @@ public partial class MainViewModel : ObservableObject
 
     public string EpisodeTitle => Episode?.Title ?? "No episode yet";
 
-    public string ClipCountText => Episode is null ? "" : $"{Episode.Clips.Count} clips";
+    public string ClipCountText => Episode is null ? "" : Episode.Clips.Count == 1 ? "1 clip" : $"{Episode.Clips.Count} clips";
 
     public string RuntimeText
     {
@@ -148,6 +192,12 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private static readonly EpisodeLength[] Lengths = [EpisodeLength.Full, EpisodeLength.Short, EpisodeLength.QuickTest];
+
+    // Length of the next episode: 0 full (15 to 20 clips), 1 short (5 clips), 2 quick test (1 clip).
+    [ObservableProperty]
+    public partial int LengthIndex { get; set; }
+
     private bool CanCreateEpisode => !string.IsNullOrWhiteSpace(TopicInput);
 
     [RelayCommand(CanExecute = nameof(CanCreateEpisode))]
@@ -162,7 +212,7 @@ public partial class MainViewModel : ObservableObject
             foreach (var snippet in grounding)
                 Snippets.Add(snippet);
             OnPropertyChanged(nameof(SnippetsHeading));
-            var episode = VisualMix.Assign(await _scriptWriter.WriteEpisodeAsync(topic, grounding, ct), MixPercentages.Default);
+            var episode = VisualMix.Assign(await _scriptWriter.WriteEpisodeAsync(topic, grounding, Lengths[Math.Clamp(LengthIndex, 0, Lengths.Length - 1)], ct), MixPercentages.Default);
             EpisodeFolder = Path.Combine(EpisodesRoot, EpisodeBuilder.Slug(episode.Title));
             ProjectStore.Save(episode, EpisodeFolder);
             Show(episode);
@@ -204,6 +254,7 @@ public partial class MainViewModel : ObservableObject
         _syncingClips = false;
         Renumber();
         SelectedClip = Clips.FirstOrDefault();
+        Step = 1; // a new or reopened episode lands on its script
     }
 
     // A drag-reorder arrives as a remove followed by an insert; act once the deck is whole again.
@@ -336,7 +387,7 @@ public partial class MainViewModel : ObservableObject
 
     private Visuals? CurrentVisuals => _visualsFor?.Invoke(EpisodeFolder ?? HostFolder);
 
-    private bool CanGenerateAll => HasEpisode && PicturesAvailable;
+    private bool CanGenerateAll => HasEpisode && PicturesAvailable && !IsWorking;
 
     private bool CanGeneratePicture => HasSelection && PicturesAvailable;
 
@@ -356,14 +407,23 @@ public partial class MainViewModel : ObservableObject
 
         var failures = new List<string>();
         var made = 0;
-        foreach (var id in estimate.ClipIds)
+        var total = estimate.ClipIds.Count;
+        BeginActivity("Generating pictures");
+        try
         {
-            if (ct.IsCancellationRequested) break;
-            if (await GenerateOneAsync(id, ct) is { } failure) failures.Add(failure); else made++;
-            RenderProgress = 100.0 * (made + failures.Count) / estimate.Pictures;
+            foreach (var id in estimate.ClipIds)
+            {
+                if (ct.IsCancellationRequested) break;
+                var done = made + failures.Count;
+                ReportActivity($"Drawing the picture for clip {done + 1} of {total} · {Episode!.Clips.First(c => c.Id == id).Title}", (double)done / total);
+                if (await GenerateOneAsync(id, ct) is { } failure) failures.Add(failure); else made++;
+            }
         }
-        RenderProgress = 0;
-        StatusMessage = ct.IsCancellationRequested ? $"Stopped after {made} pictures." : $"Made {made} pictures.";
+        finally
+        {
+            EndActivity();
+        }
+        StatusMessage = ct.IsCancellationRequested ? $"Stopped. Pictures are ready for {made} clips." : $"Pictures are ready for {made} clips.";
         if (failures.Count > 0)
             ErrorMessage = $"{failures.Count} clips kept their title card. {failures[0]}";
     }
@@ -477,15 +537,12 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial int ExportPresetIndex { get; set; }
 
-    [ObservableProperty]
-    public partial double RenderProgress { get; set; }
-
-    private bool CanRender => HasEpisode && FfmpegAvailable;
+    private bool CanRender => HasEpisode && FfmpegAvailable && !IsWorking;
 
     [RelayCommand(CanExecute = nameof(CanRender), IncludeCancelCommand = true)]
     private async Task BuildPreviewAsync(CancellationToken ct)
     {
-        await RunRenderAsync("Preview ready.", async progress =>
+        await RunRenderAsync("Building the preview", "Preview ready.", async progress =>
         {
             ReleasePreview?.Invoke();
             Preview = null;
@@ -498,20 +555,21 @@ public partial class MainViewModel : ObservableObject
     {
         var preset = ExportPresets[Math.Clamp(ExportPresetIndex, 0, ExportPresets.Length - 1)];
         string? output = null;
-        await RunRenderAsync(null, async progress =>
+        await RunRenderAsync($"Rendering the master video ({preset.Height}p, {preset.Fps} fps)", null, async progress =>
             output = await Task.Run(() => _builder.ExportAsync(Episode!, EpisodeFolder!, preset, Captions, progress, ct), ct));
         if (output is not null)
             StatusMessage = $"Saved to {output}";
     }
 
-    private async Task RunRenderAsync(string? doneMessage, Func<IProgress<double>, Task> work)
+    private async Task RunRenderAsync(string title, string? doneMessage, Func<IProgress<RenderProgress>, Task> work)
     {
         ErrorMessage = null;
         StatusMessage = null;
-        RenderProgress = 0;
+        BeginActivity(title);
         try
         {
-            await work(new Progress<double>(p => RenderProgress = p * 100)); // Progress<T> hops back to the UI thread
+            // Progress<T> hops back to the UI thread.
+            await work(new Progress<RenderProgress>(p => ReportActivity(p.Activity, p.Fraction)));
             StatusMessage = doneMessage;
         }
         catch (OperationCanceledException)
@@ -524,7 +582,72 @@ public partial class MainViewModel : ObservableObject
         }
         finally
         {
-            RenderProgress = 0;
+            EndActivity();
         }
+    }
+
+    // ---- The one long job in progress ----
+
+    private readonly System.Diagnostics.Stopwatch _activityClock = new();
+
+    /// <summary>True while a preview, a render or a batch of pictures is running. Only one runs at a time.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(CancelActivityCommand))]
+    public partial bool IsWorking { get; set; }
+
+    /// <summary>What the job is, e.g. "Rendering the master video (1080p, 30 fps)".</summary>
+    [ObservableProperty]
+    public partial string ActivityTitle { get; set; } = "";
+
+    /// <summary>The exact step it is on, e.g. "Drawing clip 7 of 16 · Rewards Shape Steps".</summary>
+    [ObservableProperty]
+    public partial string ActivityDetail { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActivityPercentText))]
+    public partial double ActivityPercent { get; set; }
+
+    /// <summary>Time spent and a rough time left, worked out from the pace so far.</summary>
+    [ObservableProperty]
+    public partial string ActivityTime { get; set; } = "";
+
+    public string ActivityPercentText => $"{ActivityPercent:0}%";
+
+    private void BeginActivity(string title)
+    {
+        ActivityTitle = title;
+        ActivityDetail = "Starting…";
+        ActivityPercent = 0;
+        ActivityTime = "";
+        _activityClock.Restart();
+        IsWorking = true;
+    }
+
+    private void ReportActivity(string detail, double fraction)
+    {
+        if (!IsWorking) return; // a late report after the job ended
+        ActivityDetail = detail;
+        ActivityPercent = Math.Clamp(fraction, 0, 1) * 100;
+        var elapsed = _activityClock.Elapsed;
+        var left = fraction > 0.03 ? TimeSpan.FromTicks((long)(elapsed.Ticks * (1 - fraction) / fraction)) : (TimeSpan?)null;
+        ActivityTime = left is { } remaining
+            ? $"{elapsed:m\\:ss} so far · {(remaining.TotalMinutes >= 1 ? $"about {Math.Ceiling(remaining.TotalMinutes):0} min" : "under a minute")} left"
+            : $"{elapsed:m\\:ss} so far";
+    }
+
+    private void EndActivity()
+    {
+        _activityClock.Stop();
+        IsWorking = false;
+    }
+
+    /// <summary>Stops whichever long job is running. Finished pictures and narration are kept.</summary>
+    [RelayCommand(CanExecute = nameof(IsWorking))]
+    private void CancelActivity()
+    {
+        ActivityDetail = "Stopping…";
+        RenderCancelCommand.Execute(null);
+        BuildPreviewCancelCommand.Execute(null);
+        GenerateAllCancelCommand.Execute(null);
     }
 }

@@ -10,6 +10,9 @@ namespace PoAutoRobo.Core.Pipeline;
 /// <summary>A quick low-resolution render for the preview player, plus the word timings its caption overlay draws from.</summary>
 public sealed record Preview(string VideoPath, IReadOnlyList<CaptionSegment> Segments);
 
+/// <summary>Where a render has got to: what it is doing in plain words, and how far through the whole job it is (0 to 1).</summary>
+public sealed record RenderProgress(string Activity, double Fraction);
+
 /// <summary>Turns an episode into narration files and a finished video inside the episode folder.</summary>
 public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
 {
@@ -44,7 +47,7 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
     public Task<TimeSpan> ProbeDurationAsync(string path, CancellationToken ct) => ffmpeg.ProbeDurationAsync(path, ct);
 
     /// <returns>Path of the finished video in the episode's export folder.</returns>
-    public async Task<string> ExportAsync(Episode episode, string folder, ExportPreset preset, CaptionStyle captions, IProgress<double>? progress, CancellationToken ct)
+    public async Task<string> ExportAsync(Episode episode, string folder, ExportPreset preset, CaptionStyle captions, IProgress<RenderProgress>? progress, CancellationToken ct)
     {
         var output = Path.Combine(folder, "export", $"{Slug(episode.Title)}-{preset.Height}p{preset.Fps}.mp4");
         await RenderAsync(episode, folder, preset, captions, output, progress, ct);
@@ -52,16 +55,24 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
     }
 
     /// <summary>Small, fast render with no captions burned in; the preview draws them live so style changes show at once.</summary>
-    public async Task<Preview> PreviewAsync(Episode episode, string folder, IProgress<double>? progress, CancellationToken ct)
+    public async Task<Preview> PreviewAsync(Episode episode, string folder, IProgress<RenderProgress>? progress, CancellationToken ct)
     {
         var output = Path.Combine(folder, "export", "preview.mp4");
         return new Preview(output, await RenderAsync(episode, folder, Draft, null, output, progress, ct));
     }
 
     private async Task<IReadOnlyList<CaptionSegment>> RenderAsync(
-        Episode episode, string folder, ExportPreset preset, CaptionStyle? captions, string output, IProgress<double>? progress, CancellationToken ct)
+        Episode episode, string folder, ExportPreset preset, CaptionStyle? captions, string output, IProgress<RenderProgress>? progress, CancellationToken ct)
     {
-        var narrations = await NarrateAsync(episode, folder, ct);
+        // The job has three stages. Their shares of the bar are rough but fixed, so it only ever moves forward.
+        const double VoiceShare = 0.10, DrawShare = 0.45;
+        var count = episode.Clips.Count;
+        var narrations = new List<Narration>(count);
+        for (var i = 0; i < count; i++)
+        {
+            progress?.Report(new RenderProgress($"Recording the voice for clip {i + 1} of {count} · {episode.Clips[i].Title}", VoiceShare * i / count));
+            narrations.Add(await NarrateClipAsync(episode.Clips[i], folder, ct));
+        }
         var slots = FfmpegArgs.Timeline([.. narrations.Select(n => n.Duration)]);
         var segments = narrations.Select((n, i) => new CaptionSegment(slots[i].Start, n.Words)).ToList();
         // Scratch files live in the temp folder, never in the episode folder: that is usually inside a synced
@@ -72,7 +83,6 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
         try
         {
             // Each clip is rendered to its own file first, so the final join stays a simple, fast graph.
-            var count = episode.Clips.Count;
             var pictures = new List<string>(count);
             for (var i = 0; i < count; i++)
             {
@@ -84,7 +94,8 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
                     File.Copy(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeuib.ttf"), Path.Combine(work, FfmpegArgs.TitleFontFile), overwrite: true);
                 }
                 var index = i;
-                var clipProgress = progress is null ? null : new Relay(p => progress.Report((index + p) / count / 2));
+                var drawing = $"Drawing clip {i + 1} of {count} · {episode.Clips[i].Title}";
+                var clipProgress = progress is null ? null : new Relay(p => progress.Report(new RenderProgress(drawing, VoiceShare + DrawShare * (index + p) / count)));
                 pictures.Add(Path.Combine(work, $"clip_{i:00}.mp4"));
                 var panels = PanelsFor(episode.Clips[i]);
                 var args = panels.Count > 1
@@ -97,12 +108,14 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
                 await File.WriteAllTextAsync(Path.Combine(work, "captions.ass"), AssCaptions.Build(segments, captions), ct);
 
             var total = slots[^1].Start + slots[^1].VideoLength;
-            var masterProgress = progress is null ? null : new Relay(p => progress.Report(0.5 + p / 2));
+            const string Joining = "Joining the clips, adding captions and levelling the sound";
+            var masterProgress = progress is null ? null : new Relay(p => progress.Report(new RenderProgress(Joining, VoiceShare + DrawShare + (1 - VoiceShare - DrawShare) * p)));
             await ffmpeg.RunAsync(
                 FfmpegArgs.Master(pictures, [.. narrations.Select(n => n.AudioPath)], slots, captions is null ? null : "captions.ass", preset, partial),
                 work, total, masterProgress, ct);
 
             File.Move(partial, output, overwrite: true);
+            progress?.Report(new RenderProgress("Done", 1));
             return segments;
         }
         finally

@@ -12,7 +12,7 @@ public sealed record TopicCard(string Title, string Summary, string Source, stri
 /// <summary>Downloads a URL as text.</summary>
 public delegate Task<string> FetchText(string url, CancellationToken ct);
 
-/// <summary>Recent humanoid-robotics topics from free public feeds. Any source may fail without affecting the others.</summary>
+/// <summary>Recent topics about the Unitree R1 from free public feeds. Any source may fail without affecting the others.</summary>
 public sealed partial class TrendFeed(FetchText fetch)
 {
     public const int MaxSummaryLength = 220;
@@ -22,14 +22,11 @@ public sealed partial class TrendFeed(FetchText fetch)
     // and commit or release titles do not read as video topics. Add a row here to add a source.
     private static readonly (string Name, string Url, bool IsHackerNews)[] Sources =
     [
-        ("arXiv cs.RO", "https://export.arxiv.org/api/query?search_query=cat:cs.RO+AND+all:humanoid&sortBy=submittedDate&sortOrder=descending&max_results=10", false),
-        ("Hacker News", "https://hn.algolia.com/api/v1/search_by_date?query=humanoid+robot&tags=story&numericFilters=points%3E5&hitsPerPage=10", true),
+        ("arXiv cs.RO", "https://export.arxiv.org/api/query?search_query=all:%22Unitree+R1%22&sortBy=submittedDate&sortOrder=descending&max_results=20", false),
+        ("Hacker News", "https://hn.algolia.com/api/v1/search_by_date?query=unitree+r1&tags=story&hitsPerPage=30", true),
         ("IEEE Spectrum", "https://spectrum.ieee.org/feeds/topic/robotics.rss", false),
         ("The Robot Report", "https://www.therobotreport.com/feed/", false),
     ];
-
-    private static readonly string[] Relevant = ["humanoid", "unitree", " r1", "biped", "legged", "whole-body", "isaac lab", "mujoco", "sim-to-real"];
-
     private static readonly TopicCard[] Samples =
     [
         new("Training whole-body balance on the Unitree R1", "How a humanoid learns to stay upright in simulation before it ever stands on a lab floor.", "Sample topic", "https://github.com/unitreerobotics/unitree_rl_mjlab", null, DateTimeOffset.MinValue),
@@ -61,12 +58,22 @@ public sealed partial class TrendFeed(FetchText fetch)
         }));
 
         var cards = batches.SelectMany(b => b)
-            .Where(c => Relevant.Any(word => $" {c.Title} {c.Summary}".Contains(word, StringComparison.OrdinalIgnoreCase)))
+            .Where(IsAboutR1)
             .DistinctBy(c => c.Url)
             .OrderByDescending(c => c.Published)
             .Take(MaxCards)
             .ToList();
         return cards.Count > 0 ? cards : Samples;
+    }
+
+    /// <summary>
+    /// True only for the Unitree R1 itself: the card must name both the maker and the model. General humanoid news,
+    /// other Unitree robots and other makers' "R1" products are all left out.
+    /// </summary>
+    public static bool IsAboutR1(TopicCard card)
+    {
+        var text = $"{card.Title} {card.Summary}";
+        return text.Contains("unitree", StringComparison.OrdinalIgnoreCase) && WholeWordR1().IsMatch(text);
     }
 
     /// <summary>Reads an RSS or Atom document.</summary>
@@ -105,6 +112,9 @@ public sealed partial class TrendFeed(FetchText fetch)
         Whitespace().Replace(WebUtility.HtmlDecode(Tags().Replace(text ?? "", " ")), " ").Trim();
 
     private static string Shorten(string text) => text.Length <= MaxSummaryLength ? text : text[..MaxSummaryLength].TrimEnd() + "…";
+
+    [GeneratedRegex(@"\bR1\b", RegexOptions.IgnoreCase)]
+    private static partial Regex WholeWordR1();
 
     [GeneratedRegex("<[^>]+>")]
     private static partial Regex Tags();

@@ -38,7 +38,7 @@ public sealed class AzureScriptWriterTests
     {
         _replies.Enqueue(EpisodeJson(16));
 
-        var episode = await Writer.WriteEpisodeAsync("Whole-body balance", [], Ct);
+        var episode = await Writer.WriteEpisodeAsync("Whole-body balance", [], EpisodeLength.Full, Ct);
 
         Assert.Equal("Balancing the R1", episode.Title);
         Assert.Equal("Whole-body balance", episode.Topic);
@@ -60,7 +60,7 @@ public sealed class AzureScriptWriterTests
         _replies.Enqueue(EpisodeJson(12));
         _replies.Enqueue(EpisodeJson(17));
 
-        var episode = await Writer.WriteEpisodeAsync("x", [], Ct);
+        var episode = await Writer.WriteEpisodeAsync("x", [], EpisodeLength.Full, Ct);
 
         Assert.Equal(17, episode.Clips.Count);
         Assert.Equal(2, _calls.Count);
@@ -73,7 +73,7 @@ public sealed class AzureScriptWriterTests
         _replies.Enqueue(EpisodeJson(23));
         _replies.Enqueue(EpisodeJson(22));
 
-        Assert.Equal(20, (await Writer.WriteEpisodeAsync("x", [], Ct)).Clips.Count);
+        Assert.Equal(20, (await Writer.WriteEpisodeAsync("x", [], EpisodeLength.Full, Ct)).Clips.Count);
     }
 
     [Fact]
@@ -82,9 +82,41 @@ public sealed class AzureScriptWriterTests
         _replies.Enqueue(EpisodeJson(3));
         _replies.Enqueue(EpisodeJson(4));
 
-        var error = await Assert.ThrowsAsync<InvalidDataException>(() => Writer.WriteEpisodeAsync("x", [], Ct));
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => Writer.WriteEpisodeAsync("x", [], EpisodeLength.Full, Ct));
 
         Assert.Contains("try again", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task A_quick_test_asks_for_exactly_one_clip_and_accepts_it()
+    {
+        _replies.Enqueue(EpisodeJson(1));
+
+        var episode = await Writer.WriteEpisodeAsync("x", [], EpisodeLength.QuickTest, Ct);
+
+        Assert.Single(episode.Clips);
+        Assert.Single(_calls);
+        Assert.Contains("exactly 1 clip", _calls[0].User);
+        Assert.DoesNotContain("15", _calls[0].System);
+    }
+
+    [Fact]
+    public async Task A_quick_test_that_comes_back_too_long_is_cut_to_one_clip()
+    {
+        _replies.Enqueue(EpisodeJson(4));
+        _replies.Enqueue(EpisodeJson(3));
+
+        Assert.Single((await Writer.WriteEpisodeAsync("x", [], EpisodeLength.QuickTest, Ct)).Clips);
+    }
+
+    [Fact]
+    public async Task A_full_episode_asks_for_fifteen_to_twenty_clips()
+    {
+        _replies.Enqueue(EpisodeJson(16));
+
+        await Writer.WriteEpisodeAsync("x", [], EpisodeLength.Full, Ct);
+
+        Assert.Contains("between 15 and 20 clips", _calls[0].User);
     }
 
     [Theory]
@@ -95,7 +127,7 @@ public sealed class AzureScriptWriterTests
         _replies.Enqueue(reply);
         _replies.Enqueue(reply);
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => Writer.WriteEpisodeAsync("x", [], Ct));
+        await Assert.ThrowsAsync<InvalidDataException>(() => Writer.WriteEpisodeAsync("x", [], EpisodeLength.Full, Ct));
     }
 
     [Fact]
@@ -104,7 +136,7 @@ public sealed class AzureScriptWriterTests
         _replies.Enqueue(EpisodeJson(15));
         GroundingSnippet[] grounding = [new("unitreerobotics/unitree_rl_mjlab", "README.md", "https://github.com/unitreerobotics/unitree_rl_mjlab/blob/main/README.md", "Supports R1.")];
 
-        await Writer.WriteEpisodeAsync("x", grounding, Ct);
+        await Writer.WriteEpisodeAsync("x", grounding, EpisodeLength.Full, Ct);
 
         Assert.Contains("https://github.com/unitreerobotics/unitree_rl_mjlab/blob/main/README.md", _calls[0].User);
         Assert.Contains("Supports R1.", _calls[0].User);
@@ -115,7 +147,7 @@ public sealed class AzureScriptWriterTests
     {
         _replies.Enqueue(EpisodeJson(15));
 
-        await Writer.WriteEpisodeAsync("x", [], Ct);
+        await Writer.WriteEpisodeAsync("x", [], EpisodeLength.Full, Ct);
 
         await Verify(_calls[0].System + "\n\n--- schema ---\n" + _calls[0].Schema);
     }
@@ -153,7 +185,7 @@ public sealed class AzureScriptWriterTests
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
         var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault), Ct);
 
-        var episode = await AzureScriptWriter.Create(settings).WriteEpisodeAsync("Training whole-body dynamic balancing on the Unitree R1 EDU", [], Ct);
+        var episode = await AzureScriptWriter.Create(settings).WriteEpisodeAsync("Training whole-body dynamic balancing on the Unitree R1 EDU", [], EpisodeLength.Full, Ct);
 
         Assert.InRange(episode.Clips.Count, 15, 20);
         Assert.All(episode.Clips, c => Assert.Equal(3, c.Scripts.Count));

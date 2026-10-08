@@ -4,14 +4,14 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
     Unloaded="OnUnloaded">
-    <Grid Padding="16,12" ColumnSpacing="16">
+    <Grid ColumnSpacing="16">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <!-- Preview with captions drawn live on top, so style changes show without re-rendering -->
-        <Grid Width="320" Height="180" CornerRadius="4" Background="Black">
+        <Grid Width="640" Height="360" CornerRadius="4" Background="Black">
             <MediaPlayerElement x:Name="Player" AreTransportControlsEnabled="False" Stretch="Uniform" />
             <canvas:CanvasControl x:Name="Overlay" Draw="OnDrawCaption" IsHitTestVisible="False" />
         </Grid>
@@ -24,20 +24,18 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <Button x:Name="PlayButton" Width="44" Height="44" CornerRadius="22" Padding="0" Click="OnPlayPause"
-                        AutomationProperties.Name="Play or pause" IsEnabled="False">
+                        AutomationProperties.Name="Play or pause" IsEnabled="False" ToolTipService.ToolTip="Play or pause the preview.">
                     <SymbolIcon x:Name="PlayIcon" Symbol="Play" />
                 </Button>
-                <Slider x:Name="Scrubber" Grid.Column="1" VerticalAlignment="Center" Minimum="0" Maximum="1" StepFrequency="0.1"
+                <Slider x:Name="Scrubber" Grid.Column="1" ToolTipService.ToolTip="Drag to move through the preview." VerticalAlignment="Center" Minimum="0" Maximum="1" StepFrequency="0.1"
                         IsEnabled="False" IsThumbToolTipEnabled="False" ValueChanged="OnScrub" AutomationProperties.Name="Position" />
                 <TextBlock x:Name="TimeText" Grid.Column="2" Text="0:00 / 0:00" VerticalAlignment="Center"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </Grid>
             <StackPanel Orientation="Horizontal" Spacing="12">
-                <Button x:Name="PreviewButton" Content="Build preview" Command="{x:Bind ViewModel.BuildPreviewCommand}" />
-                <Button Content="Cancel" Command="{x:Bind ViewModel.BuildPreviewCancelCommand}"
-                        Visibility="{x:Bind ViewModel.BuildPreviewCommand.IsRunning, Mode=OneWay}" />
-                <TextBlock x:Name="StatusText" Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Button x:Name="PreviewButton" ToolTipService.ToolTip="Make a quick low-resolution version to watch here. Faster than the master, and captions are drawn live so style changes show at once." Content="Build preview" Command="{x:Bind ViewModel.BuildPreviewCommand}" />
+
+
             </StackPanel>
         </StackPanel>
     </Grid>

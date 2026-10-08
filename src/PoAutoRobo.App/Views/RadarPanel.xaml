@@ -5,10 +5,16 @@
     xmlns:services="using:PoAutoRobo.Core.Services">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Padding="16" Spacing="12">
-            <TextBox x:Name="TopicBox" Header="Your own topic" PlaceholderText="Paste a topic, outline, abstract or code"
+            <TextBox x:Name="TopicBox" ToolTipService.ToolTip="The one subject of this episode. A sentence is enough; an outline, paper abstract or code snippet also works." Header="Your own topic" PlaceholderText="Paste a topic, outline, abstract or code"
                      Text="{x:Bind ViewModel.TopicInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      AcceptsReturn="True" TextWrapping="Wrap" Height="120" />
-            <Button x:Name="CreateEpisodeButton" Content="Create episode" Style="{ThemeResource AccentButtonStyle}"
+            <ComboBox x:Name="LengthBox" Header="Episode length" HorizontalAlignment="Stretch" SelectedIndex="{x:Bind ViewModel.LengthIndex, Mode=TwoWay}"
+                      ToolTipService.ToolTip="How many clips to write. Quick test makes a single clip of about 30 seconds, so you can try every step and render in a minute or two.">
+                <ComboBoxItem Content="Full episode · 15 to 20 clips, about 10 minutes" />
+                <ComboBoxItem Content="Short · 5 clips, about 3 minutes" />
+                <ComboBoxItem Content="Quick test · 1 clip, about 30 seconds" />
+            </ComboBox>
+            <Button x:Name="CreateEpisodeButton" ToolTipService.ToolTip="Read the official repositories and write the script on this topic. A full episode takes about two minutes; a quick test a few seconds." Content="Create episode" Style="{ThemeResource AccentButtonStyle}"
                     HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.CreateEpisodeCommand}" />
             <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.CreateEpisodeCommand.IsRunning, Mode=OneWay}">
                 <ProgressBar IsIndeterminate="True" />
@@ -16,14 +22,14 @@
                            Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
-            <DropDownButton x:Name="OpenEpisodeButton" Content="Open a saved episode" HorizontalAlignment="Stretch">
+            <DropDownButton x:Name="OpenEpisodeButton" ToolTipService.ToolTip="Carry on with an episode you made earlier. Everything is saved as you go." Content="Open a saved episode" HorizontalAlignment="Stretch">
                 <DropDownButton.Flyout>
                     <MenuFlyout x:Name="SavedEpisodesMenu" Opening="OnSavedEpisodesOpening" Placement="Bottom" />
                 </DropDownButton.Flyout>
             </DropDownButton>
             <Grid>
                 <TextBlock Text="Topic radar" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
-                <Button x:Name="RefreshTopicsButton" HorizontalAlignment="Right" Padding="8" Command="{x:Bind ViewModel.RefreshTopicsCommand}" AutomationProperties.Name="Refresh topics">
+                <Button x:Name="RefreshTopicsButton" HorizontalAlignment="Right" Padding="8" Command="{x:Bind ViewModel.RefreshTopicsCommand}" AutomationProperties.Name="Refresh topics" ToolTipService.ToolTip="Look for new Unitree R1 stories.">
                     <SymbolIcon Symbol="Refresh" />
                 </Button>
             </Grid>
@@ -40,12 +46,12 @@
                                     <Run Text="{x:Bind Source}" /><Run Text="  " /><Run Text="{x:Bind Interest}" />
                                 </TextBlock>
                             </HyperlinkButton>
-                            <Button Content="Adopt topic" HorizontalAlignment="Stretch" Tag="{x:Bind}" Click="OnAdoptTopic" />
+                            <Button Content="Adopt topic" HorizontalAlignment="Stretch" Tag="{x:Bind}" Click="OnAdoptTopic" ToolTipService.ToolTip="Use this story as the episode topic and start writing the script straight away." />
                         </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <Expander x:Name="RepositoryInspector" Header="{x:Bind ViewModel.SnippetsHeading, Mode=OneWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+            <Expander x:Name="RepositoryInspector" ToolTipService.ToolTip="The passages from official Unitree, Isaac Lab and MuJoCo repositories that the current script was written from." Header="{x:Bind ViewModel.SnippetsHeading, Mode=OneWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <ItemsControl ItemsSource="{x:Bind ViewModel.Snippets}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="services:GroundingSnippet">

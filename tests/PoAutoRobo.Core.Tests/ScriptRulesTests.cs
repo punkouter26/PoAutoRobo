@@ -13,7 +13,7 @@ public sealed class ScriptRulesTests
     [Fact]
     public async Task Mock_episode_has_16_clips_with_three_tiers_all_in_range_and_tier_b_active()
     {
-        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], Ct);
+        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], EpisodeLength.Full, Ct);
 
         Assert.Equal(16, episode.Clips.Count);
         Assert.All(episode.Clips, c =>
@@ -26,10 +26,39 @@ public sealed class ScriptRulesTests
         Assert.Equal(16, episode.Clips.Select(c => c.Id).Distinct().Count());
     }
 
+    [Theory]
+    [InlineData(1, 1, 1)]     // quick test: one clip, about half a minute
+    [InlineData(5, 5, 5)]     // short
+    [InlineData(15, 20, 16)]  // full
+    public async Task Mock_episode_can_be_as_short_as_one_clip(int min, int max, int expected)
+    {
+        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], new EpisodeLength(min, max), Ct);
+
+        Assert.Equal(expected, episode.Clips.Count);
+        Assert.Empty(Durations.OutOfRange(episode));
+    }
+
+    [Fact]
+    public void The_three_lengths_on_offer_are_full_short_and_quick_test()
+    {
+        Assert.Equal((15, 20), (EpisodeLength.Full.MinClips, EpisodeLength.Full.MaxClips));
+        Assert.Equal((5, 5), (EpisodeLength.Short.MinClips, EpisodeLength.Short.MaxClips));
+        Assert.Equal((1, 1), (EpisodeLength.QuickTest.MinClips, EpisodeLength.QuickTest.MaxClips));
+    }
+
+    [Theory]
+    [InlineData(0, 5)]
+    [InlineData(6, 5)]
+    [InlineData(1, 21)]
+    public void A_length_must_be_between_one_and_twenty_clips(int min, int max)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new EpisodeLength(min, max));
+    }
+
     [Fact]
     public async Task Mock_tiers_differ_in_dialogue_and_visual_prompt()
     {
-        var clip = (await new MockScriptWriter().WriteEpisodeAsync("x", [], Ct)).Clips[0];
+        var clip = (await new MockScriptWriter().WriteEpisodeAsync("x", [], EpisodeLength.Full, Ct)).Clips[0];
 
         Assert.Equal(3, clip.Scripts.Values.Select(s => s.Dialogue).Distinct().Count());
         Assert.Equal(3, clip.Scripts.Values.Select(s => s.VisualPrompt).Distinct().Count());

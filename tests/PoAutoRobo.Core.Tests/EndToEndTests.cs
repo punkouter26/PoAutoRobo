@@ -35,7 +35,7 @@ public sealed class EndToEndTests : IDisposable
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=800x600", "-frames:v", "1", image], _folder, null, null, default);
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=320x240:r=25:d=1", "-pix_fmt", "yuv420p", video], _folder, null, null, default);
 
-        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], default);
+        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], EpisodeLength.Full, default);
         static Clip Short(Clip c, VisualSpec visual) => c with
         {
             Visual = visual,
@@ -56,7 +56,7 @@ public sealed class EndToEndTests : IDisposable
     public async Task Mock_topic_exports_h264_aac_at_the_chosen_size_rate_and_loudness()
     {
         var episode = await ThreeClipEpisodeAsync();
-        var progress = new List<double>();
+        var progress = new List<RenderProgress>();
 
         var output = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), new SyncProgress(progress.Add), default);
 
@@ -74,7 +74,18 @@ public sealed class EndToEndTests : IDisposable
 
         Assert.InRange(await Ffmpeg.MeasureLoudnessAsync(output, default), -17.0, -15.0);
         Assert.NotEmpty(progress);
-        Assert.All(progress, p => Assert.InRange(p, 0.0, 1.0));
+        Assert.All(progress, p => Assert.InRange(p.Fraction, 0.0, 1.0));
+        Assert.Equal(progress.Select(p => p.Fraction).Order(), progress.Select(p => p.Fraction)); // never goes backwards
+        // Every stage is named in plain words, in order, with which clip it is on.
+        var stages = progress.Select(p => p.Activity).Distinct().ToList();
+        Assert.Contains(stages, s => s.StartsWith("Recording the voice for clip 1 of 3"));
+        Assert.Contains(stages, s => s.StartsWith("Drawing clip 1 of 3"));
+        Assert.Contains(stages, s => s.StartsWith("Drawing clip 3 of 3"));
+        Assert.Contains(stages, s => s.StartsWith("Joining the clips"));
+        Assert.True(stages.FindIndex(s => s.StartsWith("Recording")) < stages.FindIndex(s => s.StartsWith("Drawing")));
+        Assert.True(stages.FindLastIndex(s => s.StartsWith("Drawing")) < stages.FindIndex(s => s.StartsWith("Joining")));
+        Assert.Contains(episode.Clips[1].Title, stages.First(s => s.StartsWith("Drawing clip 2 of 3")));
+        Assert.Equal(1.0, progress[^1].Fraction, precision: 2);
         Assert.Empty(Directory.GetDirectories(Path.Combine(_folder, "export"))); // working folder cleaned up
     }
 
@@ -84,7 +95,7 @@ public sealed class EndToEndTests : IDisposable
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_SLOW_OUT") is not { Length: > 0 } keep)
             return;
-        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], default);
+        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], EpisodeLength.Full, default);
 
         var output = await Builder.ExportAsync(episode, _folder, ExportPreset.Hd30, new CaptionStyle(), null, default);
 
@@ -130,9 +141,9 @@ public sealed class EndToEndTests : IDisposable
         Assert.Contains("does-not-exist.mp4", error.Message);
     }
 
-    private sealed class SyncProgress(Action<double> report) : IProgress<double>
+    private sealed class SyncProgress(Action<RenderProgress> report) : IProgress<RenderProgress>
     {
-        public void Report(double value) => report(value);
+        public void Report(RenderProgress value) => report(value);
     }
 
     private sealed class CountingNarrator : INarrator

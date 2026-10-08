@@ -14,7 +14,7 @@ public sealed class TrendFeedTests
             <id>http://arxiv.org/abs/2610.00001v1</id>
             <title>Whole-Body Balance for Humanoid
               Robots</title>
-            <summary>We train a &lt;b&gt;humanoid&lt;/b&gt; policy with domain randomization.</summary>
+            <summary>We train a &lt;b&gt;humanoid&lt;/b&gt; policy on the Unitree R1 with domain randomization.</summary>
             <updated>2026-10-05T10:00:00Z</updated>
             <link href="http://arxiv.org/abs/2610.00001v1" rel="alternate" />
           </entry>
@@ -50,7 +50,7 @@ public sealed class TrendFeedTests
         var card = TrendFeed.ParseFeed(Atom, "arXiv cs.RO")[0];
 
         Assert.Equal("Whole-Body Balance for Humanoid Robots", card.Title);
-        Assert.Equal("We train a humanoid policy with domain randomization.", card.Summary);
+        Assert.Equal("We train a humanoid policy on the Unitree R1 with domain randomization.", card.Summary);
         Assert.Equal("arXiv cs.RO", card.Source);
         Assert.Equal("http://arxiv.org/abs/2610.00001v1", card.Url);
         Assert.Equal(new DateTimeOffset(2026, 10, 5, 10, 0, 0, TimeSpan.Zero), card.Published);
@@ -81,9 +81,33 @@ public sealed class TrendFeedTests
     [Fact]
     public void Long_summaries_are_shortened()
     {
-        var xml = Rss.Replace("The R1 humanoid gets new firmware.", "humanoid " + new string('x', 600));
+        var xml = Rss.Replace("The R1 humanoid gets new firmware.", "R1 " + new string('x', 600));
 
         Assert.InRange(TrendFeed.ParseFeed(xml, "Outlet")[0].Summary.Length, 1, TrendFeed.MaxSummaryLength + 1);
+    }
+
+    [Theory]
+    [InlineData("Unitree R1 learns to walk", "", true)]
+    [InlineData("New firmware for the R1", "Unitree shipped an update for its smallest humanoid.", true)]
+    [InlineData("Unitree's R1: a teardown", "", true)]
+    [InlineData("Whole-body balance for humanoid robots", "A general method for bipeds.", false)]   // humanoids in general
+    [InlineData("Unitree G1 does a backflip", "", false)]                                              // another Unitree robot
+    [InlineData("Rivian R1 road test", "An electric truck.", false)]                                   // another maker's R1
+    [InlineData("Unitree shows the R1S prototype", "", false)]                                         // R1 must be the whole word
+    public void Only_cards_about_the_unitree_r1_itself_are_kept(string title, string summary, bool kept)
+    {
+        Assert.Equal(kept, TrendFeed.IsAboutR1(new TopicCard(title, summary, "x", "https://example.org", null, DateTimeOffset.MinValue)));
+    }
+
+    [Fact]
+    public async Task A_general_humanoid_story_no_longer_reaches_the_radar()
+    {
+        var feed = new TrendFeed((url, _) => Task.FromResult(url.Contains("hn.algolia") ? HackerNews : Rss));
+
+        var cards = await feed.GetAsync(Ct);
+
+        Assert.DoesNotContain(cards, c => c.Title.Contains("Ask HN"));
+        Assert.Contains(cards, c => c.Title == "Unitree R1 teardown");
     }
 
     [Fact]
@@ -128,13 +152,14 @@ public sealed class TrendFeedTests
     /// <summary>Opt-in: the real feeds. Reports which sources answered.</summary>
     [Fact]
     [Trait("Category", "Live")]
-    public async Task Live_feeds_return_real_cards_from_more_than_one_source()
+    public async Task Live_feeds_return_real_cards_and_every_one_is_about_the_unitree_r1()
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
 
         var cards = await TrendFeed.Create().GetAsync(Ct);
 
-        var sources = cards.Select(c => c.Source).Distinct().ToList();
-        Assert.True(sources.Count >= 2 && !sources.Contains("Sample topic"), "sources that answered: " + string.Join(", ", sources));
+        var sources = cards.GroupBy(c => c.Source).Select(g => $"{g.Key} ({g.Count()})").ToList();
+        Assert.All(cards, c => Assert.True(TrendFeed.IsAboutR1(c), c.Title));
+        Assert.True(cards.Count > 0 && cards.All(c => c.Source != "Sample topic") && Environment.GetEnvironmentVariable("POAUTOROBO_SHOW") is null, "real cards: " + string.Join(", ", sources));
     }
 }

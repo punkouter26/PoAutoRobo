@@ -13,8 +13,6 @@ public delegate Task<string> JsonChat(string deployment, string system, string u
 /// <summary>Writes scripts with Azure OpenAI. The <see cref="JsonChat"/> seam lets tests supply replies without a network.</summary>
 public sealed class AzureScriptWriter(AppSettings settings, JsonChat chat) : IScriptWriter
 {
-    private const int MinClips = 15;
-    private const int MaxClips = 20;
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     private sealed record TierDto(string Dialogue, string VisualPrompt, string Pose);
@@ -45,9 +43,9 @@ public sealed class AzureScriptWriter(AppSettings settings, JsonChat chat) : ISc
         });
     }
 
-    public async Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, CancellationToken ct)
+    public async Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct)
     {
-        var prompt = new StringBuilder().AppendLine($"Topic: {topic}");
+        var prompt = new StringBuilder().AppendLine($"Topic: {topic}").AppendLine($"Number of clips: {length.InWords}.");
         if (grounding.Count > 0)
         {
             prompt.AppendLine().AppendLine("Reference snippets from official repositories:");
@@ -56,15 +54,15 @@ public sealed class AzureScriptWriter(AppSettings settings, JsonChat chat) : ISc
         }
 
         var draft = await Ask<EpisodeDto>(settings.ChatDeployment, ScriptSchemas.System, prompt.ToString(), "episode", ScriptSchemas.Episode, ct);
-        if (draft.Clips.Count is < MinClips or > MaxClips)
+        if (draft.Clips.Count < length.MinClips || draft.Clips.Count > length.MaxClips)
         {
-            prompt.AppendLine().AppendLine($"Your last answer had {draft.Clips.Count} clips. Return between {MinClips} and {MaxClips} clips.");
+            prompt.AppendLine().AppendLine($"Your last answer had {draft.Clips.Count} clips. Return {length.InWords}.");
             draft = await Ask<EpisodeDto>(settings.ChatDeployment, ScriptSchemas.System, prompt.ToString(), "episode", ScriptSchemas.Episode, ct);
         }
-        if (draft.Clips.Count < MinClips)
+        if (draft.Clips.Count < length.MinClips)
             throw new InvalidDataException($"The script came back with only {draft.Clips.Count} clips. Please try again.");
 
-        var clips = draft.Clips.Take(MaxClips).Select(c => new Clip(
+        var clips = draft.Clips.Take(length.MaxClips).Select(c => new Clip(
             Guid.NewGuid(), c.Title, Tier.B,
             new Dictionary<Tier, TierScript> { [Tier.A] = Script(c.A), [Tier.B] = Script(c.B), [Tier.C] = Script(c.C) },
             new VisualSpec(VisualKind.TitleCard), HostVisible: true)).ToList();
