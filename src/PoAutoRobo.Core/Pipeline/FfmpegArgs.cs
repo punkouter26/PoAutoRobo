@@ -68,7 +68,7 @@ public static class FfmpegArgs
                 $"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,fps={fps}," +
                 $"tpad=stop_mode=clone:stop_duration={Seconds(length)}",
             // ponytail: one centred line, no wrapping. Clip titles are short; wrap here if they stop being so.
-            _ => $"drawtext=textfile={input}:fontfile={TitleFontFile}:fontcolor=white:fontsize=h/12:x=(w-text_w)/2:y=(h-text_h)/2",
+            _ => $"drawtext=textfile={input}:expansion=none:fontfile={TitleFontFile}:fontcolor=white:fontsize=h/12:x=(w-text_w)/2:y=(h-text_h)/2",
         };
         return [.. inputArgs, "-vf", filter + Finish(length, captionsFile), "-t", Seconds(length), "-an", .. Encode(preset), "-y", output];
     }

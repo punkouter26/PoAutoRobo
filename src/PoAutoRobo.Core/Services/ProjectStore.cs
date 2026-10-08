@@ -27,14 +27,47 @@ public static class ProjectStore
     }
 
     /// <exception cref="InvalidDataException">The file is missing or unreadable; offer <see cref="RestoreBackup"/>.</exception>
-    public static Episode Load(string folder) => Read(Path.Combine(folder, FileName));
+    public static Episode Load(string folder) => Read(Path.Combine(folder, FileName), folder);
 
     public static Episode RestoreBackup(string folder)
     {
         var path = Path.Combine(folder, FileName);
-        var episode = Read(path + ".bak");
+        var episode = Read(path + ".bak", folder);
         File.Copy(path + ".bak", path, overwrite: true);
         return episode;
+    }
+
+    // An episode file can be edited by anyone who can reach the (often cloud-synced) folder, so it is not trusted.
+    // Its shape is checked here, where a problem can be reported as a damaged file, and not left to crash later.
+    private static void CheckShape(Episode episode, string path)
+    {
+        var sound = episode.Clips is not null && episode.Captions is not null && episode.Mix is not null
+            && System.Text.RegularExpressions.Regex.IsMatch(episode.Captions.AccentColor ?? "", "^#[0-9a-fA-F]{6}$")
+            && episode.Clips.All(c => c is { Title: not null, Visual: not null, Scripts: not null }
+                && Enum.GetValues<Tier>().All(t => c.Scripts.TryGetValue(t, out var script) && script is { Dialogue: not null, VisualPrompt: not null, Pose: not null }));
+        if (!sound)
+            throw new InvalidDataException($"{path} is missing or damaged.");
+    }
+
+    // Media must live inside the episode's own folder. A path pointing anywhere else (a network share, a system
+    // file) is dropped, so opening an episode can never make the app reach out to or read from another place.
+    private static Episode KeepOwnMedia(Episode episode, string folder)
+    {
+        var root = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        bool Inside(string path) => Path.GetFullPath(path, root).StartsWith(root, StringComparison.OrdinalIgnoreCase);
+
+        return episode with
+        {
+            Clips = [.. episode.Clips.Select(clip =>
+            {
+                var visual = clip.Visual;
+                if (visual.UserVideoPath is { } video && !Inside(video))
+                    return clip with { NarrationRate = 1.0, Visual = new VisualSpec(VisualKind.TitleCard) };
+                if (visual.MediaPaths is { } media && !media.All(Inside))
+                    return clip with { Visual = visual with { MediaPaths = [.. media.Where(Inside)] } };
+                return clip;
+            })],
+        };
     }
 
     /// <summary>Episode folders directly under <paramref name="root"/>, most recently saved first.</summary>
@@ -66,14 +99,16 @@ public static class ProjectStore
         return folder;
     }
 
-    private static Episode Read(string path)
+    private static Episode Read(string path, string folder)
     {
         try
         {
-            return JsonSerializer.Deserialize<Episode>(File.ReadAllText(path), JsonOptions)
+            var episode = JsonSerializer.Deserialize<Episode>(File.ReadAllText(path), JsonOptions)
                 ?? throw new InvalidDataException($"{path} is empty.");
+            CheckShape(episode, path);
+            return KeepOwnMedia(episode, folder);
         }
-        catch (Exception e) when (e is JsonException or IOException)
+        catch (Exception e) when (e is JsonException or IOException or ArgumentException or NotSupportedException)
         {
             throw new InvalidDataException($"{path} is missing or damaged.", e);
         }

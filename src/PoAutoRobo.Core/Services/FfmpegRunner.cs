@@ -12,10 +12,16 @@ public sealed partial class FfmpegRunner(string ffmpegPath)
     private const int LogLinesKept = 20;
 
     /// <summary>Finds ffmpeg.exe on PATH, or null when it is not installed.</summary>
-    public static string? Locate() =>
-        (Environment.GetEnvironmentVariable("PATH") ?? "")
+    public static string? Locate() => LocateIn(Environment.GetEnvironmentVariable("PATH") ?? "");
+
+    // Relative PATH entries resolve against whatever folder the app was started from, so a stray ffmpeg.exe there
+    // would be run in place of the real one. Only absolute folders are searched.
+    public static string? LocateIn(string pathVariable) =>
+        pathVariable
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(dir => Path.Combine(dir.Trim(), "ffmpeg.exe"))
+            .Select(dir => dir.Trim())
+            .Where(Path.IsPathFullyQualified)
+            .Select(dir => Path.Combine(dir, "ffmpeg.exe"))
             .FirstOrDefault(File.Exists);
 
     /// <param name="total">Expected output length; with <paramref name="progress"/> it turns FFmpeg's clock into 0..1.</param>
