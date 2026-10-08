@@ -15,12 +15,14 @@ public partial class MainViewModel : ObservableObject
 
     private readonly IScriptWriter _scriptWriter;
     private readonly EpisodeBuilder _builder;
+    private readonly Grounding _grounding;
     private bool _syncingClips;
 
-    public MainViewModel(IScriptWriter scriptWriter, EpisodeBuilder builder, bool ffmpegAvailable, string? offlineMessage)
+    public MainViewModel(IScriptWriter scriptWriter, EpisodeBuilder builder, Grounding grounding, bool ffmpegAvailable, string? offlineMessage)
     {
         _scriptWriter = scriptWriter;
         _builder = builder;
+        _grounding = grounding;
         FfmpegAvailable = ffmpegAvailable;
         OfflineMessage = offlineMessage;
         Clips.CollectionChanged += OnClipsChanged;
@@ -30,6 +32,11 @@ public partial class MainViewModel : ObservableObject
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PoAutoRobo");
 
     public ObservableCollection<ClipViewModel> Clips { get; } = [];
+
+    /// <summary>Passages from the official repositories that the current script was grounded in.</summary>
+    public ObservableCollection<GroundingSnippet> Snippets { get; } = [];
+
+    public string SnippetsHeading => Snippets.Count == 0 ? "Repository inspector" : $"Repository inspector · {Snippets.Count} sources";
 
     public bool FfmpegAvailable { get; }
 
@@ -90,7 +97,13 @@ public partial class MainViewModel : ObservableObject
         ErrorMessage = null;
         try
         {
-            var episode = await _scriptWriter.WriteEpisodeAsync(TopicInput.Trim(), [], ct);
+            var topic = TopicInput.Trim();
+            var grounding = await _grounding.FindAsync(topic, ct);
+            Snippets.Clear();
+            foreach (var snippet in grounding)
+                Snippets.Add(snippet);
+            OnPropertyChanged(nameof(SnippetsHeading));
+            var episode = await _scriptWriter.WriteEpisodeAsync(topic, grounding, ct);
             EpisodeFolder = Path.Combine(EpisodesRoot, EpisodeBuilder.Slug(episode.Title));
             ProjectStore.Save(episode, EpisodeFolder);
             Show(episode);

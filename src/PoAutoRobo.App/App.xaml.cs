@@ -34,9 +34,10 @@ public partial class App : Application
             ? null
             : $"{string.Join(" and ", plan.Simulated)} simulated. {settings.LoadError ?? "The key vault has no key for your Azure AI resource."}";
 
+        var grounding = Grounding.Create(settings.GitHubToken, Path.Combine(Path.GetDirectoryName(WindowStateFile)!, "grounding"));
         var ffmpeg = FfmpegRunner.Locate();
         var builder = new EpisodeBuilder(narrator, new FfmpegRunner(ffmpeg ?? "ffmpeg.exe"));
-        _window = new MainWindow(new MainViewModel(writer, builder, ffmpegAvailable: ffmpeg is not null, offline));
+        _window = new MainWindow(new MainViewModel(writer, builder, grounding, ffmpegAvailable: ffmpeg is not null, offline));
         _window.Closed += (_, _) =>
         {
             Directory.CreateDirectory(Path.GetDirectoryName(WindowStateFile)!);

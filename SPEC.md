@@ -159,7 +159,8 @@ Each external service has a mock chosen automatically when its credentials or bi
 | Narrator | Windows built-in voice, word timings spread evenly |
 | ImageGen | Locally rendered title card |
 | VideoGen | Falls back to a still |
-| TrendFeed / Grounding | Bundled sample cards and snippets |
+| TrendFeed | Bundled sample cards |
+| Grounding | Last saved copy of each repository; with none, the script is written without snippets |
 | FFmpeg missing | Export disabled with a "Get FFmpeg" action; everything else works |
 
 ## 9. Testing strategy

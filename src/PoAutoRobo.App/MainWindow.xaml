@@ -90,18 +90,9 @@
         </StackPanel>
 
         <!-- Topic radar -->
-        <StackPanel Grid.Row="2" Padding="16" Spacing="12" Background="{ThemeResource LayerFillColorDefaultBrush}">
-            <TextBlock Text="Topic" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-            <TextBox x:Name="TopicBox" Header="Your own topic" PlaceholderText="Paste a topic, outline, abstract or code"
-                     Text="{x:Bind ViewModel.TopicInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     AcceptsReturn="True" TextWrapping="Wrap" Height="120" />
-            <Button x:Name="CreateEpisodeButton" Content="Create episode" Style="{ThemeResource AccentButtonStyle}"
-                    HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.CreateEpisodeCommand}" />
-            <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.CreateEpisodeCommand.IsRunning, Mode=OneWay}">
-                <ProgressBar IsIndeterminate="True" />
-                <TextBlock Text="Writing the script. This can take a couple of minutes." TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
-        </StackPanel>
+        <Border Grid.Row="2" Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <views:RadarPanel ViewModel="{x:Bind ViewModel}" />
+        </Border>
 
         <!-- Clip deck -->
         <GridView x:Name="ClipDeck" Grid.Row="2" Grid.Column="1" Padding="16" ItemsSource="{x:Bind ViewModel.Clips}"
