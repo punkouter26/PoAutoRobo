@@ -16,13 +16,15 @@ public partial class MainViewModel : ObservableObject
     private readonly IScriptWriter _scriptWriter;
     private readonly EpisodeBuilder _builder;
     private readonly Grounding _grounding;
+    private readonly TrendFeed _trendFeed;
     private bool _syncingClips;
 
-    public MainViewModel(IScriptWriter scriptWriter, EpisodeBuilder builder, Grounding grounding, bool ffmpegAvailable, string? offlineMessage)
+    public MainViewModel(IScriptWriter scriptWriter, EpisodeBuilder builder, Grounding grounding, TrendFeed trendFeed, bool ffmpegAvailable, string? offlineMessage)
     {
         _scriptWriter = scriptWriter;
         _builder = builder;
         _grounding = grounding;
+        _trendFeed = trendFeed;
         FfmpegAvailable = ffmpegAvailable;
         OfflineMessage = offlineMessage;
         Clips.CollectionChanged += OnClipsChanged;
@@ -54,6 +56,27 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Set by the view that owns the preview player; it must let go of the file before a new preview is written.</summary>
     public Action? ReleasePreview { get; set; }
+
+    // ---- Topic radar ----
+
+    public ObservableCollection<TopicCard> Topics { get; } = [];
+
+    [RelayCommand]
+    private async Task RefreshTopicsAsync(CancellationToken ct)
+    {
+        var cards = await _trendFeed.GetAsync(ct); // never throws for a dead source; falls back to sample topics
+        Topics.Clear();
+        foreach (var card in cards)
+            Topics.Add(card);
+    }
+
+    /// <summary>Takes a card as the episode's one topic and starts writing.</summary>
+    [RelayCommand]
+    private async Task AdoptTopicAsync(TopicCard card)
+    {
+        TopicInput = card.Summary.Length > 0 ? $"{card.Title}\n\n{card.Summary}" : card.Title;
+        await CreateEpisodeCommand.ExecuteAsync(null);
+    }
 
     // ---- Episode ----
 

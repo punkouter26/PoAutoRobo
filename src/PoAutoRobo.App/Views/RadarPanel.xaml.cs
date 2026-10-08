@@ -16,6 +16,13 @@ public sealed partial class RadarPanel : UserControl
         {
             _viewModel = value;
             Bindings.Update();
+            value?.RefreshTopicsCommand.Execute(null); // topics load on launch; the button reloads them
         }
+    }
+
+    private void OnAdoptTopic(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: PoAutoRobo.Core.Services.TopicCard card })
+            ViewModel?.AdoptTopicCommand.Execute(card);
     }
 }

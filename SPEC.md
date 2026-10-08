@@ -147,7 +147,7 @@ public interface INarrator
 
 **Export.** H.264 MP4 with AAC audio; 1920×1080 or 3840×2160; 30 or 60 fps. Narration is loudness-normalised to −16 LUFS, with 150ms crossfades at clip joins and 0.5s visual transitions.
 
-**Topic Radar.** Refreshes on launch and on demand. Interest metric is stars, upvotes or comment count depending on the source.
+**Topic Radar.** Refreshes on launch and on demand. Sources: arXiv cs.RO, Hacker News, IEEE Spectrum and The Robot Report, filtered to humanoid and Unitree topics. Hacker News cards show points and comments; the others have no interest figure. Reddit (refuses anonymous readers) and GitHub activity (commit titles are not topics) are not used.
 
 ## 8. Mock fallbacks
 

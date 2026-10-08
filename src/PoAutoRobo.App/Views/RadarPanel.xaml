@@ -5,7 +5,6 @@
     xmlns:services="using:PoAutoRobo.Core.Services">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Padding="16" Spacing="12">
-            <TextBlock Text="Topic" Style="{ThemeResource BodyStrongTextBlockStyle}" />
             <TextBox x:Name="TopicBox" Header="Your own topic" PlaceholderText="Paste a topic, outline, abstract or code"
                      Text="{x:Bind ViewModel.TopicInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      AcceptsReturn="True" TextWrapping="Wrap" Height="120" />
@@ -17,6 +16,30 @@
                            Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
+            <Grid>
+                <TextBlock Text="Topic radar" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                <Button x:Name="RefreshTopicsButton" HorizontalAlignment="Right" Padding="8" Command="{x:Bind ViewModel.RefreshTopicsCommand}" AutomationProperties.Name="Refresh topics">
+                    <SymbolIcon Symbol="Refresh" />
+                </Button>
+            </Grid>
+            <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.RefreshTopicsCommand.IsRunning, Mode=OneWay}" />
+            <ItemsControl x:Name="TopicCards" ItemsSource="{x:Bind ViewModel.Topics}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="services:TopicCard">
+                        <StackPanel Spacing="6" Padding="12" Margin="0,0,0,8" CornerRadius="6" Background="{ThemeResource ControlFillColorDefaultBrush}">
+                            <TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                            <TextBlock Text="{x:Bind Summary}" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis"
+                                       Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <HyperlinkButton Padding="0" NavigateUri="{x:Bind Url}">
+                                <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" TextWrapping="Wrap">
+                                    <Run Text="{x:Bind Source}" /><Run Text="  " /><Run Text="{x:Bind Interest}" />
+                                </TextBlock>
+                            </HyperlinkButton>
+                            <Button Content="Adopt topic" HorizontalAlignment="Stretch" Tag="{x:Bind}" Click="OnAdoptTopic" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
             <Expander x:Name="RepositoryInspector" Header="{x:Bind ViewModel.SnippetsHeading, Mode=OneWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <ItemsControl ItemsSource="{x:Bind ViewModel.Snippets}">
                     <ItemsControl.ItemTemplate>
