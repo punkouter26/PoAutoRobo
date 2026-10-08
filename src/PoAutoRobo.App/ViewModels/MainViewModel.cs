@@ -17,11 +17,12 @@ public partial class MainViewModel : ObservableObject
     private readonly EpisodeBuilder _builder;
     private bool _syncingClips;
 
-    public MainViewModel(IScriptWriter scriptWriter, EpisodeBuilder builder, bool ffmpegAvailable)
+    public MainViewModel(IScriptWriter scriptWriter, EpisodeBuilder builder, bool ffmpegAvailable, string? offlineMessage)
     {
         _scriptWriter = scriptWriter;
         _builder = builder;
         FfmpegAvailable = ffmpegAvailable;
+        OfflineMessage = offlineMessage;
         Clips.CollectionChanged += OnClipsChanged;
     }
 
@@ -33,6 +34,11 @@ public partial class MainViewModel : ObservableObject
     public bool FfmpegAvailable { get; }
 
     public bool FfmpegMissing => !FfmpegAvailable;
+
+    /// <summary>Which services are simulated and why; null when everything is live.</summary>
+    public string? OfflineMessage { get; }
+
+    public bool IsOffline => OfflineMessage is not null;
 
     public string? EpisodeFolder { get; private set; }
 

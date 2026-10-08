@@ -11,5 +11,5 @@ public static class ServiceSelector
 {
     public static ServicePlan Plan(AppSettings settings) => new(
         ScriptLive: settings.Endpoint is not null && settings.ApiKey is not null,
-        VoiceLive: settings.SpeechKey is not null && settings.SpeechRegion is not null);
+        VoiceLive: settings.Endpoint is not null && settings.ApiKey is not null);
 }

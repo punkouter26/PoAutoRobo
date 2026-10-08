@@ -31,9 +31,10 @@ public sealed class KeyVaultSecretSource(Uri vault) : ISecretSource
 }
 
 /// <summary>Connection details for the live services. Held in memory only; never saved with an episode.</summary>
-public sealed record AppSettings(Uri? Endpoint, string? ApiKey, string? SpeechKey, string? SpeechRegion, string? GitHubToken)
+/// <param name="Endpoint">The Azure AI services resource. One resource and key serve script, voice, images and video.</param>
+public sealed record AppSettings(Uri? Endpoint, string? ApiKey, string? GitHubToken)
 {
-    public static readonly AppSettings Offline = new(null, null, null, null, null);
+    public static readonly AppSettings Offline = new(null, null, null);
 
     public string ChatDeployment { get; init; } = "gpt-5.4";
     public string FastChatDeployment { get; init; } = "gpt-5.4-mini";
@@ -50,8 +51,6 @@ public sealed record AppSettings(Uri? Endpoint, string? ApiKey, string? SpeechKe
             return new AppSettings(
                 Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) ? uri : null,
                 await Get("AzureOpenAI--ApiKey"),
-                await Get("AzureSpeech-SubscriptionKey"),
-                await Get("AzureSpeech-Region"),
                 await Get("GitHub--PAT"));
         }
         catch (Exception e) when (e is not OperationCanceledException)
@@ -66,7 +65,7 @@ public sealed record AppSettings(Uri? Endpoint, string? ApiKey, string? SpeechKe
 
     // Records print every property by default; secrets must never reach a log or an error message.
     public override string ToString() =>
-        $"AppSettings {{ Endpoint = {Endpoint}, ApiKey = {Mask(ApiKey)}, SpeechKey = {Mask(SpeechKey)}, SpeechRegion = {SpeechRegion}, GitHubToken = {Mask(GitHubToken)} }}";
+        $"AppSettings {{ Endpoint = {Endpoint}, ApiKey = {Mask(ApiKey)}, GitHubToken = {Mask(GitHubToken)} }}";
 
     private static string Mask(string? secret) => secret is null ? "(none)" : "(set)";
 }

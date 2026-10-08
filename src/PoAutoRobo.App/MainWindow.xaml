@@ -77,8 +77,8 @@
 
         <StackPanel Grid.Row="1" Grid.ColumnSpan="3">
             <ProgressBar x:Name="RenderProgressBar" Maximum="100" Value="{x:Bind ViewModel.RenderProgress, Mode=OneWay}" />
-            <InfoBar IsOpen="True" IsClosable="False" Severity="Informational"
-                     Title="Running offline" Message="Script and voice are simulated until you connect your Azure services." />
+            <InfoBar IsOpen="{x:Bind ViewModel.IsOffline}" IsClosable="False" Severity="Informational"
+                     Title="Running offline" Message="{x:Bind ViewModel.OfflineMessage}" />
             <InfoBar IsOpen="{x:Bind ViewModel.FfmpegMissing}" IsClosable="False" Severity="Warning"
                      Title="FFmpeg is needed to preview and export" Message="Install it, then restart the app. Everything else works without it.">
                 <InfoBar.ActionButton>
@@ -97,6 +97,10 @@
                      AcceptsReturn="True" TextWrapping="Wrap" Height="120" />
             <Button x:Name="CreateEpisodeButton" Content="Create episode" Style="{ThemeResource AccentButtonStyle}"
                     HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.CreateEpisodeCommand}" />
+            <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.CreateEpisodeCommand.IsRunning, Mode=OneWay}">
+                <ProgressBar IsIndeterminate="True" />
+                <TextBlock Text="Writing the script. This can take a couple of minutes." TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
         </StackPanel>
 
         <!-- Clip deck -->

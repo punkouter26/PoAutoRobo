@@ -28,7 +28,7 @@ Users: robotics researchers, developers and content creators working alone on th
 | UI | WinUI 3, pure XAML, unpackaged | Windows App SDK 2.5.1, WinUIEx 2.9.3; built for the machine's own architecture (x64 or ARM64) |
 | MVVM | CommunityToolkit.Mvvm | 8.4.2 |
 | Script LLM | Azure OpenAI via `Azure.AI.OpenAI` 2.1.0, JSON-schema structured outputs; a full episode takes about two minutes | deployment `gpt-5.4`; `gpt-5.4-mini` for drift checks |
-| Narration | Azure AI Speech SDK, SSML `express-as`, `WordBoundary` events | `Microsoft.CognitiveServices.Speech`, latest stable at scaffold |
+| Narration | Azure AI Speech SDK through the same AI services resource and key as the script; SSML `express-as` excited style, `WordBoundary` events | `Microsoft.CognitiveServices.Speech` 1.52.0, voice `en-US-DavisNeural` |
 | Images | Azure OpenAI image edit endpoint with character sheet as reference | deployment `gpt-image-2` (fallback `gpt-image-1-mini`) |
 | Video | Sora 2, Azure OpenAI v1 API, async job + poll, `input_reference` | deployment `sora-2`, 1280×720 |
 | Assembly | FFmpeg CLI as a child process | 7.x or later (built and tested on 9.0.1), on PATH or downloaded on first run |
@@ -245,6 +245,6 @@ Each external service has a mock chosen automatically when its credentials or bi
 
 1. `gpt-image-2` and `sora-2` are not yet deployed on `po-aiservices-shared`. Quota allows 2 and 9 requests per minute. Until they exist, images use `gpt-image-1-mini` and AI video falls back to stills.
 2. Allowed Sora 2 `seconds` values on this deployment are unconfirmed (docs samples show 4, 8 and 12). Confirm with one live call before building shot stitching.
-3. Whether the Foundry User role allows keyless data-plane calls is unconfirmed. If not, development uses the key from `kv-poshared` via `dotnet user-secrets`.
+3. Resolved 2026-10-07: the app reads the resource endpoint and key from `kv-poshared` at startup. The vault's separate `AzureSpeech-*` secrets are stale (401) and are not used; voice goes through the shared resource.
 4. Host voice: default is an en-US neural voice with the `excited` style, with a picker in Settings. Final voice to be chosen by ear.
 5. `gpt-image-2.5-sunburst` is available in the region and is described as stronger at reference-faithful edits. Worth a side-by-side once the character sheet exists.

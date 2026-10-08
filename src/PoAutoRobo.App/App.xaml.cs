@@ -16,21 +16,43 @@ public partial class App : Application
 
     public App() => InitializeComponent();
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         // An unpackaged app has no app-data store, so WinUIEx needs somewhere to keep the window's size and position.
         var windowState = LoadWindowState();
         WindowManager.PersistenceStorage = windowState;
 
+        // ponytail: the window appears after the vault answers (a second or two). Show it first if that ever feels slow.
+        var settings = await LoadSettingsAsync();
+        var plan = ServiceSelector.Plan(settings);
+        IScriptWriter writer = plan.ScriptLive ? AzureScriptWriter.Create(settings) : new MockScriptWriter();
+        INarrator narrator = plan.VoiceLive ? new AzureNarrator(settings) : new MockNarrator();
+        var offline = plan.Simulated.Count == 0
+            ? null
+            : $"{string.Join(" and ", plan.Simulated)} simulated. {settings.LoadError ?? "The key vault has no key for your Azure AI resource."}";
+
         var ffmpeg = FfmpegRunner.Locate();
-        var builder = new EpisodeBuilder(new MockNarrator(), new FfmpegRunner(ffmpeg ?? "ffmpeg.exe"));
-        _window = new MainWindow(new MainViewModel(new MockScriptWriter(), builder, ffmpegAvailable: ffmpeg is not null));
+        var builder = new EpisodeBuilder(narrator, new FfmpegRunner(ffmpeg ?? "ffmpeg.exe"));
+        _window = new MainWindow(new MainViewModel(writer, builder, ffmpegAvailable: ffmpeg is not null, offline));
         _window.Closed += (_, _) =>
         {
             Directory.CreateDirectory(Path.GetDirectoryName(WindowStateFile)!);
             File.WriteAllText(WindowStateFile, JsonSerializer.Serialize(windowState.ToDictionary(p => p.Key, p => p.Value?.ToString())));
         };
         _window.Activate();
+    }
+
+    private static async Task<AppSettings> LoadSettingsAsync()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        try
+        {
+            return await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault), timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return AppSettings.Offline with { LoadError = "The key vault did not answer in time." };
+        }
     }
 
     private static Dictionary<string, object> LoadWindowState()

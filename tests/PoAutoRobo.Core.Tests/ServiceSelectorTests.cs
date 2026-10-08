@@ -10,8 +10,6 @@ public sealed class ServiceSelectorTests
     {
         ["AzureOpenAI--Endpoint"] = "https://example.cognitiveservices.azure.com/",
         ["AzureOpenAI--ApiKey"] = "openai-secret-value",
-        ["AzureSpeech-SubscriptionKey"] = "speech-secret-value",
-        ["AzureSpeech-Region"] = "eastus2",
         ["GitHub--PAT"] = "github-secret-value",
     };
 
@@ -28,8 +26,6 @@ public sealed class ServiceSelectorTests
 
         Assert.Equal(new Uri("https://example.cognitiveservices.azure.com/"), settings.Endpoint);
         Assert.Equal("openai-secret-value", settings.ApiKey);
-        Assert.Equal("speech-secret-value", settings.SpeechKey);
-        Assert.Equal("eastus2", settings.SpeechRegion);
         Assert.Equal("github-secret-value", settings.GitHubToken);
         Assert.Null(settings.LoadError);
     }
@@ -45,17 +41,27 @@ public sealed class ServiceSelectorTests
     }
 
     [Theory]
-    [InlineData("AzureOpenAI--ApiKey", "Script")]
-    [InlineData("AzureOpenAI--Endpoint", "Script")]
-    [InlineData("AzureSpeech-SubscriptionKey", "Voice")]
-    [InlineData("AzureSpeech-Region", "Voice")]
-    public async Task A_missing_or_blank_secret_falls_back_to_the_mock_for_that_service_only(string missing, string simulated)
+    [InlineData("AzureOpenAI--ApiKey")]
+    [InlineData("AzureOpenAI--Endpoint")]
+    public async Task A_missing_or_blank_resource_secret_simulates_script_and_voice_since_they_share_one_resource(string missing)
     {
         var vault = new Dictionary<string, string>(FullVault) { [missing] = "  " };
 
         var plan = ServiceSelector.Plan(await AppSettings.LoadAsync(new FakeVault(vault), Ct));
 
-        Assert.Equal([simulated], plan.Simulated);
+        Assert.Equal(["Script", "Voice"], plan.Simulated);
+    }
+
+    [Fact]
+    public async Task A_missing_github_token_simulates_nothing()
+    {
+        var vault = new Dictionary<string, string>(FullVault);
+        vault.Remove("GitHub--PAT");
+
+        var settings = await AppSettings.LoadAsync(new FakeVault(vault), Ct);
+
+        Assert.Null(settings.GitHubToken);
+        Assert.Empty(ServiceSelector.Plan(settings).Simulated);
     }
 
     [Fact]
