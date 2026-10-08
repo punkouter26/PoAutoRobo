@@ -29,6 +29,12 @@ public sealed record Clip(
     public double NarrationRate { get; init; } = 1.0;
 }
 
+/// <summary>Share of generated clips given each kind of picture; the four must add up to 100.</summary>
+public sealed record MixPercentages(int Still, int MultiPanel, int AiVideo, int TitleCard)
+{
+    public static readonly MixPercentages Default = new(50, 20, 20, 10);
+}
+
 public sealed record Episode(
     string Title,
     string Topic,
@@ -36,4 +42,6 @@ public sealed record Episode(
     int MixSeed)
 {
     public CaptionStyle Captions { get; init; } = new();
+
+    public MixPercentages Mix { get; init; } = MixPercentages.Default;
 }

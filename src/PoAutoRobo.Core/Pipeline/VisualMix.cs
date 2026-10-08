@@ -2,11 +2,6 @@ using PoAutoRobo.Core.Models;
 
 namespace PoAutoRobo.Core.Pipeline;
 
-public sealed record MixPercentages(int Still, int MultiPanel, int AiVideo, int TitleCard)
-{
-    public static readonly MixPercentages Default = new(50, 20, 20, 10);
-}
-
 public static class VisualMix
 {
     /// <summary>Largest-remainder split of <paramref name="clipCount"/> clips; ties go to the earlier kind.</summary>
@@ -27,6 +22,10 @@ public static class VisualMix
         return counts;
     }
 
+    /// <summary>A clip that changes kind starts clean: its old picture belongs to the kind it had.</summary>
+    private static Clip WithKind(Clip clip, VisualKind kind) =>
+        clip.Visual.Kind == kind ? clip : clip with { Visual = new VisualSpec(kind) };
+
     /// <summary>Deals kinds to clips using <see cref="Episode.MixSeed"/>. User footage and hand-picked kinds are untouched.</summary>
     public static Episode Assign(Episode episode, MixPercentages mix)
     {
@@ -40,7 +39,7 @@ public static class VisualMix
         var next = 0;
         return episode with
         {
-            Clips = [.. episode.Clips.Select(c => Eligible(c) ? c with { Visual = c.Visual with { Kind = deck[next++] } } : c)],
+            Clips = [.. episode.Clips.Select(c => Eligible(c) ? WithKind(c, deck[next++]) : c)],
         };
     }
 }

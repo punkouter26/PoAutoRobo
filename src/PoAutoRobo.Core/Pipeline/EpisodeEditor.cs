@@ -53,6 +53,22 @@ public static class EpisodeEditor
     public static Episode RemoveVideo(Episode episode, Guid clipId) =>
         Update(episode, clipId, c => c with { NarrationRate = 1.0, Visual = new VisualSpec(VisualKind.TitleCard) });
 
+    public static Episode SetMix(Episode episode, MixPercentages mix) => VisualMix.Assign(episode with { Mix = mix }, mix);
+
+    /// <summary>Same proportions, dealt to different clips.</summary>
+    public static Episode RerollMix(Episode episode, int newSeed) => VisualMix.Assign(episode with { MixSeed = newSeed }, episode.Mix);
+
+    /// <summary>The user's own choice for one clip; mix changes and re-rolls leave it alone from then on.</summary>
+    public static Episode SetKind(Episode episode, Guid clipId, VisualKind kind)
+    {
+        if (kind == VisualKind.UserVideo)
+            throw new ArgumentException("Attach a video to make a clip use your own footage.", nameof(kind));
+        return Update(episode, clipId, c => c with
+        {
+            Visual = c.Visual.Kind == kind ? c.Visual with { KindLocked = true } : new VisualSpec(kind, KindLocked: true),
+        });
+    }
+
     /// <summary>Replaces one clip's picture settings, leaving any edits made to the rest of the episode meanwhile.</summary>
     public static Episode SetVisual(Episode episode, Guid clipId, VisualSpec visual) => Update(episode, clipId, c => c with { Visual = visual });
 

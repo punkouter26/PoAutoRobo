@@ -398,6 +398,14 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // ---- Visual mix ----
+
+    public MixPercentages Mix => Episode?.Mix ?? MixPercentages.Default;
+
+    public void ApplyMix(MixPercentages mix) => Edit(e => EpisodeEditor.SetMix(e, mix));
+
+    public void RerollMix() => Edit(e => EpisodeEditor.RerollMix(e, Random.Shared.Next()));
+
     // ---- Captions ----
 
     public CaptionStyle Captions => Episode?.Captions ?? new CaptionStyle();

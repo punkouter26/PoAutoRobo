@@ -86,7 +86,11 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
                 var index = i;
                 var clipProgress = progress is null ? null : new Relay(p => progress.Report((index + p) / count / 2));
                 pictures.Add(Path.Combine(work, $"clip_{i:00}.mp4"));
-                await ffmpeg.RunAsync(FfmpegArgs.ClipVideo(source, input, slots[i].VideoLength, preset, pictures[i]), work, slots[i].VideoLength, clipProgress, ct);
+                var panels = PanelsFor(episode.Clips[i]);
+                var args = panels.Count > 1
+                    ? FfmpegArgs.PanelsVideo(panels, slots[i].VideoLength, preset, pictures[i])
+                    : FfmpegArgs.ClipVideo(source, input, slots[i].VideoLength, preset, pictures[i]);
+                await ffmpeg.RunAsync(args, work, slots[i].VideoLength, clipProgress, ct);
             }
 
             if (captions is not null)
@@ -117,12 +121,18 @@ public sealed partial class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmp
     /// <summary>Uses the clip's footage or generated media when the file exists; otherwise a title card.</summary>
     private static (ClipSource Source, string Input) PictureFor(Clip clip)
     {
-        var path = clip.Visual.UserVideoPath ?? clip.Visual.MediaPaths?.FirstOrDefault();
+        var path = clip.Visual.Kind == VisualKind.TitleCard ? null : clip.Visual.UserVideoPath ?? clip.Visual.MediaPaths?.FirstOrDefault();
         if (path is null || !File.Exists(path))
             return (ClipSource.TitleCard, "");
         var isVideo = VideoExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
         return (isVideo ? ClipSource.Video : ClipSource.Image, Path.GetFullPath(path));
     }
+
+    /// <summary>The pictures of a panel sequence that are on disk; fewer than two means it is not rendered as a sequence.</summary>
+    private static List<string> PanelsFor(Clip clip) =>
+        clip.Visual.Kind == VisualKind.MultiPanel
+            ? [.. (clip.Visual.MediaPaths ?? []).Where(p => File.Exists(p) && !VideoExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)).Select(Path.GetFullPath)]
+            : [];
 
     public static string Slug(string title)
     {

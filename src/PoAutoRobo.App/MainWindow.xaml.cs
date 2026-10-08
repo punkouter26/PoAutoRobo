@@ -30,6 +30,16 @@ public sealed partial class MainWindow : WindowEx
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
+    private async void OnVisualMix(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Views.MixDialog(ViewModel.Mix) { XamlRoot = Content.XamlRoot };
+        switch (await dialog.ShowAsync())
+        {
+            case ContentDialogResult.Primary: ViewModel.ApplyMix(dialog.Mix); break;
+            case ContentDialogResult.Secondary: ViewModel.RerollMix(); break;
+        }
+    }
+
     private async void OnHostSetup(object sender, RoutedEventArgs e) =>
         await new Views.HostSetupDialog(ViewModel) { XamlRoot = Content.XamlRoot }.ShowAsync();
 

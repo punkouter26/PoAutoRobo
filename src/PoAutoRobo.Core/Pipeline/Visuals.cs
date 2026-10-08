@@ -46,8 +46,13 @@ public sealed class Visuals(IImageGen images, MediaCache cache, string character
         return new ImageRequest($"{Style} {script.VisualPrompt} {host} The host is {script.Pose}. What the host is saying, for context only: {script.Dialogue}", HasSheet ? characterSheetPath : null);
     }
 
-    /// <summary>Generates the clip's picture, or reuses the cached one for an identical request.</summary>
-    // ponytail: panel sequences and AI video get one still for now; T20 and T21 replace this with the real thing.
+    /// <summary>Pictures in a panel sequence.</summary>
+    public const int PanelCount = 3;
+
+    private static readonly string[] Beats = ["the setup", "the key moment", "the result"];
+
+    /// <summary>Generates the clip's picture or panel sequence, reusing cached files for identical requests.</summary>
+    // ponytail: AI video clips get one still until the video service is wired in (T20).
     public async Task<Episode> GenerateAsync(Episode episode, Guid clipId, CancellationToken ct)
     {
         var clip = episode.Clips.FirstOrDefault(c => c.Id == clipId)
@@ -55,7 +60,15 @@ public sealed class Visuals(IImageGen images, MediaCache cache, string character
         var request = RequestFor(clip);
         var reference = request.ReferencePath is null ? "" : MediaCache.ContentHash(request.ReferencePath);
 
-        var path = await cache.GetOrCreateAsync([model, request.Size, request.Prompt, reference], ".png", scratch => images.GenerateAsync(request, scratch, ct));
-        return EpisodeEditor.Update(episode, clipId, c => c with { Visual = c.Visual with { MediaPaths = [path], Stale = false } });
+        var prompts = clip.Visual.Kind == VisualKind.MultiPanel
+            ? Beats.Select((beat, i) => $"{request.Prompt} This is panel {i + 1} of {PanelCount} in a sequence and shows {beat}.")
+            : [request.Prompt];
+        var paths = new List<string>();
+        foreach (var prompt in prompts)
+        {
+            var panel = request with { Prompt = prompt };
+            paths.Add(await cache.GetOrCreateAsync([model, panel.Size, panel.Prompt, reference], ".png", scratch => images.GenerateAsync(panel, scratch, ct)));
+        }
+        return EpisodeEditor.SetVisual(episode, clipId, clip.Visual with { MediaPaths = paths, Stale = false });
     }
 }

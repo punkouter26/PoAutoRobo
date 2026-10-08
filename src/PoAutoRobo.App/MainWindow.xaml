@@ -103,6 +103,7 @@
             <StackPanel Orientation="Horizontal" Spacing="8" Padding="16,12,16,0">
                 <Button x:Name="GenerateAllButton" Content="Generate pictures" Command="{x:Bind ViewModel.GenerateAllCommand}" />
                 <Button Content="Stop" Command="{x:Bind ViewModel.GenerateAllCancelCommand}" Visibility="{x:Bind ViewModel.GenerateAllCommand.IsRunning, Mode=OneWay}" />
+                <Button x:Name="MixButton" Content="Visual mix" Click="OnVisualMix" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}" />
                 <Button x:Name="HostButton" Content="Host" Click="OnHostSetup" IsEnabled="{x:Bind ViewModel.PicturesAvailable}" />
             </StackPanel>
             <GridView x:Name="ClipDeck" Grid.Row="1" Padding="16" ItemsSource="{x:Bind ViewModel.Clips}"

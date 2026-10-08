@@ -18,6 +18,13 @@
                 <Run Text="{x:Bind ViewModel.SelectedClip.Pose, Mode=OneWay}" />
             </TextBlock>
         </Border>
+        <ComboBox x:Name="KindBox" Header="Picture type" HorizontalAlignment="Stretch" IsEnabled="{x:Bind ViewModel.SelectedClip.CanPickKind, Mode=OneWay}"
+                  SelectedIndex="{x:Bind ViewModel.SelectedClip.KindIndex, Mode=TwoWay}">
+            <ComboBoxItem Content="Still panel" />
+            <ComboBoxItem Content="Panel sequence" />
+            <ComboBoxItem Content="AI video" />
+            <ComboBoxItem Content="Title card" />
+        </ComboBox>
         <Button x:Name="GeneratePictureButton" Content="Generate picture" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.GeneratePictureCommand}" />
         <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.GeneratePictureCommand.IsRunning, Mode=OneWay}" />
         <Button x:Name="AuditionButton" Content="Audition audio" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.AuditionCommand}" />

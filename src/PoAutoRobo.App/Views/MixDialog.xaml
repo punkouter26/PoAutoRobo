@@ -1,0 +1,21 @@
+<ContentDialog
+    x:Class="PoAutoRobo.App.Views.MixDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Visual mix"
+    PrimaryButtonText="Apply"
+    SecondaryButtonText="Re-roll"
+    CloseButtonText="Close"
+    DefaultButton="Primary">
+    <StackPanel Width="380" Spacing="12">
+        <TextBlock TextWrapping="Wrap"
+                   Text="Choose what share of clips gets each kind of picture. Clips using your own video, and clips whose picture type you set by hand, are left as they are." />
+        <Slider x:Name="StillSlider" Header="Still panel: one picture with a slow pan and zoom" Maximum="100" StepFrequency="5" ValueChanged="OnChanged" />
+        <Slider x:Name="PanelsSlider" Header="Panel sequence: three pictures cut to the voice" Maximum="100" StepFrequency="5" ValueChanged="OnChanged" />
+        <Slider x:Name="VideoSlider" Header="AI video: short generated shots" Maximum="100" StepFrequency="5" ValueChanged="OnChanged" />
+        <Slider x:Name="TitleSlider" Header="Title card: text only, no cost" Maximum="100" StepFrequency="5" ValueChanged="OnChanged" />
+        <TextBlock x:Name="TotalText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+        <TextBlock TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                   Text="Re-roll keeps the current shares and deals them to different clips." />
+    </StackPanel>
+</ContentDialog>

@@ -67,6 +67,28 @@ public static class FfmpegArgs
         return [.. inputArgs, "-vf", filter, "-t", Seconds(length), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-y", output];
     }
 
+    /// <summary>Renders a panel sequence: each picture gets an equal share of the clip, with its own pan and zoom.</summary>
+    public static IReadOnlyList<string> PanelsVideo(IReadOnlyList<string> images, TimeSpan length, ExportPreset preset, string output)
+    {
+        var (w, h, fps) = preset;
+        var total = (int)Math.Round(length.TotalSeconds * fps);
+        var graph = new List<string>();
+        for (var i = 0; i < images.Count; i++)
+        {
+            var frames = total / images.Count + (i < total % images.Count ? 1 : 0); // spare frames go to the first panels
+            graph.Add(
+                $"[{i}:v]scale={2 * w}:{2 * h}:force_original_aspect_ratio=increase,crop={2 * w}:{2 * h}," +
+                $"zoompan=z='1+0.08*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}[p{i}]");
+        }
+        graph.Add($"{string.Concat(images.Select((_, i) => $"[p{i}]"))}concat=n={images.Count}:v=1:a=0,format=yuv420p[v]");
+        return
+        [
+            .. images.SelectMany(path => new[] { "-i", path }),
+            "-filter_complex", string.Join(';', graph), "-map", "[v]",
+            "-t", Seconds(length), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-y", output,
+        ];
+    }
+
     /// <summary>Joins the clip pictures and narration into the finished file.</summary>
     public static IReadOnlyList<string> Master(
         IReadOnlyList<string> videos, IReadOnlyList<string> audios, IReadOnlyList<Slot> slots,

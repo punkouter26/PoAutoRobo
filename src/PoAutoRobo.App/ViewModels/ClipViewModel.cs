@@ -8,7 +8,7 @@ namespace PoAutoRobo.App.ViewModels;
 public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edit) : ObservableObject
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Heading), nameof(DurationText), nameof(KindText), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(IsStale), nameof(HasUserVideo), nameof(ThumbnailPath))]
+    [NotifyPropertyChangedFor(nameof(Heading), nameof(DurationText), nameof(KindText), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(IsStale), nameof(HasUserVideo), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath))]
     public partial Clip Clip { get; set; } = clip;
 
     [ObservableProperty]
@@ -41,6 +41,21 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
         VisualKind.UserVideo => "My video",
         _ => "Title card",
     };
+
+    private static readonly VisualKind[] PickableKinds = [VisualKind.Still, VisualKind.MultiPanel, VisualKind.AiVideo, VisualKind.TitleCard];
+
+    public bool CanPickKind => !HasUserVideo;
+
+    /// <summary>Picture type as the inspector's list shows it; -1 for the user's own video, which is not in the list.</summary>
+    public int KindIndex
+    {
+        get => Array.IndexOf(PickableKinds, Clip.Visual.Kind);
+        set
+        {
+            if (value >= 0 && value < PickableKinds.Length && value != KindIndex)
+                edit(e => EpisodeEditor.SetKind(e, Id, PickableKinds[value]));
+        }
+    }
 
     public int TierIndex
     {
