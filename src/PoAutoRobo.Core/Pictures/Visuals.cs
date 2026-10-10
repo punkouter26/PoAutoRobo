@@ -78,6 +78,58 @@ public sealed class Visuals(ImageMaker images, MediaCache cache, string characte
     /// <summary>Writes a scene in code and renders it to a video as long as the clip.</summary>
     public Func<SceneRequest, string, CancellationToken, Task>? Scene { get; init; }
 
+    /// <summary>Thinks of another picture for a clip whose own was declined; null when there is nobody to ask.</summary>
+    public Func<Clip, CancellationToken, Task<SaferPicture>>? Rethink { get; init; }
+
+    /// <summary>
+    /// Makes what the clip shows, as <see cref="DrawAsync"/> does. When the picture service will not draw it, the
+    /// clip is given a picture it will: first the same idea described as a diagram, then a stock photograph of the
+    /// place or object, then a diagram drawn in code, and failing all of those a title card.
+    /// </summary>
+    /// <returns>
+    /// The clip as it was drawn (itself, or with the description or picture type that was used in its place), its
+    /// files, and for a clip that was changed a sentence saying how, fit to show.
+    /// </returns>
+    public async Task<(Clip Drawn, IReadOnlyList<string> Paths, string? Change)> DrawOrSubstituteAsync(Clip clip, Look look, CancellationToken ct)
+    {
+        try
+        {
+            return (clip, await DrawAsync(clip, look, ct), null);
+        }
+        catch (PictureDeclinedException declined) when (Rethink is not null)
+        {
+            SaferPicture safer;
+            try
+            {
+                safer = await Rethink(clip, ct);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                throw declined; // nothing better was thought of, so the first answer is the one to give
+            }
+
+            var why = $"The picture service would not draw “{clip.Title}” as described{(declined.Flagged is null ? "" : $" ({declined.Flagged})")}";
+            (Clip Clip, string Change)[] substitutes =
+            [
+                (EpisodeEditor.WithVisualPrompt(clip, safer.Diagram), $"{why}, so it was described again as a diagram."),
+                (EpisodeEditor.WithVisualPrompt(clip, safer.SearchWords) with { Visual = new VisualSpec(VisualKind.Stock, KindLocked: true) }, $"{why}, so it shows a stock photograph."),
+                (EpisodeEditor.WithVisualPrompt(clip, safer.Diagram) with { Visual = new VisualSpec(VisualKind.Animation, KindLocked: true) }, $"{why}, so it shows an animated diagram."),
+            ];
+            foreach (var (substitute, change) in substitutes.Where(s => CanMake(s.Clip.Visual.Kind)))
+            {
+                try
+                {
+                    return (substitute, await DrawAsync(substitute, look, ct), change);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Declined as well, or nothing found, or the diagram's code would not run: the next is tried.
+                }
+            }
+            return (clip with { Visual = new VisualSpec(VisualKind.TitleCard, KindLocked: true) }, [], $"{why}, and nothing else could be made in its place, so it shows its title.");
+        }
+    }
+
     public bool CanMake(VisualKind kind) => kind switch
     {
         VisualKind.Stock => Stock is not null,

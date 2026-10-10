@@ -132,6 +132,29 @@ public static class EpisodeEditor
         return Update(episode, requested.Id, c => c with { Visual = c.Visual with { MediaPaths = paths, Stale = !stillDescribesIt, Take = requested.Visual.Take, EarlierTakes = earlier } });
     }
 
+    /// <summary>The clip with its active depth's picture described as <paramref name="prompt"/>.</summary>
+    public static Clip WithVisualPrompt(Clip clip, string prompt) => clip with
+    {
+        Scripts = clip.Scripts.ToDictionary(s => s.Key, s => s.Key == clip.ActiveTier ? s.Value with { VisualPrompt = prompt } : s.Value),
+    };
+
+    /// <summary>
+    /// Puts in a clip's place the clip that was drawn instead of it, with its files, when the picture asked for
+    /// could not be made as described. Only when the clip is still as it was when its picture was asked for: any
+    /// change made to it meanwhile wins, and what was drawn is dropped.
+    /// </summary>
+    public static Episode ApplySubstitute(Episode episode, Clip requested, Clip drawn, IReadOnlyList<string> paths)
+    {
+        var current = episode.Clips.FirstOrDefault(c => c.Id == requested.Id);
+        if (current is null || current.Active != requested.Active || current.Visual.Kind != requested.Visual.Kind || current.Visual.UserVideoPath is not null)
+            return episode;
+        // The words, depths and place in the episode are the clip's own; the description, picture type and files are what was drawn.
+        return Update(episode, requested.Id, c => WithVisualPrompt(c, drawn.Active.VisualPrompt) with
+        {
+            Visual = drawn.Visual with { MediaPaths = paths.Count > 0 ? paths : null, EarlierTakes = c.Visual.EarlierTakes },
+        });
+    }
+
     /// <summary>The clip as it would be asked for once more: the same words, a fresh attempt at the picture.</summary>
     public static Clip NextTake(Clip clip) =>
         clip with { Visual = clip.Visual with { Take = Math.Max(clip.Visual.Take, clip.Visual.EarlierTakes?.Count ?? 0) + 1 } };

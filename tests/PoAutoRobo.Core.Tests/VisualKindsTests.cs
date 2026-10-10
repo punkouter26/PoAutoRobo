@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace PoAutoRobo.Core.Tests;
 
@@ -412,5 +413,55 @@ public sealed class VisualKindsTests : IDisposable
         File.WriteAllText(Path.Combine(jobs, Files.TextHash($"{Live.VideoDeployment}|a bridge")[..32] + ".job"), "video_old");
         await new AzureVideoGen(Live, new HttpClient(gone), jobs).GenerateAsync("a bridge", output, Ct);
         Assert.Equal([8], File.ReadAllBytes(output));
+    }
+
+    [Fact]
+    public async Task A_picture_the_service_will_not_draw_is_made_another_way_a_diagram_then_a_photograph_then_code_then_its_title()
+    {
+        var clip = Clip(VisualKind.Still);
+        var episode = ProjectStoreTests.NewEpisode(1) with { Clips = [clip] };
+        var rethought = new SaferPicture("A labelled diagram of the stages.", "stone tower");
+        // The picture model draws diagrams and nothing else.
+        var picky = Substitute.For<ImageMaker>();
+        picky.Invoke(default!, default!, default).ReturnsForAnyArgs(call =>
+        {
+            if (!call.Arg<ImageRequest>().Prompt.Contains("diagram", StringComparison.Ordinal)) throw new PictureDeclinedException("violence: medium");
+            File.WriteAllBytes(call.ArgAt<string>(1), [3]);
+            return Task.CompletedTask;
+        });
+        Visuals With(ImageMaker images, bool stock = false, bool scenes = false, string cache = "a") => new(images, new MediaCache(Path.Combine(_folder, cache)), Path.Combine(_folder, "sheet.png"), "test-model")
+        {
+            Rethink = (_, _) => Task.FromResult(rethought),
+            Stock = stock ? (_, _, output, ct) => File.WriteAllBytesAsync(output, [4], ct) : null,
+            Scene = scenes ? (_, output, ct) => File.WriteAllBytesAsync(output, [5], ct) : null,
+        };
+
+        // First the same idea, described as a diagram, in the picture type the clip had.
+        var (drawn, paths, change) = await With(picky).DrawOrSubstituteAsync(clip, Look.Comic, Ct);
+        Assert.Equal((VisualKind.Still, rethought.Diagram), (drawn.Visual.Kind, drawn.Active.VisualPrompt));
+        Assert.Contains("(violence: medium), so it was described again as a diagram", change);
+        var after = EpisodeEditor.ApplySubstitute(episode, clip, drawn, paths).Clips[0];
+        Assert.Equal((rethought.Diagram, paths, clip.Active.Dialogue), (after.Active.VisualPrompt, after.Visual.MediaPaths, after.Active.Dialogue));
+        // A clip changed while its picture was being made keeps the change, and the substitute is dropped.
+        var edited = EpisodeEditor.SetKind(episode, clip.Id, VisualKind.Chart);
+        Assert.Equal(edited, EpisodeEditor.ApplySubstitute(edited, clip, drawn, paths));
+
+        // With a picture model that draws nothing at all: a photograph, then a diagram drawn in code, then the title alone.
+        var never = Substitute.For<ImageMaker>();
+        never.Invoke(default!, default!, default).ThrowsAsyncForAnyArgs(new PictureDeclinedException(null));
+        (drawn, _, change) = await With(never, stock: true, scenes: true, cache: "b").DrawOrSubstituteAsync(clip, Look.Comic, Ct);
+        Assert.Equal((VisualKind.Stock, "stone tower"), (drawn.Visual.Kind, drawn.Active.VisualPrompt));
+        (drawn, _, _) = await With(never, scenes: true, cache: "c").DrawOrSubstituteAsync(clip, Look.Comic, Ct);
+        Assert.Equal((VisualKind.Animation, rethought.Diagram), (drawn.Visual.Kind, drawn.Active.VisualPrompt));
+        (drawn, paths, change) = await With(never, cache: "d").DrawOrSubstituteAsync(clip, Look.Comic, Ct);
+        Assert.Equal(VisualKind.TitleCard, drawn.Visual.Kind);
+        Assert.Empty(paths);
+        Assert.EndsWith("so it shows its title.", change);
+        Assert.Null(EpisodeEditor.ApplySubstitute(episode, clip, drawn, paths).Clips[0].Visual.MediaPaths);
+
+        // A fault is not a refusal: it is reported as it always was, and nothing is made in the picture's place.
+        var broken = Substitute.For<ImageMaker>();
+        broken.Invoke(default!, default!, default).ThrowsAsyncForAnyArgs(new InvalidOperationException("The service answered 500."));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => With(broken, stock: true, cache: "e").DrawOrSubstituteAsync(clip, Look.Comic, Ct));
     }
 }

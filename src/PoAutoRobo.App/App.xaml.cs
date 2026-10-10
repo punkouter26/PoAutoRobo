@@ -45,6 +45,7 @@ public partial class App : Application
         {
             var script = AzureScriptWriter.Create(settings);
             script.Used = viewModel.LogUsage;
+            script.Note = viewModel.Note;
             writer = script;
             narrator = new AzureNarrator(settings) { Used = viewModel.LogUsage };
             var http = AzureImageGen.NewHttpClient();
@@ -62,6 +63,7 @@ public partial class App : Application
                 Stock = stock is null ? null : stock.FindAsync,
                 Video = video is null ? null : video.GenerateAsync,
                 Scene = scenes is null ? null : (request, output, ct) => DrawSceneAsync(script, scenes, request, output, ct),
+                Rethink = script.RethinkPictureAsync,
             };
             script.CanMake = visualsFor(AppPaths.Host, Quality.Medium).CanMake;
         }

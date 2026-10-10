@@ -154,7 +154,7 @@ public sealed class MediaCacheTests : IDisposable
     {
         var handler = new Scripted((HttpStatusCode.BadRequest, """{ "error": { "code": "content_policy_violation", "message": "Your request was rejected by the safety system." } }""", null));
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => ImageGen(handler).GenerateAsync(new ImageRequest("x", null), Output, Ct));
+        var error = await Assert.ThrowsAsync<PictureDeclinedException>(() => ImageGen(handler).GenerateAsync(new ImageRequest("x", null), Output, Ct));
 
         Assert.Contains("rejected by the safety system", error.Message);
         Assert.DoesNotContain(FakeCredential.Token, error.Message);

@@ -376,6 +376,26 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnStatusMessageChanged(string? value) => Remember(value);
 
+    private readonly Microsoft.UI.Dispatching.DispatcherQueue? _ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+    private string? _lastNote;
+
+    /// <summary>
+    /// Something out of the ordinary in how a script or a picture came to be made: a clip left for the user to
+    /// write, a picture made another way. Shown while the job runs and kept in the messages. Safe to call from any thread.
+    /// </summary>
+    public void Note(string message)
+    {
+        if (_ui is null || _ui.HasThreadAccess) Say();
+        else _ui.TryEnqueue(Say);
+
+        void Say()
+        {
+            Remember(message);
+            _lastNote = message;
+            if (IsWorking) ActivityDetail = message;
+        }
+    }
+
     private void Remember(string? message)
     {
         if (string.IsNullOrEmpty(message)) return;
@@ -464,6 +484,7 @@ public partial class MainViewModel : ObservableObject
         var topic = TopicInput.Trim();
         var length = LengthChoices[LengthIndex].Value;
         Skeletons = [.. Enumerable.Repeat("", length.MaxClips)];
+        _lastNote = null;
         IsCreating = true;
         try
         {
@@ -497,6 +518,8 @@ public partial class MainViewModel : ObservableObject
                 _usedBeforeFolder.Clear();
             }
             Open(episode, folder, grounding);
+            // What was said along the way (a clip left for the user to write) is what to read first, on the page it concerns.
+            if (_lastNote is { } note) StatusMessage = note;
             _ = ReviewAsync(quiet: true); // read by an editor while the user looks the clips over; nothing waits for it
         }
         finally

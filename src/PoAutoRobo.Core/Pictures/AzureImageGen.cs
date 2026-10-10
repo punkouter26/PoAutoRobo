@@ -32,6 +32,9 @@ public sealed class AzureImageGen(AppSettings settings, HttpClient http)
             "The picture service is busy. Wait a minute and generate again; pictures already made are kept and not charged twice.",
             HttpCompletionOption.ResponseContentRead, ct);
         var body = await response.Content.ReadAsStringAsync(ct);
+        // Turned away for what it shows, which another picture of the same idea can get past; not a fault, which it cannot.
+        if (!response.IsSuccessStatusCode && ScriptDeclinedException.FilterVerdict(body) is { } verdict)
+            throw new PictureDeclinedException(verdict.Length > 0 ? verdict : null, AzureRest.ErrorMessage(body));
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException(AzureRest.Failure("The picture could not be made.", response, body));
 

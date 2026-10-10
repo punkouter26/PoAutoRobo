@@ -27,6 +27,11 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
     private sealed record DriftDto(bool CoreChanged);
     private sealed record RewriteDto(string Dialogue);
     private sealed record ReviewDto(List<ClipNote> Notes);
+    private sealed record PlannedClipDto(string Title, string Kind, string About);
+    private sealed record OutlineDto(string Title, List<PlannedClipDto> Clips);
+
+    /// <summary>Told, in words fit to show, of anything out of the ordinary in how a script came to be written.</summary>
+    public Action<string>? Note { get; set; }
 
     /// <summary>Told what each request used: its name in the spend log, how many tokens, and their price when the rates are known.</summary>
     public Action<string, int, decimal>? Used { get; set; }
@@ -53,26 +58,37 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
             };
             ChatMessage[] messages = [new SystemChatMessage(system), new UserChatMessage(user)];
             var reply = new StringBuilder();
-            await foreach (var update in client.GetChatClient(deployment).CompleteChatStreamingAsync(messages, chatOptions, ct))
+            try
             {
-                // A declined or cut-off reply is not valid JSON; say what happened instead of "could not be read".
-                if (!string.IsNullOrEmpty(update.RefusalUpdate) || update.FinishReason == ChatFinishReason.ContentFilter)
-                    throw new InvalidOperationException("The script service declined this request. Reword the topic and try again.");
-                if (update.FinishReason == ChatFinishReason.Length)
-                    throw new InvalidOperationException("The script was cut off before it finished. Choose a shorter episode length and try again.");
-                if (update.Usage is { } usage)
+                await foreach (var update in client.GetChatClient(deployment).CompleteChatStreamingAsync(messages, chatOptions, ct))
                 {
-                    var cached = usage.InputTokenDetails?.CachedTokenCount ?? 0;
-                    var rates = deployment == settings.FastChatDeployment ? settings.FastChatRates : settings.ChatRates;
-                    writer?.Used?.Invoke(SpendLog.ScriptTokens, usage.TotalTokenCount, rates?.Cost(usage.InputTokenCount, cached, usage.OutputTokenCount) ?? 0);
-                    if (cached > 0)
-                        writer?.Used?.Invoke(SpendLog.CachedScriptTokens, cached, 0); // shows whether the long, unchanging prompt is being reused
+                    // A declined or cut-off reply is not valid JSON; say what happened, and what did it, instead of "could not be read".
+                    if (!string.IsNullOrEmpty(update.RefusalUpdate))
+                        throw new ScriptDeclinedException(DeclinedBy.Model, null, deployment);
+                    if (update.FinishReason == ChatFinishReason.ContentFilter)
+                        throw new ScriptDeclinedException(DeclinedBy.ReplyFilter, null, deployment);
+                    if (update.FinishReason == ChatFinishReason.Length)
+                        throw new InvalidOperationException("The script was cut off before it finished. Choose a shorter episode length and try again.");
+                    if (update.Usage is { } usage)
+                    {
+                        var cached = usage.InputTokenDetails?.CachedTokenCount ?? 0;
+                        var rates = deployment == settings.FastChatDeployment ? settings.FastChatRates : settings.ChatRates;
+                        writer?.Used?.Invoke(SpendLog.ScriptTokens, usage.TotalTokenCount, rates?.Cost(usage.InputTokenCount, cached, usage.OutputTokenCount) ?? 0);
+                        if (cached > 0)
+                            writer?.Used?.Invoke(SpendLog.CachedScriptTokens, cached, 0); // shows whether the long, unchanging prompt is being reused
+                    }
+                    foreach (var part in update.ContentUpdate)
+                    {
+                        reply.Append(part.Text);
+                        onText?.Invoke(part.Text);
+                    }
                 }
-                foreach (var part in update.ContentUpdate)
-                {
-                    reply.Append(part.Text);
-                    onText?.Invoke(part.Text);
-                }
+            }
+            // The filter in front of the model turns a request away with an ordinary "bad request", and says in the
+            // reply which kind of content it objected to and how strongly. That is worth telling apart from a fault.
+            catch (System.ClientModel.ClientResultException e) when (e.Status == 400 && ScriptDeclinedException.FilterVerdict(e.GetRawResponse()?.Content.ToString() ?? "") is { } verdict)
+            {
+                throw new ScriptDeclinedException(DeclinedBy.RequestFilter, verdict.Length > 0 ? verdict : null, deployment);
             }
             return reply.ToString();
         });
@@ -100,17 +116,29 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
 
         IReadOnlyList<KindInfo> kinds = [.. Visuals.Kinds.Where(k => CanMake(k.Kind))];
         var (system, schema) = (ScriptSchemas.System(subject, kinds), ScriptSchemas.Episode(kinds));
-        var draft = await Ask<EpisodeDto>(settings.ChatDeployment, system, prompt.ToString(), "episode", schema, watch, ct);
-        // Too many clips are simply trimmed below. Too few is topped up once, asking only for the clips that are missing
-        // so the ones already paid for are kept.
-        if (draft.Clips.Count < length.MinClips)
+        EpisodeDto draft;
+        try
         {
-            var missing = length.MinClips - draft.Clips.Count;
-            prompt.AppendLine().AppendLine(
-                $"Your last answer had only {draft.Clips.Count} clips: {string.Join("; ", draft.Clips.Select(c => c.Title))}. " +
-                $"Write {missing} more on subtopics those do not cover, and return only the new clips.");
-            var more = await Ask<EpisodeDto>(settings.ChatDeployment, system, prompt.ToString(), "episode", schema, null, ct);
-            draft = draft with { Clips = [.. draft.Clips, .. more.Clips] };
+            draft = await Ask<EpisodeDto>(settings.ChatDeployment, system, prompt.ToString(), "episode", schema, watch, ct);
+            // Too many clips are simply trimmed below. Too few is topped up once, asking only for the clips that are missing
+            // so the ones already paid for are kept.
+            if (draft.Clips.Count < length.MinClips)
+            {
+                var missing = length.MinClips - draft.Clips.Count;
+                prompt.AppendLine().AppendLine(
+                    $"Your last answer had only {draft.Clips.Count} clips: {string.Join("; ", draft.Clips.Select(c => c.Title))}. " +
+                    $"Write {missing} more on subtopics those do not cover, and return only the new clips.");
+                var more = await Ask<EpisodeDto>(settings.ChatDeployment, system, prompt.ToString(), "episode", schema, null, ct);
+                draft = draft with { Clips = [.. draft.Clips, .. more.Clips] };
+            }
+        }
+        // A whole script is one reply, so one passage turned away loses all of it. It is then written a clip at a
+        // time, and only the clip in question is lost. Not when the topic itself was turned away before the model
+        // saw it: every piece would carry the same topic and meet the same answer.
+        catch (ScriptDeclinedException declined) when (declined.By != DeclinedBy.RequestFilter)
+        {
+            Note?.Invoke($"{declined.What} Writing it one clip at a time, so that only the clip in question is lost.");
+            draft = await WriteInPiecesAsync(prompt.ToString(), subject, kinds, length, clipsWritten, ct);
         }
         if (draft.Clips.Count < length.MinClips)
             throw new InvalidDataException($"The script came back with only {draft.Clips.Count} clips. Please try again.");
@@ -121,6 +149,52 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
             new VisualSpec(Visuals.KindFor(c.Kind)), HostVisible: subject != Subject.Essay)).ToList();
         return new Episode(draft.Title, topic, clips, MixSeed: Random.Shared.Next()) { Subject = subject };
     }
+
+    /// <summary>What a clip the model would not write says until the user writes it.</summary>
+    public const string LeftToWrite = "Write what the narrator says here. The script service would not write this clip.";
+
+    /// <summary>
+    /// The same episode as one plan and then one request a clip. A clip that is turned away is left for the user to
+    /// write, under the title and picture the plan gave it, and the rest are written as usual.
+    /// </summary>
+    /// <param name="request">The request as it was made for the whole script: the number of clips, the topic and the references.</param>
+    private async Task<EpisodeDto> WriteInPiecesAsync(string request, Subject subject, IReadOnlyList<KindInfo> kinds, EpisodeLength length, IProgress<IReadOnlyList<string>>? clipsWritten, CancellationToken ct)
+    {
+        var outline = await Ask<OutlineDto>(settings.ChatDeployment, ScriptSchemas.OutlineSystem(subject, kinds), request, "outline", ScriptSchemas.Outline(kinds), null, ct);
+        var planned = outline.Clips.Take(length.MaxClips).ToList();
+        var plan = string.Join('\n', planned.Select((c, i) => $"{i + 1}. {c.Title}: {c.About}"));
+        var clips = new List<ClipDto>(planned.Count);
+        var left = new List<string>();
+        for (var i = 0; i < planned.Count; i++)
+        {
+            var clip = planned[i];
+            var mine = new StringBuilder(request).AppendLine()
+                .Append(Fenced("existing", " what=\"the plan of the whole video\"", $"{outline.Title}\n{plan}"))
+                .AppendLine($"Write clip {i + 1} of {planned.Count}.")
+                .AppendLine(kinds.FirstOrDefault(k => k.Key == clip.Kind) is { } kind ? $"Picture type: {kind.Key}. {kind.Brief}" : "Picture type: title. visualPrompt: the title.");
+            try
+            {
+                clips.Add(new ClipDto(clip.Title, await Ask<TierDto>(settings.ChatDeployment, ScriptSchemas.ClipSystem(subject), mine.ToString(), "tier", ScriptSchemas.Tier, null, ct), clip.Kind));
+            }
+            catch (ScriptDeclinedException)
+            {
+                // Kept as a title card: there is nothing yet to draw a picture of.
+                clips.Add(new ClipDto(clip.Title, new TierDto(LeftToWrite, clip.About, "none"), "title"));
+                left.Add(clip.Title);
+            }
+            clipsWritten?.Report([.. clips.Select(c => c.Title)]);
+        }
+        if (left.Count == planned.Count)
+            throw new ScriptDeclinedException(DeclinedBy.Model, null, settings.ChatDeployment); // nothing was written: there is no episode to hand back
+        if (left.Count > 0)
+            Note?.Invoke($"{(left.Count == 1 ? "1 clip was" : $"{left.Count} clips were")} left for you to write, as the script service would not: {string.Join(", ", left)}.");
+        return new EpisodeDto(outline.Title, clips);
+    }
+
+    public async Task<SaferPicture> RethinkPictureAsync(Clip clip, CancellationToken ct) =>
+        await Ask<SaferPicture>(settings.FastChatDeployment, ScriptSchemas.RethinkSystem,
+            Fenced("existing", " what=\"the picture that was declined\"", clip.Active.VisualPrompt) + Fenced("existing", " what=\"what the narrator says over it\"", clip.Active.Dialogue),
+            "rethink", ScriptSchemas.Rethink, null, ct);
 
     public async Task<Scene> WriteSceneAsync(SceneRequest request, CancellationToken ct, Scene? failed = null, string? problem = null)
     {
@@ -205,8 +279,20 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
         {
             var value = JsonSerializer.Deserialize<T>(reply, Json);
             // The serializer checks every field, but not for a null in the middle of a list.
-            if (value is null || (value is EpisodeDto episode && episode.Clips.Contains(null!)))
+            if (value is null || (value is EpisodeDto episode && episode.Clips.Contains(null!)) || (value is OutlineDto outline && outline.Clips.Contains(null!)))
                 throw new JsonException("Reply is missing required fields.");
+            // Some models answer in exactly the shape asked, with "I cannot assist with that" where the script should
+            // be. Taken at its word that would be saved, voiced and drawn as an episode.
+            string[] words = value switch
+            {
+                EpisodeDto script => [script.Title, .. script.Clips.Select(c => c.B.Dialogue)],
+                OutlineDto plan => [plan.Title, .. plan.Clips.Select(c => c.About)],
+                TierDto tier => [tier.Dialogue],
+                RewriteDto rewrite => [rewrite.Dialogue],
+                _ => [],
+            };
+            if (words.Any(ScriptDeclinedException.IsRefusal))
+                throw new ScriptDeclinedException(DeclinedBy.Model, null, deployment);
             return value;
         }
         catch (JsonException e)

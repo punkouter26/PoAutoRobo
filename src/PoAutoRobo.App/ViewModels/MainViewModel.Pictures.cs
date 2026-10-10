@@ -159,13 +159,22 @@ public partial class MainViewModel
         card?.IsBusy = true;
         try
         {
-            var paths = await CurrentVisuals!.DrawAsync(clip, Look, ct);
+            // When the picture service will not draw the clip as described, it is given a picture it will, and told so.
+            var (drawn, paths, change) = await CurrentVisuals!.DrawOrSubstituteAsync(clip, Look, ct);
             // Footage and animations have no picture of their own; a frame is taken to stand for them on the card.
             if (FfmpegAvailable)
                 foreach (var video in paths.Where(path => EpisodeBuilder.VideoExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) && !File.Exists(Clip.PosterFor(path))))
                     await _builder.PosterAsync(video, ct);
             // Attached to the clip as it is now: footage, a new picture type or changed words since the request win.
-            Edit(e => EpisodeEditor.ApplyPicture(e, clip, paths));
+            if (change is null)
+            {
+                Edit(e => EpisodeEditor.ApplyPicture(e, clip, paths));
+            }
+            else
+            {
+                Edit(e => EpisodeEditor.ApplySubstitute(e, clip, drawn, paths));
+                Note(change);
+            }
             return null;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

@@ -68,6 +68,9 @@ public sealed class MockScriptWriter : IScriptWriter
             ["#robotics"]));
 
     /// <summary>What the scene shows, as words that fade in over a bar that fills: enough to exercise the renderer offline.</summary>
+    public Task<SaferPicture> RethinkPictureAsync(Clip clip, CancellationToken ct) =>
+        Task.FromResult(new SaferPicture($"A clean labelled diagram about {clip.Title.ToLowerInvariant()}.", clip.Title.ToLowerInvariant()));
+
     public Task<IReadOnlyList<ClipNote>> ReviewAsync(Episode episode, CancellationToken ct) => Task.FromResult<IReadOnlyList<ClipNote>>([]);
 
     public Task<Scene> WriteSceneAsync(SceneRequest request, CancellationToken ct, Scene? failed = null, string? problem = null) => Task.FromResult(new Scene(
