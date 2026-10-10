@@ -9,16 +9,28 @@
     <StackPanel Width="{StaticResource CardWidth}" Spacing="4" Padding="4" ToolTipService.ToolTip="{x:Bind Card.Heading, Mode=OneWay}">
         <Grid Height="{StaticResource CardPictureHeight}" CornerRadius="4" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
             <Image Source="{x:Bind local:ClipCard.ToImage(Card.ThumbnailPath), Mode=OneWay}" Stretch="UniformToFill" AutomationProperties.Name="Clip picture" />
-            <!-- One mark for everything worth a second look; pointing at it says what -->
-            <Border Style="{StaticResource Badge}" HorizontalAlignment="Left" VerticalAlignment="Top" Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
-                    Visibility="{x:Bind app:Ui.ShowText(Card.Warnings), Mode=OneWay}" ToolTipService.ToolTip="{x:Bind Card.Warnings, Mode=OneWay}"
-                    AutomationProperties.Name="{x:Bind Card.Warnings, Mode=OneWay}">
-                <FontIcon Glyph="&#xE7BA;" FontSize="12" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-            </Border>
+            <!-- A mark for each kind of thing worth a second look, told apart by sign and colour; pointing at one says what -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="6" HorizontalAlignment="Left" VerticalAlignment="Top" AutomationProperties.Name="{x:Bind Card.Warnings, Mode=OneWay}">
+                <!-- The picture no longer matches the words: it wants making again -->
+                <Border Style="{StaticResource Mark}" Background="{ThemeResource SystemFillColorAttentionBackgroundBrush}"
+                        Visibility="{x:Bind app:Ui.ShowText(Card.StaleWarning), Mode=OneWay}" ToolTipService.ToolTip="{x:Bind Card.StaleWarning, Mode=OneWay}">
+                    <FontIcon Glyph="&#xE72C;" FontSize="12" Foreground="{ThemeResource SystemFillColorAttentionBrush}" />
+                </Border>
+                <!-- The clip runs too short or too long -->
+                <Border Style="{StaticResource Mark}" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                        Visibility="{x:Bind app:Ui.ShowText(Card.LengthWarning), Mode=OneWay}" ToolTipService.ToolTip="{x:Bind Card.LengthWarning, Mode=OneWay}">
+                    <FontIcon Glyph="&#xE823;" FontSize="12" />
+                </Border>
+                <!-- The words themselves: a figure not found in the sources, or an editor's note -->
+                <Border Style="{StaticResource Mark}" Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                        Visibility="{x:Bind app:Ui.ShowText(Card.CheckWarning), Mode=OneWay}" ToolTipService.ToolTip="{x:Bind Card.CheckWarning, Mode=OneWay}">
+                    <FontIcon Glyph="&#xE7BA;" FontSize="12" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                </Border>
+            </StackPanel>
             <!-- The clip's state in one strip: depth, picture type, length -->
             <Border Style="{StaticResource Badge}" HorizontalAlignment="Left" VerticalAlignment="Bottom"
                     ToolTipService.ToolTip="Depth of explanation (A accessible, B applied, C advanced), picture type, and length: measured once the voice is recorded, estimated from the word count until then.">
-                <TextBlock Text="{x:Bind Card.Summary, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{x:Bind Card.Summary, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
             </Border>
             <!-- Something is being made for this clip right now; a render says how far it has got -->
             <Grid Background="{ThemeResource SmokeFillColorDefaultBrush}" Visibility="{x:Bind Card.Working, Mode=OneWay}">

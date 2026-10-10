@@ -26,12 +26,16 @@ public sealed class AssCaptionsTests
     private static string Plain(string text) =>
         System.Text.RegularExpressions.Regex.Replace(text, @"\{[^}]*\}", "").Replace(@"\N", " ");
 
-    [Theory]
-    [InlineData(CaptionPreset.KaraokeHighlight)]
-    [InlineData(CaptionPreset.TwoLineBlock)]
-    [InlineData(CaptionPreset.ComicBanner)]
-    public Task Preset_snapshot(CaptionPreset preset) =>
-        Verify(AssCaptions.Build(TwoClips, new CaptionStyle(preset))).UseParameters(preset);
+    [Fact]
+    public async Task Preset_snapshot()
+    {
+        await Preset_snapshotCase(CaptionPreset.KaraokeHighlight);
+        await Preset_snapshotCase(CaptionPreset.TwoLineBlock);
+        await Preset_snapshotCase(CaptionPreset.ComicBanner);
+    }
+
+    private Task Preset_snapshotCase(CaptionPreset preset) =>
+        Verify(AssCaptions.Build(TwoClips, new CaptionStyle(preset))).UseTextForParameters($"preset={preset}");
 
     [Fact]
     public void Every_preset_shows_each_caption_exactly_when_its_first_word_is_spoken_and_never_across_two_clips()

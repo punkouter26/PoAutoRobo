@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.AppNotifications.Builder;
 using PoAutoRobo.App.ViewModels;
+using Windows.Storage.Pickers;
 using Windows.System;
 using WinUIEx;
 
@@ -31,15 +32,19 @@ public sealed partial class MainWindow : WindowEx
         ViewModel.Ask = AskAsync;
         ViewModel.JobFinished = OnJobFinished;
         ViewModel.ClipDone = place => Sounds.Play(Cue.Tick, place * 2 - 1); // the ticks travel left to right across the batch
+        ViewModel.PlayCue = cue => Sounds.Play(cue);
         ViewModel.PropertyChanged += OnViewModelChanged;
         _roll.Tick += (_, _) => Roll();
         Activated += (_, e) =>
         {
             _inFront = e.WindowActivationState != WindowActivationState.Deactivated;
-            TopicPage.SetInFront(_inFront);
+            Topic.SetInFront(_inFront);
         };
         Closed += (_, _) =>
         {
+            // A job still running is stopped here and now: FFmpeg and the browser it started would otherwise carry on
+            // working after the window, with nobody to hand the result to.
+            if (ViewModel.IsWorking) ViewModel.CancelActivityCommand.Execute(null);
             ViewModel.Flush();
             if (_toastsReady) AppNotificationManager.Default.Unregister();
         };
@@ -56,7 +61,7 @@ public sealed partial class MainWindow : WindowEx
                 ApplySounds();
                 break;
             case nameof(MainViewModel.IsCreating):
-                if (ViewModel.IsCreating) SkeletonPulse.Begin(); else SkeletonPulse.Stop();
+                Ui.Shimmer(ViewModel.IsCreating); // light crosses the placeholder cards while the script is written
                 break;
             case nameof(MainViewModel.IsWorking) when ViewModel.IsWorking:
                 _shownPercent = 0;
@@ -104,7 +109,7 @@ public sealed partial class MainWindow : WindowEx
     private void OnJobFinished(string job, bool finished)
     {
         ShowTaskbarProgress(null);
-        Sounds.Play(finished ? Cue.Finished : Cue.Stopped); // silent when sounds are off
+        Sounds.Play(finished ? Cue.Finished : ViewModel.ErrorMessage is null ? Cue.Stopped : Cue.Error); // silent when sounds are off
         if (_inFront) return;
         try
         {
@@ -130,6 +135,43 @@ public sealed partial class MainWindow : WindowEx
         args.Handled = true;
     }
 
+    // Each shortcut belongs to one page and does nothing on the others: Ctrl+Enter on the clips page must never
+    // start (and pay for) a new script from a topic left in the box.
+    private void OnCommandShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        System.Windows.Input.ICommand? command = sender.Key switch
+        {
+            VirtualKey.Enter when ViewModel.ShowTopic => ViewModel.CreateEpisodeCommand,
+            VirtualKey.G when ViewModel.Step == 1 => ViewModel.GeneratePictureCommand,
+            VirtualKey.D when ViewModel.Step == 1 => ViewModel.DuplicateClipCommand,
+            VirtualKey.P when ViewModel.Step == 1 => ViewModel.AuditionCommand,
+            _ => null,
+        };
+        if (command?.CanExecute(null) != true) return;
+        command.Execute(null);
+        args.Handled = true;
+    }
+
+    // Delete, with a card in hand, takes that clip out. Only here: in a text box the key deletes text.
+    private void OnDeckKey(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Delete || !ViewModel.RemoveClipCommand.CanExecute(null)) return;
+        ViewModel.RemoveClipCommand.Execute(null);
+        e.Handled = true;
+    }
+
+    private void OnSettingsOpening(object? sender, object e) => ViewModel.RefreshSpendDetail();
+
+    private async void OnPickMusic(object sender, RoutedEventArgs e)
+    {
+        var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.MusicLibrary };
+        foreach (var extension in MainViewModel.MusicExtensions)
+            picker.FileTypeFilter.Add(extension);
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, App.WindowHandle); // a desktop app must say which window owns the dialog
+        if (await picker.PickSingleFileAsync() is { } file)
+            await ViewModel.SetMusicAsync(file.Path);
+    }
+
     // The one message bar: an error when there is one, otherwise the outcome of the last action. Set here and not
     // by binding, because a binding is not told when a message is cleared.
     private void ShowMessage()
@@ -139,6 +181,8 @@ public sealed partial class MainWindow : WindowEx
         MessageBar.Title = error is null ? "" : "Something went wrong";
         MessageBar.Message = error ?? status ?? "";
         MessageBar.IsOpen = !string.IsNullOrEmpty(error ?? status);
+        // A job that fails says so with its own sound as it ends; anything else that goes wrong is heard here.
+        if (error is not null && !ViewModel.IsWorking) Sounds.Play(Cue.Error);
     }
 
     // Closed with its own button, the bar forgets what it said, so the same message said again shows again.
@@ -152,12 +196,13 @@ public sealed partial class MainWindow : WindowEx
     private void OnCardShown(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
         if (args.InRecycleQueue) return;
-        // Whenever the layout gives this card a new position (a reorder, an undo, a card added before it), it travels there.
+        // Whenever the layout gives this card a new position (a reorder, an undo, a card added before it), it travels
+        // there on a spring and settles with a slight overshoot, the way a card lifts under the pointer.
         var visual = ElementCompositionPreview.GetElementVisual(args.ItemContainer);
-        var glide = Compositor.CreateVector3KeyFrameAnimation();
+        var glide = Compositor.CreateSpringVector3Animation();
         glide.Target = "Offset";
-        glide.InsertExpressionKeyFrame(1f, "this.FinalValue");
-        glide.Duration = TimeSpan.FromMilliseconds(260);
+        glide.DampingRatio = 0.75f;
+        glide.Period = TimeSpan.FromMilliseconds(70);
         var moves = Compositor.CreateImplicitAnimationCollection();
         moves["Offset"] = glide;
         visual.ImplicitAnimations = moves;
@@ -190,6 +235,7 @@ public sealed partial class MainWindow : WindowEx
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
         };
+        dialog.Opened += (opened, _) => Ui.PopIn(opened.Content as UIElement ?? opened);
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
@@ -205,21 +251,36 @@ public sealed partial class MainWindow : WindowEx
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
         };
+        // Nothing to save while the box is blank, and the button says so by being unavailable.
+        box.TextChanged += (_, _) => dialog.IsPrimaryButtonEnabled = box.Text.Trim().Length > 0;
+        dialog.IsPrimaryButtonEnabled = current.Trim().Length > 0;
+        dialog.Opened += (opened, _) => Ui.PopIn(opened.Content as UIElement ?? opened);
         return await dialog.ShowAsync() == ContentDialogResult.Primary && box.Text.Trim() is { Length: > 0 } text ? text : null;
     }
 
     private async void OnVisualMix(object sender, RoutedEventArgs e)
     {
-        var dialog = new Views.MixDialog(ViewModel.Mix) { XamlRoot = Content.XamlRoot };
+        var (mix, host) = (ViewModel.Mix, ViewModel.HostMostlyVisible);
+        var dialog = new Views.MixDialog(mix, ViewModel.Look, host) { XamlRoot = Content.XamlRoot };
+        dialog.Opened += (opened, _) => Ui.PopIn(opened.Content as UIElement ?? opened);
         switch (await dialog.ShowAsync())
         {
-            case ContentDialogResult.Primary: ViewModel.ApplyMix(dialog.Mix); break;
+            case ContentDialogResult.Primary:
+                // Only what was changed is applied: dealing the mix again would undo the script's choice of picture types.
+                ViewModel.ApplyLook(dialog.Look);
+                if (dialog.HostVisible != host) ViewModel.ShowHostEverywhere(dialog.HostVisible);
+                if (dialog.Mix != mix) ViewModel.ApplyMix(dialog.Mix);
+                break;
             case ContentDialogResult.Secondary: ViewModel.RerollMix(); break;
         }
     }
 
-    private async void OnHostSetup(object sender, RoutedEventArgs e) =>
-        await new Views.HostSetupDialog(ViewModel) { XamlRoot = Content.XamlRoot }.ShowAsync();
+    private async void OnHostSetup(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Views.HostSetupDialog(ViewModel) { XamlRoot = Content.XamlRoot };
+        dialog.Opened += (opened, _) => Ui.PopIn(opened.Content as UIElement ?? opened);
+        await dialog.ShowAsync();
+    }
 
     // ---- Progress on the taskbar button, so a long job can be watched with the window hidden ----
 

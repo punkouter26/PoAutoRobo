@@ -10,12 +10,12 @@
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.11.2" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.Segmented" Version="8.2.251219" />
+    <PackageVersion Include="ComputeSharp.D2D1.WinUI" Version="3.2.0" />
     <PackageVersion Include="Microsoft.CognitiveServices.Speech" Version="1.52.0" />
     <PackageVersion Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
-    <PackageVersion Include="Octokit" Version="14.0.0" />
     <PackageVersion Include="System.ServiceModel.Syndication" Version="10.0.12" />
     <PackageVersion Include="Verify.Xunit" Version="31.12.5" />
     <PackageVersion Include="WinUIEx" Version="2.9.3" />

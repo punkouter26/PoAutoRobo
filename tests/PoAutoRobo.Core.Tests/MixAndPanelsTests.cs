@@ -21,14 +21,14 @@ public sealed class MixAndPanelsTests : IDisposable
         var id = withPictures.Clips[3].Id;
 
         var picked = EpisodeEditor.SetKind(withPictures, id, VisualKind.AiVideo);
-        var stillStills = EpisodeEditor.RerollMix(EpisodeEditor.SetMix(picked, new MixPercentages(100, 0, 0, 0)), newSeed: 99);
-        var titleCards = EpisodeEditor.SetMix(picked, new MixPercentages(0, 0, 0, 100));
+        var stillStills = EpisodeEditor.RerollMix(EpisodeEditor.SetMix(picked, new MixPercentages(100, 0, 0)), newSeed: 99);
+        var titleCards = EpisodeEditor.SetMix(picked, new MixPercentages(0, 0, 100));
 
         Assert.Equal(new VisualSpec(VisualKind.AiVideo, KindLocked: true), stillStills.Clips[3].Visual);
         Assert.Equal(new VisualSpec(VisualKind.AiVideo, KindLocked: true), titleCards.Clips[3].Visual);
         Assert.All(stillStills.Clips.Where(c => c.Id != id), c => Assert.Equal(["a.png"], c.Visual.MediaPaths)); // same kind: picture kept
         Assert.All(titleCards.Clips.Where(c => c.Id != id), c => Assert.Equal(new VisualSpec(VisualKind.TitleCard), c.Visual));
-        Assert.Equal(new MixPercentages(0, 0, 0, 100), titleCards.Mix);
+        Assert.Equal(new MixPercentages(0, 0, 100), titleCards.Mix);
         // "My video" comes from attaching footage, never from picking a kind.
         Assert.Throws<ArgumentException>(() => EpisodeEditor.SetKind(_episode, id, VisualKind.UserVideo));
     }
@@ -38,8 +38,8 @@ public sealed class MixAndPanelsTests : IDisposable
     [Fact]
     public async Task A_panel_sequence_is_three_different_pictures_and_is_costed_as_three()
     {
-        var images = Substitute.For<IImageGen>();
-        images.GenerateAsync(default!, default!, default).ReturnsForAnyArgs(call =>
+        var images = Substitute.For<ImageMaker>();
+        images.Invoke(default!, default!, default).ReturnsForAnyArgs(call =>
         {
             File.WriteAllBytes(call.ArgAt<string>(1), Guid.NewGuid().ToByteArray());
             return Task.CompletedTask;
@@ -51,7 +51,7 @@ public sealed class MixAndPanelsTests : IDisposable
         var updated = await visuals.GenerateAsync(episode, episode.Clips[0].Id, Ct);
 
         Assert.Equal(3, updated.Clips[0].Visual.MediaPaths!.Distinct().Count());
-        await images.ReceivedWithAnyArgs(3).GenerateAsync(default!, default!, default);
+        await images.ReceivedWithAnyArgs(3).Invoke(default!, default!, default);
         Assert.True(CostEstimate.For(updated, "gpt-image-1-mini").NothingToDo);
     }
 
@@ -59,9 +59,13 @@ public sealed class MixAndPanelsTests : IDisposable
     public Task Panels_are_cut_evenly_across_the_narration() =>
         Verify(string.Join('\n', FfmpegArgs.PanelsVideo(["p1.png", "p2.png", "p3.png"], TimeSpan.FromSeconds(20.35), ExportPreset.Hd30, "clip_00.mp4")));
 
-    [Theory]
-    [InlineData(31.7, 4)]
-    public void Panel_frame_counts_add_up_to_the_clip_length_exactly(double seconds, int panels)
+    [Fact]
+    public void Panel_frame_counts_add_up_to_the_clip_length_exactly()
+    {
+        Panel_frame_counts_add_up_to_the_clip_length_exactlyCase(31.7, 4);
+    }
+
+    private void Panel_frame_counts_add_up_to_the_clip_length_exactlyCase(double seconds, int panels)
     {
         var args = string.Join(' ', FfmpegArgs.PanelsVideo([.. Enumerable.Range(0, panels).Select(i => $"p{i}.png")], TimeSpan.FromSeconds(seconds), ExportPreset.Hd30, "o.mp4"));
 
@@ -72,6 +76,7 @@ public sealed class MixAndPanelsTests : IDisposable
     }
 
     [FfmpegFact]
+    [Trait("Category", "Integration")] // runs FFmpeg for real
     public async Task A_panel_sequence_renders_to_the_right_length()
     {
         var ffmpeg = new FfmpegRunner(FfmpegRunner.Locate()!);

@@ -89,11 +89,15 @@ public sealed class ConformanceTests
     }
 
     /// <summary>Opt-in: the real writer and voice fitting a real line to longer and shorter footage (success criterion 7).</summary>
-    [Theory]
     [Trait("Category", "Live")]
-    [InlineData(34)]
-    [InlineData(9)]
-    public async Task Live_narration_lands_within_a_second_of_the_footage(double footage)
+    [Fact]
+    public async Task Live_narration_lands_within_a_second_of_the_footage()
+    {
+        await Live_narration_lands_within_a_second_of_the_footageCase(34);
+        await Live_narration_lands_within_a_second_of_the_footageCase(9);
+    }
+
+    private async Task Live_narration_lands_within_a_second_of_the_footageCase(double footage)
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
         var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault, AppSettings.SignedInUser), Ct);

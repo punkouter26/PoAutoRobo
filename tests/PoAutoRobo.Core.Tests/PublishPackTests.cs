@@ -6,7 +6,13 @@ public sealed class PublishPackTests
     private static TimeSpan S(double seconds) => TimeSpan.FromSeconds(seconds);
 
     [Fact]
-    public void Chapters_are_one_line_per_clip_with_its_start_as_minutes_and_seconds()
+    public void Chapters_and_subtitles_are_written_as_video_sites_read_them()
+    {
+        Chapters_are_one_line_per_clip_with_its_start_as_minutes_and_seconds();
+        Subtitles_are_numbered_plain_lines_timed_on_the_episode_clock_with_formatting_codes_removed();
+    }
+
+    private void Chapters_are_one_line_per_clip_with_its_start_as_minutes_and_seconds()
     {
         var chapters = PublishPack.Chapters([(S(0), "Meet the R1"), (S(75.4), "Why balance is hard"), (S(3725), "What to try next")]);
 
@@ -18,8 +24,7 @@ public sealed class PublishPackTests
         Assert.Equal("TITLES\nOne\nTwo\n\nDESCRIPTION\nAbout it.\n\n#r1\n\nTAGS\nrobots, balance\n", notes);
     }
 
-    [Fact]
-    public void Subtitles_are_numbered_plain_lines_timed_on_the_episode_clock_with_formatting_codes_removed()
+    private void Subtitles_are_numbered_plain_lines_timed_on_the_episode_clock_with_formatting_codes_removed()
     {
         CaptionSegment[] segments =
         [

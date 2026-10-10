@@ -10,7 +10,7 @@ internal static class TestExtensions
     public static async Task<Episode> GenerateAsync(this Visuals visuals, Episode episode, Guid clipId, CancellationToken ct)
     {
         var clip = episode.Clips.First(c => c.Id == clipId);
-        return EpisodeEditor.ApplyPicture(episode, clip, await visuals.DrawAsync(clip, ct));
+        return EpisodeEditor.ApplyPicture(episode, clip, await visuals.DrawAsync(clip, episode.Look, ct));
     }
 
     public static async Task<IReadOnlyList<Narration>> NarrateAsync(this EpisodeBuilder builder, Episode episode, string folder, CancellationToken ct)

@@ -77,18 +77,27 @@ public sealed class TrendFeedTests
         Assert.Equal("Hacker News", cards[1].Source);
     }
 
-    [Theory]
-    [InlineData("New firmware for the R1", "Unitree shipped an update for its smallest humanoid.", true)]
-    [InlineData("Rivian R1 road test", "An electric truck.", false)]                       // another maker's R1
-    [InlineData("Unitree shows the R1S prototype", "", false)]                             // R1 must be the whole word
-    public void Only_cards_about_the_unitree_r1_itself_are_kept(string title, string summary, bool kept)
+    [Fact]
+    public void Only_stories_about_the_r1_itself_and_only_web_links_are_accepted()
+    {
+        Only_cards_about_the_unitree_r1_itself_are_kept();
+        Only_web_links_are_accepted();
+    }
+
+    private void Only_cards_about_the_unitree_r1_itself_are_kept()
+    {
+        Only_cards_about_the_unitree_r1_itself_are_keptCase("New firmware for the R1", "Unitree shipped an update for its smallest humanoid.", true);
+        Only_cards_about_the_unitree_r1_itself_are_keptCase("Rivian R1 road test", "An electric truck.", false); // another maker's R1
+        Only_cards_about_the_unitree_r1_itself_are_keptCase("Unitree shows the R1S prototype", "", false); // R1 must be the whole word
+    }
+
+    private void Only_cards_about_the_unitree_r1_itself_are_keptCase(string title, string summary, bool kept)
     {
         Assert.Equal(kept, TrendFeed.IsAboutR1(new TopicCard(title, summary, "x", "https://example.org", null, DateTimeOffset.MinValue)));
     }
 
     // Links from feeds and saved files end up on a button the user clicks, so only web addresses may get through.
-    [Fact]
-    public void Only_web_links_are_accepted()
+    private void Only_web_links_are_accepted()
     {
         Assert.True(TrendFeed.IsWebLink("https://example.com/r1"));
         Assert.True(TrendFeed.IsWebLink("http://example.com/r1"));
@@ -131,7 +140,13 @@ public sealed class TrendFeedTests
     }
 
     [Fact]
-    public async Task Cards_are_merged_newest_first_and_only_relevant_ones_with_web_links_reach_the_radar()
+    public async Task The_radar_keeps_only_relevant_cards_with_web_links_and_survives_a_dead_source()
+    {
+        await Cards_are_merged_newest_first_and_only_relevant_ones_with_web_links_reach_the_radar();
+        await One_dead_or_garbled_source_does_not_empty_the_list_and_with_every_source_down_sample_topics_are_offered();
+    }
+
+    private async Task Cards_are_merged_newest_first_and_only_relevant_ones_with_web_links_reach_the_radar()
     {
         var feed = new TrendFeed((url, _) => Task.FromResult(url.Contains("hn.algolia") ? HackerNews : url.Contains("arxiv") ? Atom : Rss));
 
@@ -142,8 +157,7 @@ public sealed class TrendFeedTests
         Assert.All(cards, c => Assert.True(TrendFeed.IsWebLink(c.Url), c.Url)); // the search-ms story never gets through
     }
 
-    [Fact]
-    public async Task One_dead_or_garbled_source_does_not_empty_the_list_and_with_every_source_down_sample_topics_are_offered()
+    private async Task One_dead_or_garbled_source_does_not_empty_the_list_and_with_every_source_down_sample_topics_are_offered()
     {
         var partly = new TrendFeed((url, _) =>
             url.Contains("hn.algolia") ? Task.FromResult(HackerNews)

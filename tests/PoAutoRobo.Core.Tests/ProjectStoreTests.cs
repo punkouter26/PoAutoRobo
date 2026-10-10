@@ -23,7 +23,7 @@ public sealed class ProjectStoreTests : IDisposable
     [Fact]
     public void A_saved_episode_reopens_with_everything_and_needs_no_services()
     {
-        var episode = EpisodeEditor.SetMix(NewEpisode(4), new MixPercentages(100, 0, 0, 0)) with
+        var episode = EpisodeEditor.SetMix(NewEpisode(4), new MixPercentages(100, 0, 0)) with
         {
             Captions = new CaptionStyle(CaptionPreset.ComicBanner, 72, "#11AAFF", 6),
         };
@@ -61,11 +61,15 @@ public sealed class ProjectStoreTests : IDisposable
 
     // ---- An episode file can be edited by anyone who can reach the folder, so it is not trusted ----
 
-    [Theory]
-    [InlineData(@"\\attacker\share\a.png")]
-    [InlineData(@"C:\Windows\win.ini")]
-    [InlineData(@"..\..\outside.png")]
-    public void Media_outside_the_episode_folder_is_dropped_on_load_and_media_inside_it_is_kept(string outside)
+    [Fact]
+    public void Media_outside_the_episode_folder_is_dropped_on_load_and_media_inside_it_is_kept()
+    {
+        Media_outside_the_episode_folder_is_dropped_on_load_and_media_inside_it_is_keptCase(@"\\attacker\share\a.png");
+        Media_outside_the_episode_folder_is_dropped_on_load_and_media_inside_it_is_keptCase(@"C:\Windows\win.ini");
+        Media_outside_the_episode_folder_is_dropped_on_load_and_media_inside_it_is_keptCase(@"..\..\outside.png");
+    }
+
+    private void Media_outside_the_episode_folder_is_dropped_on_load_and_media_inside_it_is_keptCase(string outside)
     {
         var inside = Path.Combine(_folder, "images", "abc.png");
         var episode = Change(NewEpisode(2), 0, c => c with { Visual = new VisualSpec(VisualKind.MultiPanel, MediaPaths: [outside, @"images\ok.png", inside]) });

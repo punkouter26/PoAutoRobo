@@ -68,6 +68,23 @@ public sealed partial class InspectorView : UserControl
     // Applied when the box loses focus, not per keystroke: each apply can ask the model whether the picture still fits.
     private void OnDialogueLostFocus(object sender, RoutedEventArgs e) => ViewModel?.ApplyDialogueCommand.Execute(null);
 
+    // Enter in the title box saves it, as leaving the box does. Leaving is what applies it, so focus is moved on.
+    private void OnTitleKey(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Enter) return;
+        e.Handled = true;
+        TabSelector.Focus(FocusState.Programmatic);
+    }
+
+    /// <summary>What the footage button says: it adds footage to a clip that has none and replaces it on one that has.</summary>
+    public static string FootageLabel(bool hasFootage) => hasFootage ? "Drop another video here, or click to replace yours" : "Drop your own video here, or click to choose one";
+
+    private void OnEarlierTake(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is EarlierTake take)
+            ViewModel?.UseEarlierTake(take.Index);
+    }
+
     // The title and the picture description are applied the same way. An edit that is not taken (an empty box)
     // leaves the clip as it was, so the box is put back to what the clip really says.
     private void OnTitleLostFocus(object sender, RoutedEventArgs e)

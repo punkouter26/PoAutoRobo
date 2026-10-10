@@ -2,17 +2,6 @@ using System.Text.Json;
 
 namespace PoAutoRobo.Core.Render;
 
-/// <summary>A quick low-resolution render for the preview player, plus the word timings its caption overlay draws from.</summary>
-/// <param name="Marks">Where each clip starts, with its narration file, for the waveform under the player.</param>
-public sealed record Preview(string VideoPath, IReadOnlyList<CaptionSegment> Segments, IReadOnlyList<ClipMark> Marks);
-
-/// <summary>One clip's place on the finished timeline.</summary>
-public sealed record ClipMark(string Title, TimeSpan Start, string AudioPath);
-
-/// <summary>Where a render has got to: what it is doing in plain words, and how far through the whole job it is (0 to 1).</summary>
-/// <param name="Clips">How far each clip's picture has got (0 to 1), in running order; null outside the drawing stage.</param>
-public sealed record RenderProgress(string Activity, double Fraction, IReadOnlyList<double>? Clips = null);
-
 /// <summary>Turns an episode into narration files and a finished video inside the episode folder.</summary>
 public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
 {
@@ -20,12 +9,15 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
     private static readonly ExportPreset Draft = new(640, 360, 30);
     private static readonly TimeSpan ClipsKeptFor = TimeSpan.FromDays(14);
 
+    /// <summary>Name of the folder of finished clips under <see cref="Files.ScratchRoot"/>; it clears itself by age.</summary>
+    public const string ClipCacheName = "clips";
+
     /// <summary>
     /// Finished clip pictures, kept between renders. A clip whose words, picture, captions and size are unchanged is
     /// not encoded again, so a render after one edit redoes one clip. In the temp folder, never the episode folder:
     /// that is usually inside a synced Documents folder, where the sync client locks new files.
     /// </summary>
-    public string ClipCacheFolder { get; init; } = Path.Combine(Path.GetTempPath(), "poautorobo-clips");
+    public string ClipCacheFolder { get; init; } = Path.Combine(Files.ScratchRoot, ClipCacheName);
 
     /// <summary>Narrates one clip's active dialogue. Audio is cached by its text, so an unchanged clip is never spoken twice.</summary>
     public async Task<Narration> NarrateClipAsync(Clip clip, string folder, CancellationToken ct)
@@ -65,7 +57,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
 
     private string AudioPath(Clip clip, string text, string folder)
     {
-        var key = MediaCache.TextHash(FormattableString.Invariant($"{narrator.GetType().Name}|{clip.NarrationRate:0.###}|{text}"))[..16];
+        var key = Files.TextHash(FormattableString.Invariant($"{narrator.GetType().Name}|{clip.NarrationRate:0.###}|{text}"))[..16];
         return Path.Combine(folder, "audio", $"{clip.Id:N}-{key}.wav");
     }
 
@@ -99,11 +91,14 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
                 kept.Add(audio);
                 kept.Add(Path.ChangeExtension(audio, ".words.json"));
             }
-            foreach (var path in (clip.Visual.MediaPaths ?? []).Append(clip.Visual.UserVideoPath).OfType<string>())
+            foreach (var path in clip.AllMedia())
+            {
                 kept.Add(Path.GetFullPath(path, folder));
-            if (clip.Visual.UserVideoPath is { } video)
-                kept.Add(Path.GetFullPath(Clip.PosterFor(video), folder)); // the frame that stands for the footage on its card
+                kept.Add(Path.GetFullPath(Clip.PosterFor(path), folder)); // the frame that stands for footage on its card
+            }
         }
+        if (episode.MusicPath is { } music)
+            kept.Add(Path.GetFullPath(music, folder));
         return [.. new[] { "audio", "images", "imports" }
             .Select(name => Path.Combine(folder, name))
             .Where(Directory.Exists)
@@ -118,9 +113,9 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
     public async Task<string> PosterAsync(string videoPath, CancellationToken ct)
     {
         var poster = Clip.PosterFor(videoPath);
-        // A second in, past any fade up from black; a video shorter than that gives its first frame.
+        // From the middle: past any fade up from black, and for an animation after it has begun to build.
         var length = await ffmpeg.ProbeDurationAsync(videoPath, ct);
-        await ffmpeg.RunAsync(["-ss", length > TimeSpan.FromSeconds(2) ? "1" : "0", "-i", videoPath, "-frames:v", "1", "-vf", "scale=640:-2", "-y", poster],
+        await ffmpeg.RunAsync(["-ss", (length.TotalSeconds / 2).ToString("F3", System.Globalization.CultureInfo.InvariantCulture), "-i", videoPath, "-frames:v", "1", "-vf", "scale=640:-2", "-y", poster],
             Path.GetDirectoryName(Path.GetFullPath(videoPath))!, null, null, ct);
         return poster;
     }
@@ -178,9 +173,9 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         var slots = FfmpegArgs.Timeline([.. narrations.Select(n => n.Duration)]);
         var segments = narrations.Select((n, i) => new CaptionSegment(slots[i].Start, n.Words)).ToList();
         // Scratch files live in the temp folder too, for the same reason the finished clips do.
-        var work = Directory.CreateTempSubdirectory("poautorobo-render-").FullName;
+        var work = Files.NewScratchFolder("render");
         var partial = Path.Combine(work, "master.mp4");
-        MediaCache.EnsureFolderFor(output);
+        Files.EnsureFolderFor(output);
         ForgetOldClips();
         var cache = new MediaCache(ClipCacheFolder);
         try
@@ -222,9 +217,11 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
                     await File.WriteAllTextAsync(Path.Combine(work, captionFile), text, token);
                     made.Add(text);
                 }
-                IReadOnlyList<string> Args(string to) => panels.Count > 1
-                    ? FfmpegArgs.PanelsVideo(panels, slots[i].VideoLength, preset, to, captionFile)
-                    : FfmpegArgs.ClipVideo(source, input, slots[i].VideoLength, preset, to, captionFile);
+                // The camera move comes from the clip itself, so a clip keeps its move when the order changes.
+                IReadOnlyList<string> Args(string to) =>
+                    panels.Count == 2 && clip.Visual.Kind == VisualKind.Parallax ? FfmpegArgs.ParallaxVideo(panels[0], panels[1], slots[i].VideoLength, preset, to, captionFile)
+                    : panels.Count > 1 ? FfmpegArgs.PanelsVideo(panels, slots[i].VideoLength, preset, to, captionFile)
+                    : FfmpegArgs.ClipVideo(source, input, slots[i].VideoLength, preset, to, captionFile, clip.Id.ToByteArray()[0] % 4);
                 // The scratch files are named for the clip's place in the order; that is taken out so a moved clip is still found.
                 var command = string.Join('\n', Args("clip.mp4")).Replace($"_{i:00}.", "_.");
 
@@ -238,7 +235,8 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
             var total = slots[^1].Start + slots[^1].VideoLength;
             const string Joining = "Joining the clips and levelling the sound";
             var joinProgress = progress is null ? null : new Relay<double>(p => progress.Report(new RenderProgress(Joining, VoiceShare + DrawShare + (1 - VoiceShare - DrawShare) * p)));
-            await ffmpeg.RunAsync(FfmpegArgs.Join("clips.txt", [.. narrations.Select(n => n.AudioPath)], partial), work, total, joinProgress, ct);
+            var music = episode.MusicPath is { } track && File.Exists(track) ? Path.GetFullPath(track) : null;
+            await ffmpeg.RunAsync(FfmpegArgs.Join("clips.txt", [.. narrations.Select(n => n.AudioPath)], partial, music), work, total, joinProgress, ct);
 
             File.Move(partial, output, overwrite: true);
             progress?.Report(new RenderProgress("Done", 1));
@@ -286,12 +284,14 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         if (path is null || !File.Exists(path))
             return (ClipSource.TitleCard, "");
         var isVideo = VideoExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
-        return (isVideo ? ClipSource.Video : ClipSource.Image, Path.GetFullPath(path));
+        // Generated footage is a few seconds long and repeats under the narration; an animation is made to length,
+        // and the narration is fitted to the user's own footage, so those hold their last frame for any shortfall.
+        return (!isVideo ? ClipSource.Image : clip.Visual.Kind == VisualKind.AiVideo ? ClipSource.Loop : ClipSource.Video, Path.GetFullPath(path));
     }
 
-    /// <summary>The pictures of a panel sequence that are on disk; fewer than two means it is not rendered as a sequence.</summary>
+    /// <summary>The pictures of a panel sequence or a layered picture that are on disk; fewer than two means the clip is drawn from one picture.</summary>
     private static List<string> PanelsFor(Clip clip) =>
-        clip.Visual.Kind == VisualKind.MultiPanel
+        clip.Visual.Kind is VisualKind.MultiPanel or VisualKind.Parallax
             ? [.. (clip.Visual.MediaPaths ?? []).Where(p => File.Exists(p) && !VideoExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)).Select(Path.GetFullPath)]
             : [];
 }

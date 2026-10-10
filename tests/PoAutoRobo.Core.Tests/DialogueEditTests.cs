@@ -21,10 +21,14 @@ public sealed class DialogueEditTests : IDisposable
 
     private Clip Target => _episode.Clips[1];
 
-    [Theory]
-    [InlineData(false)] // a phrasing change keeps the picture
-    [InlineData(true)]  // a new action, tool or subject marks it out of date
-    public async Task Edit_replaces_the_active_tier_for_that_clip_only_and_marks_the_picture_stale_only_when_the_subject_changed(bool coreChanged)
+    [Fact]
+    public async Task Edit_replaces_the_active_tier_for_that_clip_only_and_marks_the_picture_stale_only_when_the_subject_changed()
+    {
+        await Edit_replaces_the_active_tier_for_that_clip_only_and_marks_the_picture_stale_only_when_the_subject_changedCase(false); // a phrasing change keeps the picture
+        await Edit_replaces_the_active_tier_for_that_clip_only_and_marks_the_picture_stale_only_when_the_subject_changedCase(true); // a new action, tool or subject marks it out of date
+    }
+
+    private async Task Edit_replaces_the_active_tier_for_that_clip_only_and_marks_the_picture_stale_only_when_the_subject_changedCase(bool coreChanged)
     {
         _writer.CoreChangedAsync(Target.Active.Dialogue, "New words.", Ct).Returns(coreChanged);
 

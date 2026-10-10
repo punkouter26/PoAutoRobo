@@ -1,7 +1,7 @@
 
 namespace PoAutoRobo.Core.Tests;
 
-public sealed class SettingsTests
+public sealed class AppSettingsTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
 
@@ -9,6 +9,7 @@ public sealed class SettingsTests
     {
         ["AzureOpenAI--Endpoint"] = "https://example.cognitiveservices.azure.com/",
         ["GitHub--PAT"] = "github-secret-value",
+        ["Pexels--ApiKey"] = "pexels-secret-value",
     };
 
     private sealed class FakeVault(Dictionary<string, string> secrets, Exception? failure = null) : ISecretSource
@@ -23,7 +24,13 @@ public sealed class SettingsTests
     }
 
     [Fact]
-    public async Task Vault_secrets_map_onto_settings_and_with_an_endpoint_the_services_are_live()
+    public async Task Settings_come_from_the_vault_and_say_whether_the_services_are_live_or_simulated_and_why()
+    {
+        await Vault_secrets_map_onto_settings_and_with_an_endpoint_the_services_are_live();
+        await Without_a_usable_endpoint_the_services_are_simulated_and_an_unreachable_vault_also_keeps_the_reason();
+    }
+
+    private async Task Vault_secrets_map_onto_settings_and_with_an_endpoint_the_services_are_live()
     {
         var vault = new FakeVault(FullVault);
 
@@ -34,11 +41,18 @@ public sealed class SettingsTests
         Assert.Null(settings.LoadError);
         Assert.True(settings.IsLive);
         // Requests are signed as the user, so the resource's key is never fetched or held.
-        Assert.Equal(["AzureOpenAI--Endpoint", "GitHub--PAT"], vault.Asked.Order());
+        Assert.Equal("pexels-secret-value", settings.PexelsKey);
+        Assert.Equal(["AzureOpenAI--Endpoint", "GitHub--PAT", "Pexels--ApiKey"], vault.Asked.Order());
+
+        // What script and voice cost is the user's to give; until then nothing is priced, and nonsense is no rate at all.
+        Assert.Null(settings.ChatRates);
+        Assert.Null(TokenRates.Parse("cheap"));
+        Assert.Null(TokenRates.Parse("1,2"));
+        // A million tokens in, a quarter of them seen before, and 100,000 out.
+        Assert.Equal(0.75m * 2 + 0.25m * 0.2m + 0.1m * 8, TokenRates.Parse("2, 0.2, 8")!.Cost(1_000_000, 250_000, 100_000));
     }
 
-    [Fact]
-    public async Task Without_a_usable_endpoint_the_services_are_simulated_and_an_unreachable_vault_also_keeps_the_reason()
+    private async Task Without_a_usable_endpoint_the_services_are_simulated_and_an_unreachable_vault_also_keeps_the_reason()
     {
         foreach (var endpoint in new[] { "  ", "not a url" })
         {
@@ -64,7 +78,7 @@ public sealed class SettingsTests
         var text = (await AppSettings.LoadAsync(new FakeVault(FullVault), Ct)).ToString();
 
         Assert.DoesNotContain("secret-value", text);
-        Assert.Equal("AppSettings { Endpoint = https://example.cognitiveservices.azure.com/, GitHubToken = (set) }", text);
+        Assert.Equal("AppSettings { Endpoint = https://example.cognitiveservices.azure.com/, GitHubToken = (set), PexelsKey = (set) }", text);
     }
 
     /// <summary>Opt-in: reads the real vault as the signed-in user. Asserts presence only; values are never printed.</summary>

@@ -16,7 +16,13 @@ public sealed class CostEstimateTests : IDisposable
     }
 
     [Fact]
-    public void Only_clips_that_still_need_a_picture_are_counted_and_priced_only_when_the_model_price_is_known()
+    public async Task Pictures_are_costed_before_they_are_made_and_the_host_is_chosen_from_candidates()
+    {
+        Only_clips_that_still_need_a_picture_are_counted_and_priced_only_when_the_model_price_is_known();
+        await Candidate_sheets_are_separate_pictures_made_from_the_written_description_and_locking_one_makes_host_pictures_use_it();
+    }
+
+    private void Only_clips_that_still_need_a_picture_are_counted_and_priced_only_when_the_model_price_is_known()
     {
         var episode = With(
             new VisualSpec(VisualKind.Still),                                        // needs one
@@ -24,13 +30,14 @@ public sealed class CostEstimateTests : IDisposable
             new VisualSpec(VisualKind.Still, Stale: true, MediaPaths: ["old.png"]),  // out of date: needs one
             new VisualSpec(VisualKind.TitleCard),                                    // free
             new VisualSpec(VisualKind.UserVideo, UserVideoPath: "lab.mp4"),          // the user's own
-            new VisualSpec(VisualKind.AiVideo));                                     // a single still until video is built
+            new VisualSpec(VisualKind.AiVideo));                                     // footage: no picture, and priced as a video
 
         var estimate = CostEstimate.For(episode, "gpt-image-1-mini");
 
-        Assert.Equal(3, estimate.Pictures);
+        Assert.Equal(2, estimate.Pictures);
+        Assert.Equal(1, estimate.Videos);
         Assert.Equal([episode.Clips[0].Id, episode.Clips[2].Id, episode.Clips[5].Id], estimate.ClipIds);
-        Assert.Equal(3 * CostEstimate.MiniPicturePrice, estimate.Dollars);
+        Assert.Equal(2 * CostEstimate.MiniPicturePrice + CostEstimate.VideoPrice, estimate.Dollars);
 
         // A known model gets a dollar figure, an unknown one does not guess, and the summary names no model.
         var two = CostEstimate.For(With(new VisualSpec(VisualKind.Still), new VisualSpec(VisualKind.Still)), "gpt-image-1-mini");
@@ -47,11 +54,10 @@ public sealed class CostEstimateTests : IDisposable
 
     // ---- The host's character sheet ----
 
-    [Fact]
-    public async Task Candidate_sheets_are_separate_pictures_made_from_the_written_description_and_locking_one_makes_host_pictures_use_it()
+    private async Task Candidate_sheets_are_separate_pictures_made_from_the_written_description_and_locking_one_makes_host_pictures_use_it()
     {
-        var images = Substitute.For<IImageGen>();
-        images.GenerateAsync(default!, default!, default).ReturnsForAnyArgs(call =>
+        var images = Substitute.For<ImageMaker>();
+        images.Invoke(default!, default!, default).ReturnsForAnyArgs(call =>
         {
             File.WriteAllBytes(call.ArgAt<string>(1), Guid.NewGuid().ToByteArray());
             return Task.CompletedTask;
@@ -64,7 +70,7 @@ public sealed class CostEstimateTests : IDisposable
 
         Assert.Equal(3, candidates.Distinct().Count());
         Assert.All(candidates, c => Assert.True(File.Exists(c)));
-        await images.Received(3).GenerateAsync(Arg.Is<ImageRequest>(r => r.ReferencePath == null && r.Prompt.Contains("Unitree R1")), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await images.Received(3).Invoke(Arg.Is<ImageRequest>(r => r.ReferencePath == null && r.Prompt.Contains("Unitree R1")), Arg.Any<string>(), Arg.Any<CancellationToken>());
         // Until one is locked, the host is described in words and no reference is sent.
         Assert.False(visuals.HasSheet);
         Assert.Null(visuals.RequestFor(clip).ReferencePath);

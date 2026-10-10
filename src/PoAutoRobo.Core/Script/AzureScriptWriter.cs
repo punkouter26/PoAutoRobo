@@ -22,13 +22,17 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
     };
 
     private sealed record TierDto(string Dialogue, string VisualPrompt, string Pose);
-    private sealed record ClipDto(string Title, TierDto B);
+    private sealed record ClipDto(string Title, TierDto B, string? Kind = null);
     private sealed record EpisodeDto(string Title, List<ClipDto> Clips);
     private sealed record DriftDto(bool CoreChanged);
     private sealed record RewriteDto(string Dialogue);
+    private sealed record ReviewDto(List<ClipNote> Notes);
 
-    /// <summary>Told what each request used ("script tokens" and how many), for the episode's running cost.</summary>
-    public Action<string, int>? Used { get; set; }
+    /// <summary>Told what each request used: its name in the spend log, how many tokens, and their price when the rates are known.</summary>
+    public Action<string, int, decimal>? Used { get; set; }
+
+    /// <summary>Which picture types can be made on this computer; the model is offered only those.</summary>
+    public Func<VisualKind, bool> CanMake { get; set; } = _ => true;
 
     public static AzureScriptWriter Create(AppSettings settings)
     {
@@ -57,7 +61,13 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
                 if (update.FinishReason == ChatFinishReason.Length)
                     throw new InvalidOperationException("The script was cut off before it finished. Choose a shorter episode length and try again.");
                 if (update.Usage is { } usage)
-                    writer?.Used?.Invoke("script tokens", usage.TotalTokenCount);
+                {
+                    var cached = usage.InputTokenDetails?.CachedTokenCount ?? 0;
+                    var rates = deployment == settings.FastChatDeployment ? settings.FastChatRates : settings.ChatRates;
+                    writer?.Used?.Invoke(SpendLog.ScriptTokens, usage.TotalTokenCount, rates?.Cost(usage.InputTokenCount, cached, usage.OutputTokenCount) ?? 0);
+                    if (cached > 0)
+                        writer?.Used?.Invoke(SpendLog.CachedScriptTokens, cached, 0); // shows whether the long, unchanging prompt is being reused
+                }
                 foreach (var part in update.ContentUpdate)
                 {
                     reply.Append(part.Text);
@@ -88,8 +98,9 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
             clipsWritten.Report([.. TitleValue().Matches(text).Skip(1).Take(count).Select(m => JsonSerializer.Deserialize<string>($"\"{m.Groups[1].Value}\"")!)]);
         };
 
-        var system = ScriptSchemas.System(subject);
-        var draft = await Ask<EpisodeDto>(settings.ChatDeployment, system, prompt.ToString(), "episode", ScriptSchemas.Episode, watch, ct);
+        IReadOnlyList<KindInfo> kinds = [.. Visuals.Kinds.Where(k => CanMake(k.Kind))];
+        var (system, schema) = (ScriptSchemas.System(subject, kinds), ScriptSchemas.Episode(kinds));
+        var draft = await Ask<EpisodeDto>(settings.ChatDeployment, system, prompt.ToString(), "episode", schema, watch, ct);
         // Too many clips are simply trimmed below. Too few is topped up once, asking only for the clips that are missing
         // so the ones already paid for are kept.
         if (draft.Clips.Count < length.MinClips)
@@ -98,7 +109,7 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
             prompt.AppendLine().AppendLine(
                 $"Your last answer had only {draft.Clips.Count} clips: {string.Join("; ", draft.Clips.Select(c => c.Title))}. " +
                 $"Write {missing} more on subtopics those do not cover, and return only the new clips.");
-            var more = await Ask<EpisodeDto>(settings.ChatDeployment, system, prompt.ToString(), "episode", ScriptSchemas.Episode, null, ct);
+            var more = await Ask<EpisodeDto>(settings.ChatDeployment, system, prompt.ToString(), "episode", schema, null, ct);
             draft = draft with { Clips = [.. draft.Clips, .. more.Clips] };
         }
         if (draft.Clips.Count < length.MinClips)
@@ -107,8 +118,49 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
         var clips = draft.Clips.Take(length.MaxClips).Select(c => new Clip(
             Guid.NewGuid(), c.Title, Tier.B,
             new Dictionary<Tier, TierScript> { [Tier.B] = new(c.B.Dialogue, c.B.VisualPrompt, c.B.Pose) },
-            new VisualSpec(VisualKind.TitleCard), HostVisible: true)).ToList();
+            new VisualSpec(Visuals.KindFor(c.Kind)), HostVisible: subject != Subject.Essay)).ToList();
         return new Episode(draft.Title, topic, clips, MixSeed: Random.Shared.Next()) { Subject = subject };
+    }
+
+    public async Task<Scene> WriteSceneAsync(SceneRequest request, CancellationToken ct, Scene? failed = null, string? problem = null)
+    {
+        var prompt = new StringBuilder()
+            .AppendLine(ScriptSchemas.SceneKind(request.Kind))
+            .AppendLine(FormattableString.Invariant($"Length: {request.Length.TotalSeconds:0} seconds."))
+            .AppendLine($"The look: {Visuals.LookInWords(request.Look)}.").AppendLine()
+            .Append(Fenced("topic", " what=\"what the scene shows\"", request.Shows)).AppendLine()
+            .Append(Fenced("existing", " what=\"the narration spoken over it\"", request.Narration));
+        if (failed is not null)
+            prompt.AppendLine()
+                .Append(Fenced("existing", " what=\"the script you wrote last time, which did not run\"", failed.Script))
+                .Append(Fenced("existing", " what=\"what the browser said went wrong\"", problem is { Length: > MaxErrorLength } ? problem[..MaxErrorLength] : problem ?? ""))
+                .AppendLine("Write the whole scene again so that it runs.");
+
+        // Moving words and charts are near to a set pattern, which the fast model draws as well and far more cheaply.
+        // A diagram is not; but when the main model is too busy or too slow to answer, the fast one's is better than none.
+        var deployment = request.Kind is VisualKind.Chart or VisualKind.KineticText ? settings.FastChatDeployment : settings.ChatDeployment;
+        try
+        {
+            return await Ask<Scene>(deployment, ScriptSchemas.SceneSystem, prompt.ToString(), "scene", ScriptSchemas.Scene, null, ct);
+        }
+        catch (Exception e) when (deployment != settings.FastChatDeployment && IsBusy(e, ct))
+        {
+            return await Ask<Scene>(settings.FastChatDeployment, ScriptSchemas.SceneSystem, prompt.ToString(), "scene", ScriptSchemas.Scene, null, ct);
+        }
+    }
+
+    private const int MaxErrorLength = 400;
+
+    /// <summary>True when the service turned the request away for being busy, or did not answer in time; not when the user stopped it.</summary>
+    private static bool IsBusy(Exception e, CancellationToken ct) =>
+        e is System.ClientModel.ClientResultException { Status: 429 or 503 } or TimeoutException || (e is OperationCanceledException && !ct.IsCancellationRequested);
+
+    public async Task<IReadOnlyList<ClipNote>> ReviewAsync(Episode episode, CancellationToken ct)
+    {
+        var script = string.Join("\n\n", episode.Clips.Select((c, i) => $"Clip {i + 1}: {c.Title}\n{c.Active.Dialogue}"));
+        var review = await Ask<ReviewDto>(settings.FastChatDeployment, ScriptSchemas.ReviewSystem, Fenced("existing", "", script), "review", ScriptSchemas.Review, null, ct);
+        // One note a clip, and only for clips that are there: the model's numbering is not trusted further than that.
+        return [.. review.Notes.Where(n => n is not null && n.Clip >= 1 && n.Clip <= episode.Clips.Count && !string.IsNullOrWhiteSpace(n.Note)).DistinctBy(n => n.Clip)];
     }
 
     // The topic is not sent: a new depth may use only what the existing script already says.
@@ -116,7 +168,9 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
     {
         var request = new StringBuilder()
             .AppendLine($"Depth to write: {tier.ToString().ToLowerInvariant()}")
-            .AppendLine($"Clip title: {clip.Title}").AppendLine()
+            .AppendLine(Visuals.Kinds.FirstOrDefault(k => k.Kind == clip.Visual.Kind) is { } kind ? $"Picture type: {kind.Key}. {kind.Brief}" : "Picture type: the user's own footage. visualPrompt: one sentence describing a picture that would suit the clip.").AppendLine()
+            // A title and its words were written by a model from a topic that may have come from a news feed, so they are fenced like the topic.
+            .Append(Fenced("existing", " what=\"the clip's title\"", clip.Title))
             .Append(Fenced("existing", $" depth=\"{clip.ActiveTier.ToString().ToLowerInvariant()}\"", clip.Active.Dialogue));
         var script = await Ask<TierDto>(settings.FastChatDeployment, ScriptSchemas.TierSystem(subject), request.ToString(), "tier", ScriptSchemas.Tier, null, ct);
         return new TierScript(script.Dialogue, script.VisualPrompt, script.Pose);
@@ -124,11 +178,11 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
 
     public async Task<bool> CoreChangedAsync(string oldDialogue, string newDialogue, CancellationToken ct) =>
         (await Ask<DriftDto>(settings.FastChatDeployment, ScriptSchemas.DriftSystem,
-            $"First version:\n{oldDialogue}\n\nSecond version:\n{newDialogue}", "drift", ScriptSchemas.Drift, null, ct)).CoreChanged;
+            Fenced("existing", " version=\"first\"", oldDialogue) + Fenced("existing", " version=\"second\"", newDialogue), "drift", ScriptSchemas.Drift, null, ct)).CoreChanged;
 
     public async Task<string> RewriteToLengthAsync(string dialogue, int targetWords, CancellationToken ct) =>
         (await Ask<RewriteDto>(settings.ChatDeployment, ScriptSchemas.RewriteSystem,
-            $"Rewrite this to about {targetWords} words:\n{dialogue}", "rewrite", ScriptSchemas.Rewrite, null, ct)).Dialogue;
+            $"Rewrite the line below to about {targetWords} words.\n" + Fenced("existing", "", dialogue), "rewrite", ScriptSchemas.Rewrite, null, ct)).Dialogue;
 
     public Task<PublishNotes> WritePublishNotesAsync(Episode episode, CancellationToken ct) =>
         Ask<PublishNotes>(settings.FastChatDeployment, ScriptSchemas.PublishSystem,

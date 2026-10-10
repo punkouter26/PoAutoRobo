@@ -9,7 +9,7 @@ public sealed class MediaCacheTests : IDisposable
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
     private readonly string _folder = Directory.CreateTempSubdirectory("poautorobo-").FullName;
-    private readonly IImageGen _images = Substitute.For<IImageGen>();
+    private readonly ImageMaker _images = Substitute.For<ImageMaker>();
     private readonly string _sheet;
     private readonly Episode _episode;
     private int _made;
@@ -18,7 +18,7 @@ public sealed class MediaCacheTests : IDisposable
     {
         _sheet = Path.Combine(_folder, "sheet.png");
         File.WriteAllBytes(_sheet, [1, 2, 3]);
-        _images.GenerateAsync(default!, default!, default).ReturnsForAnyArgs(call =>
+        _images.Invoke(default!, default!, default).ReturnsForAnyArgs(call =>
         {
             File.WriteAllBytes(call.ArgAt<string>(1), [9, 9, 9]);
             return Task.CompletedTask;
@@ -29,7 +29,7 @@ public sealed class MediaCacheTests : IDisposable
 
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
-    private Visuals VisualsWith(IImageGen images, string model = "test-model") =>
+    private Visuals VisualsWith(ImageMaker images, string model = "test-model") =>
         new(images, new MediaCache(Path.Combine(_folder, "images")), _sheet, model) { PictureMade = () => _made++ };
 
     private Visuals Visuals => VisualsWith(_images);
@@ -44,7 +44,7 @@ public sealed class MediaCacheTests : IDisposable
 
         var twice = await Visuals.GenerateAsync(once, First, Ct);
 
-        await _images.ReceivedWithAnyArgs(1).GenerateAsync(default!, default!, default);
+        await _images.ReceivedWithAnyArgs(1).Invoke(default!, default!, default);
         Assert.Equal(1, _made); // a saved picture costs nothing, so it must not be added to the spend
         Assert.True(File.Exists(Assert.Single(once.Clips[0].Visual.MediaPaths!)));
         Assert.Equal(once.Clips[0].Visual.MediaPaths, twice.Clips[0].Visual.MediaPaths);
@@ -61,7 +61,7 @@ public sealed class MediaCacheTests : IDisposable
         await Visuals.GenerateAsync(_episode, First, Ct);
         await VisualsWith(_images, "other-model").GenerateAsync(_episode, First, Ct);
 
-        await _images.ReceivedWithAnyArgs(4).GenerateAsync(default!, default!, default);
+        await _images.ReceivedWithAnyArgs(4).Invoke(default!, default!, default);
         Assert.Equal(4, _made);
     }
 
@@ -71,10 +71,10 @@ public sealed class MediaCacheTests : IDisposable
         await Visuals.GenerateAsync(_episode, First, Ct);
         await Visuals.GenerateAsync(EpisodeEditor.SetHostVisible(_episode, First, false), First, Ct);
 
-        await _images.Received(1).GenerateAsync(
+        await _images.Received(1).Invoke(
             Arg.Is<ImageRequest>(r => r.ReferencePath == _sheet && r.Prompt.Contains(_episode.Clips[0].Active.Pose) && r.Prompt.Contains(_episode.Clips[0].Active.VisualPrompt)),
             Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _images.Received(1).GenerateAsync(
+        await _images.Received(1).Invoke(
             Arg.Is<ImageRequest>(r => r.ReferencePath == null && r.Prompt.Contains("no characters", StringComparison.OrdinalIgnoreCase)),
             Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -82,8 +82,8 @@ public sealed class MediaCacheTests : IDisposable
     [Fact]
     public async Task A_refused_picture_leaves_the_clip_as_it_was_and_nothing_half_written_in_the_cache()
     {
-        var refusing = Substitute.For<IImageGen>(); // a fresh one: reconfiguring the shared substitute would run its file-writing callback
-        refusing.GenerateAsync(default!, default!, default).ThrowsAsyncForAnyArgs(new InvalidOperationException("The picture was blocked by the content filter."));
+        var refusing = Substitute.For<ImageMaker>(); // a fresh one: reconfiguring the shared substitute would run its file-writing callback
+        refusing.Invoke(default!, default!, default).ThrowsAsyncForAnyArgs(new InvalidOperationException("The picture was blocked by the content filter."));
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => VisualsWith(refusing).GenerateAsync(_episode, First, Ct));
 
@@ -196,8 +196,8 @@ public sealed class MediaCacheTests : IDisposable
         var plain = Path.Combine(_folder, "plain.png");
         var withReference = Path.Combine(_folder, "ref.png");
 
-        await images.GenerateAsync(new ImageRequest("Comic panel: a friendly cartoon humanoid robot waving in a robotics lab.", null, Quality: "low"), plain, Ct);
-        await images.GenerateAsync(new ImageRequest("Comic panel: the same robot pointing at a whiteboard.", plain, Quality: "low"), withReference, Ct);
+        await images.GenerateAsync(new ImageRequest("Comic panel: a friendly cartoon humanoid robot waving in a robotics lab.", null, Quality: Quality.Low), plain, Ct);
+        await images.GenerateAsync(new ImageRequest("Comic panel: the same robot pointing at a whiteboard.", plain, Quality: Quality.Low), withReference, Ct);
 
         Assert.True(new FileInfo(plain).Length > 10_000);
         Assert.True(new FileInfo(withReference).Length > 10_000);

@@ -15,7 +15,8 @@ public sealed record ExportPreset(int Width, int Height, int Fps)
     public bool Portrait => Height > Width;
 }
 
-public enum ClipSource { TitleCard, Image, Video }
+/// <summary>Video holds its last frame when the narration runs longer; Loop, for short generated footage, plays again from the start.</summary>
+public enum ClipSource { TitleCard, Image, Video, Loop }
 
 /// <summary>Where a clip sits on the episode timeline, and how long its picture runs.</summary>
 public sealed record Slot(TimeSpan Start, TimeSpan VideoLength);
@@ -56,17 +57,21 @@ public static class FfmpegArgs
     /// <summary>Renders one finished clip picture (no sound): sized, faded, and with its captions burned in.</summary>
     /// <param name="input">Image or video path, or for a title card the text file holding the title.</param>
     /// <param name="captionsFile">Caption file timed from the start of this clip, read from the working folder; null for none.</param>
-    public static IReadOnlyList<string> ClipVideo(ClipSource source, string input, TimeSpan length, ExportPreset preset, string output, string? captionsFile = null)
+    /// <param name="move">Which camera move a still picture gets; see <see cref="PanZoom"/>.</param>
+    public static IReadOnlyList<string> ClipVideo(ClipSource source, string input, TimeSpan length, ExportPreset preset, string output, string? captionsFile = null, int move = 0)
     {
         var (w, h, fps) = preset;
         var frames = (int)Math.Round(length.TotalSeconds * fps);
-        string[] inputArgs = source == ClipSource.TitleCard
-            ? ["-f", "lavfi", "-i", $"color=c=0x101828:s={w}x{h}:r={fps}"]
-            : ["-i", input];
+        string[] inputArgs = source switch
+        {
+            ClipSource.TitleCard => ["-f", "lavfi", "-i", $"color=c=0x101828:s={w}x{h}:r={fps}"],
+            ClipSource.Loop => ["-stream_loop", "-1", "-i", input],
+            _ => ["-i", input],
+        };
         var filter = source switch
         {
-            ClipSource.Image => PanZoom(preset, frames),
-            ClipSource.Video =>
+            ClipSource.Image => PanZoom(preset, frames, move),
+            ClipSource.Video or ClipSource.Loop =>
                 $"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,fps={fps}," +
                 $"tpad=stop_mode=clone:stop_duration={Seconds(length)}",
             // ponytail: one centred line, no wrapping. Clip titles are short; wrap here if they stop being so.
@@ -95,10 +100,44 @@ public static class FfmpegArgs
         ];
     }
 
-    /// <summary>A slow push-in on a still picture. Oversampling before zoompan avoids the stair-stepping it shows at native size.</summary>
-    private static string PanZoom(ExportPreset p, int frames) =>
-        $"scale={2 * p.Width}:{2 * p.Height}:force_original_aspect_ratio=increase,crop={2 * p.Width}:{2 * p.Height}," +
-        $"zoompan=z='1+0.08*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={p.Width}x{p.Height}:fps={p.Fps}";
+    /// <summary>
+    /// Renders a layered picture: the background pushes in slowly while the subject, cut out on a transparent
+    /// background and a little larger than the frame, slides across in front of it.
+    /// </summary>
+    public static IReadOnlyList<string> ParallaxVideo(string background, string subject, TimeSpan length, ExportPreset preset, string output, string? captionsFile = null)
+    {
+        var (w, h, fps) = preset;
+        var frames = (int)Math.Round(length.TotalSeconds * fps);
+        var (fw, fh) = (w * 106 / 100 / 2 * 2, h * 106 / 100 / 2 * 2); // even numbers, as the encoder needs
+        var graph =
+            $"[0:v]{PanZoom(preset, frames)}[bg];" +
+            $"[1:v]format=rgba,scale={fw}:{fh}:force_original_aspect_ratio=increase,crop={fw}:{fh}[fg];" +
+            $"[bg][fg]overlay=x='-(w-W)*t/{Seconds(length)}':y='-(h-H)/2'{Finish(length, captionsFile)}[v]";
+        return
+        [
+            "-i", background, "-i", subject,
+            "-filter_complex", graph, "-map", "[v]",
+            "-t", Seconds(length), "-an", .. Encode(preset), "-y", output,
+        ];
+    }
+
+    /// <summary>
+    /// A slow camera move on a still picture: 0 pushes in, 1 pulls back, 2 and 3 drift right and left. Oversampling
+    /// before zoompan avoids the stair-stepping it shows at native size.
+    /// </summary>
+    private static string PanZoom(ExportPreset p, int frames, int move = 0)
+    {
+        const string Centre = "iw/2-(iw/zoom/2)";
+        var (zoom, x) = move switch
+        {
+            1 => ($"1.08-0.08*on/{frames}", Centre),
+            2 => ("1.08", $"(iw-iw/zoom)*on/{frames}"),
+            3 => ("1.08", $"(iw-iw/zoom)*(1-on/{frames})"),
+            _ => ($"1+0.08*on/{frames}", Centre),
+        };
+        return $"scale={2 * p.Width}:{2 * p.Height}:force_original_aspect_ratio=increase,crop={2 * p.Width}:{2 * p.Height}," +
+            $"zoompan=z='{zoom}':x='{x}':y='ih/2-(ih/zoom/2)':d={frames}:s={p.Width}x{p.Height}:fps={p.Fps}";
+    }
 
     /// <summary>The last filters on every clip: captions over the picture, then the fades over both.</summary>
     private static string Finish(TimeSpan length, string? captionsFile) =>
@@ -117,8 +156,12 @@ public static class FfmpegArgs
     public static string ClipList(IEnumerable<string> clips) =>
         string.Concat(clips.Select(path => $"file '{path.Replace("'", @"'\''")}'\n"));
 
+    /// <summary>How loud the music is before the voice pushes it down further: a quarter of its own level.</summary>
+    public const double MusicLevel = 0.25;
+
     /// <summary>Joins the finished clips by copying their pictures, and lays the crossfaded, levelled narration under them.</summary>
-    public static IReadOnlyList<string> Join(string clipListFile, IReadOnlyList<string> audios, string output)
+    /// <param name="music">A track to play quietly underneath, repeated to the video's length and dipped whenever the voice speaks; null for none.</param>
+    public static IReadOnlyList<string> Join(string clipListFile, IReadOnlyList<string> audios, string output, string? music = null)
     {
         var graph = new List<string>();
         for (var i = 0; i < audios.Count; i++)
@@ -129,12 +172,22 @@ public static class FfmpegArgs
             graph.Add($"{sound}[s{i}]acrossfade=d={Seconds(AudioCrossfade)}[a{i}]");
             sound = $"[a{i}]";
         }
+        if (music is not null)
+        {
+            // The voice is heard twice over: once in the mix, and once as the signal that pushes the music down.
+            graph.Add($"{sound}asplit[voice][key]");
+            graph.Add($"[{audios.Count + 1}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={MusicLevel.ToString(CultureInfo.InvariantCulture)}[bed]");
+            graph.Add("[bed][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[ducked]");
+            graph.Add("[voice][ducked]amix=inputs=2:duration=first:normalize=0[mixed]"); // ends with the voice, however long the track is
+            sound = "[mixed]";
+        }
         graph.Add($"{sound}loudnorm=I={TargetLufs.ToString(CultureInfo.InvariantCulture)}:TP=-1.5:LRA=11,aresample=48000[aout]");
 
         return
         [
             "-f", "concat", "-safe", "0", "-i", clipListFile,
             .. audios.SelectMany(path => new[] { "-i", path }),
+            .. music is null ? [] : new[] { "-stream_loop", "-1", "-i", music },
             "-filter_complex", string.Join(';', graph),
             "-map", "0:v", "-map", "[aout]",
             "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-y", output,

@@ -1,9 +1,4 @@
 <Solution>
-  <Configurations>
-    <Platform Name="Any CPU" />
-    <Platform Name="x64" />
-    <Platform Name="x86" />
-  </Configurations>
   <Folder Name="/src/">
     <Project Path="src/PoAutoRobo.App/PoAutoRobo.App.csproj" />
     <Project Path="src/PoAutoRobo.Core/PoAutoRobo.Core.csproj" />

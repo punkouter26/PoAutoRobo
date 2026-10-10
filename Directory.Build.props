@@ -10,6 +10,11 @@
     <!-- The unused-using check only runs on build when documentation is generated; undocumented members and parameters are not an error. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+    <!-- A package with a known weakness, used directly or pulled in by another, is a warning at restore. Warnings stop
+         the build, so it cannot be built at all, on this machine or in CI, until the package is moved off it. -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
   </PropertyGroup>
   <!-- The core is grouped by what each part does. Every project sees all five parts, so no file lists them. -->
   <ItemGroup>

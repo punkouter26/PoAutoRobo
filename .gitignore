@@ -11,8 +11,3 @@ TestResults/
 .idea/
 *.user
 *.suo
-
-# Never commit sign-in details or local settings.
-.env
-*.pfx
-appsettings.*.local.json

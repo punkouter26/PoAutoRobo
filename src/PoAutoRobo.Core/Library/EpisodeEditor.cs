@@ -72,6 +72,17 @@ public static class EpisodeEditor
     public static Episode SetHostVisible(Episode episode, Guid clipId, bool visible) =>
         Update(episode, clipId, clip => clip with { HostVisible = visible });
 
+    /// <summary>Shows or hides the host in every clip at once.</summary>
+    public static Episode SetHostEverywhere(Episode episode, bool visible) =>
+        episode with { Clips = [.. episode.Clips.Select(c => c with { HostVisible = visible })] };
+
+    /// <summary>Changes the art direction. Whatever was drawn in the old look is out of date.</summary>
+    public static Episode SetLook(Episode episode, Look look) => episode.Look == look ? episode : episode with
+    {
+        Look = look,
+        Clips = [.. episode.Clips.Select(c => HasGeneratedMedia(c) ? c with { Visual = c.Visual with { Stale = true } } : c)],
+    };
+
     /// <summary>
     /// Replaces the active tier's dialogue. Narration follows the text on the next narrate pass; the picture is only
     /// marked stale when the model says the core action, tool or subject changed, and is never regenerated here.
@@ -114,8 +125,31 @@ public static class EpisodeEditor
         if (current is null || current.Visual.Kind != requested.Visual.Kind || current.Visual.UserVideoPath is not null)
             return episode;
         var stillDescribesIt = current.Active == requested.Active && current.HostVisible == requested.HostVisible;
-        return Update(episode, requested.Id, c => c with { Visual = c.Visual with { MediaPaths = paths, Stale = !stillDescribesIt } });
+        // Another take: what the clip showed until now is kept beside it, so it can be gone back to.
+        var earlier = requested.Visual.Take != current.Visual.Take && current.Visual.MediaPaths is { Count: > 0 } shown && !shown.SequenceEqual(paths)
+            ? [.. current.Visual.EarlierTakes ?? [], shown]
+            : current.Visual.EarlierTakes;
+        return Update(episode, requested.Id, c => c with { Visual = c.Visual with { MediaPaths = paths, Stale = !stillDescribesIt, Take = requested.Visual.Take, EarlierTakes = earlier } });
     }
+
+    /// <summary>The clip as it would be asked for once more: the same words, a fresh attempt at the picture.</summary>
+    public static Clip NextTake(Clip clip) =>
+        clip with { Visual = clip.Visual with { Take = Math.Max(clip.Visual.Take, clip.Visual.EarlierTakes?.Count ?? 0) + 1 } };
+
+    /// <summary>Goes back to an earlier take: it and what the clip shows now change places. Nothing is made or paid for.</summary>
+    public static Episode UseEarlierTake(Episode episode, Guid clipId, int index) =>
+        Update(episode, clipId, c =>
+        {
+            if (c.Visual.EarlierTakes is not { } earlier || index < 0 || index >= earlier.Count)
+                return c;
+            var kept = earlier.ToList();
+            var chosen = kept[index];
+            if (c.Visual.MediaPaths is { Count: > 0 } shown) kept[index] = shown; else kept.RemoveAt(index);
+            return c with { Visual = c.Visual with { MediaPaths = chosen, EarlierTakes = kept, Stale = false } };
+        });
+
+    /// <summary>Sets the music played under the narration; null takes it away.</summary>
+    public static Episode SetMusic(Episode episode, string? path) => episode.MusicPath == path ? episode : episode with { MusicPath = path };
 
     // Swaps in one changed clip and leaves the rest of the episode as it is now, so a slow change to one clip
     // cannot undo edits made to the others while it was in progress.

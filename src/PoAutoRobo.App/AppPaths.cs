@@ -19,4 +19,7 @@ public static class AppPaths
     public static string HostSheet { get; } = Path.Combine(Host, "sheet.png");
 
     public static string Grounding { get; } = Path.Combine(Local, "grounding");
+
+    /// <summary>The names of AI videos still being made, so one that was stopped is picked up again and not paid for twice.</summary>
+    public static string VideoJobs { get; } = Path.Combine(Local, "video-jobs");
 }

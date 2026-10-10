@@ -1,0 +1,15 @@
+# Opens a pull request when a package or a CI action has a newer version. CI then says whether it still builds and passes.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # One pull request for the routine updates, so they are read and merged together.
+      packages:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

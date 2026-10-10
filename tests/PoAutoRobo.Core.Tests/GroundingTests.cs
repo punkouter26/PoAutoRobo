@@ -79,6 +79,7 @@ public sealed class GroundingTests : IDisposable
     {
         string[] sources = ["The policy runs at 500Hz on the robot.", "Observations include joint_pos."];
 
+        Assert.Empty(Grounding.UnverifiedClaims("It runs at 50Hz.", ["The loop runs at 50 Hz."])); // the same figure, spaced differently
         var claims = Grounding.UnverifiedClaims("I run my policy at 500Hz, read joint_pos and joint_vel, and move 23 joints.", sources);
 
         Assert.Equal(["joint_vel", "23"], claims);
@@ -97,5 +98,32 @@ public sealed class GroundingTests : IDisposable
         Assert.NotEmpty(snippets);
         Assert.All(snippets, s => Assert.Contains(s.Repo, Grounding.OfficialRepos));
         Assert.All(snippets, s => Assert.StartsWith("https://github.com/", s.Url));
+    }
+
+    [Fact]
+    public async Task With_an_embedding_model_a_passage_that_means_the_topic_is_found_without_sharing_a_word_and_each_text_is_sent_once()
+    {
+        const string Readme = "# Gait\n\nThe gait controller sets cadence and step height.\n\n# Licence\n\nBSD 3-Clause.";
+        var source = Serving(new() { ["unitreerobotics/unitree_sdk2"] = Readme });
+        var sent = 0;
+        // Texts about walking point one way and everything else another, as a real model's would.
+        Embed embed = (texts, _) =>
+        {
+            sent += texts.Count;
+            return Task.FromResult<IReadOnlyList<float[]>>([.. texts.Select(text => text.Contains("gait", StringComparison.OrdinalIgnoreCase) || text.Contains("stride", StringComparison.Ordinal) ? new float[] { 1, 0 } : [0, 1])]);
+        };
+        var grounding = new Grounding(source, _cache) { Embed = embed };
+
+        var found = Assert.Single(await grounding.FindAsync("stride", Ct)); // no passage says "stride"
+        Assert.StartsWith("# Gait", found.Text);
+        Assert.Equal(3, sent); // two passages and the topic
+        await grounding.FindAsync("stride", Ct);
+        Assert.Equal(3, sent); // all three were kept on disk
+
+        // With no model, or one that fails, passages are found by their words as before.
+        Assert.Empty(await new Grounding(source, _cache).FindAsync("stride", Ct));
+        var failing = new Grounding(source, Path.Combine(_cache, "fresh")) { Embed = (_, _) => throw new HttpRequestException("no such deployment") };
+        Assert.Empty(await failing.FindAsync("stride", Ct));
+        Assert.Single(await failing.FindAsync("cadence", Ct));
     }
 }

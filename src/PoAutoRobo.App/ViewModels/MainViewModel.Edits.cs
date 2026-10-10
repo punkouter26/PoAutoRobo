@@ -36,12 +36,14 @@ public partial class MainViewModel
     private void Undo()
     {
         if (Episode is { } now && _history.TryUndo(now, out var before)) Travel(before);
+        PlayCue(Cue.Undo);
     }
 
     [RelayCommand(CanExecute = nameof(CanRedo))]
     private void Redo()
     {
         if (Episode is { } now && _history.TryRedo(now, out var after)) Travel(after);
+        PlayCue(Cue.Undo);
     }
 
     private void Travel(Episode target)
@@ -164,6 +166,7 @@ public partial class MainViewModel
             card.Unverified = Grounding.UnverifiedClaims(card.Dialogue, sources) is { Count: > 0 } claims
                 ? "Not in the sources: " + string.Join(", ", claims)
                 : "";
+            card.Review = _notes.GetValueOrDefault(card.Id, "");
         }
         RefreshMeta();
     }
@@ -214,6 +217,7 @@ public partial class MainViewModel
     {
         var id = SelectedClip!.Id;
         Edit(e => EpisodeEditor.RemoveClip(e, id));
+        if (Clips.All(c => c.Id != id)) PlayCue(Cue.Delete); // the last clip cannot go, and makes no sound of going
     }
 
     public void RenameSelectedClip(string title)
@@ -253,7 +257,7 @@ public partial class MainViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection), nameof(DraftProblem))]
-    [NotifyCanExecuteChangedFor(nameof(AuditionCommand), nameof(GeneratePictureCommand), nameof(AddClipCommand), nameof(DuplicateClipCommand), nameof(RemoveClipCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AuditionCommand), nameof(GeneratePictureCommand), nameof(AnotherTakeCommand), nameof(AddClipCommand), nameof(DuplicateClipCommand), nameof(RemoveClipCommand))]
     public partial ClipViewModel? SelectedClip { get; set; }
 
     /// <summary>The dialogue box's text while it is being typed; applied to the clip when the box loses focus.</summary>
@@ -291,6 +295,7 @@ public partial class MainViewModel
         var updated = await EpisodeEditor.EditDialogueAsync(Episode, clip.Id, draft, _scriptWriter, ct);
         // The drift check above can take a moment; apply only this clip so edits made meanwhile are kept.
         var changed = updated.Clips.First(c => c.Id == clip.Id);
+        _notes.Remove(clip.Id); // the editor's note was about the old words
         Edit(e => EpisodeEditor.ReplaceClip(e, changed));
         await _builder.NarrateClipAsync(changed, folder, ct); // new words are spoken straight away
         SyncCards();
@@ -302,14 +307,18 @@ public partial class MainViewModel
         await ApplyDialogueAsync(ct);
         var narration = await _builder.NarrateClipAsync(SelectedClip!.Clip, EpisodeFolder!, ct);
         SyncCards();
-        PlayAudio?.Invoke(narration.AudioPath);
+        PlayAudio(narration.AudioPath);
     });
 
     private bool CanStartJob => HasEpisode && !IsWorking;
 
     /// <summary>Records every clip's voice now, so the cards and the running time show real lengths before any render.</summary>
     [RelayCommand(CanExecute = nameof(CanStartJob))]
-    private Task NarrateAllAsync() => RunActivityAsync("Recording the voices", async ct =>
+    private Task NarrateAllAsync() =>
+        RunActivityAsync("Recording the voices", NarrateEveryClipAsync, "Voices recorded. Clip lengths and the running time are now measured, not estimated.");
+
+    /// <summary>Records every clip's voice, one after another. Part of a job already under way.</summary>
+    private async Task NarrateEveryClipAsync(CancellationToken ct)
     {
         var folder = EpisodeFolder!;
         var cards = Clips.ToList();
@@ -326,9 +335,9 @@ public partial class MainViewModel
                 cards[i].IsBusy = false;
             }
             SyncCards();
-            ClipDone?.Invoke((double)i / Math.Max(1, cards.Count - 1));
+            ClipDone((double)i / Math.Max(1, cards.Count - 1));
         }
-    }, "Voices recorded. Clip lengths and the running time are now measured, not estimated.");
+    }
 
     // ---- The user's own footage ----
 

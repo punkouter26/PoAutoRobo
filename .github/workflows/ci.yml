@@ -14,27 +14,26 @@ jobs:
     # WinUI 3 and the Windows voice used by the offline narrator only exist on Windows.
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      # Each action is named by the exact commit it was at, so a tag moved later cannot change what runs here.
+      # Dependabot keeps these, and the packages, up to date; see dependabot.yml.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 10.0.x
       # First, because it is the quickest thing that can fail.
       - name: Formatting
         run: dotnet format PoAutoRobo.slnx --verify-no-changes
+      # A package with a known weakness is a warning at restore, so this step fails on one as well.
       - name: Build (warnings are errors)
         run: dotnet build PoAutoRobo.slnx --configuration Release
+      # No Azure sign-in here, so everything runs on the mocks. These need nothing installed and take a second.
+      - name: Unit tests
+        run: dotnet test PoAutoRobo.slnx --configuration Release --no-build --filter "Category!=Integration"
       # Tests that render video skip themselves without FFmpeg, so it is installed for them to really run.
       - name: FFmpeg
         shell: pwsh
         run: |
           if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg -y --no-progress }
           ffmpeg -version | Select-Object -First 1
-      # No Azure sign-in here, so everything runs on the mocks.
-      - name: Test
-        run: dotnet test PoAutoRobo.slnx --configuration Release --no-build
-      - name: Known-vulnerable packages
-        shell: pwsh
-        run: |
-          $report = dotnet list PoAutoRobo.slnx package --vulnerable --include-transitive | Out-String
-          $report
-          if ($report -match 'has the following vulnerable packages') { exit 1 }
+      - name: Integration tests (FFmpeg and Edge for real)
+        run: dotnet test PoAutoRobo.slnx --configuration Release --no-build --filter "Category=Integration"

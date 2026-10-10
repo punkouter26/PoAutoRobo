@@ -102,19 +102,27 @@ public sealed partial class FfmpegRunner(string ffmpegPath)
 
         ct.ThrowIfCancellationRequested();
         process.Start();
+        // Stopped the moment the job is cancelled, on the cancelling thread: when the app is closing there is no
+        // later moment, and FFmpeg left alone would carry on encoding with nobody to hand the result to.
+        using var stop = ct.Register(() => Kill(process));
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
+        await process.WaitForExitAsync(CancellationToken.None); // files stay locked until it is really gone
+        ct.ThrowIfCancellationRequested();
+        return (process.ExitCode, output.ToString(), string.Join(Environment.NewLine, log));
+    }
+
+    /// <summary>Ends a program the app started, and everything it started in turn. Safe when it has already gone.</summary>
+    internal static void Kill(Process process)
+    {
         try
         {
-            await process.WaitForExitAsync(ct);
-        }
-        catch (OperationCanceledException)
-        {
             process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync(CancellationToken.None); // files stay locked until it is really gone
-            throw;
         }
-        return (process.ExitCode, output.ToString(), string.Join(Environment.NewLine, log));
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // Already finished, or finishing: there is nothing left to stop.
+        }
     }
 
     [GeneratedRegex(@"I:\s+(-?[\d.]+) LUFS")]

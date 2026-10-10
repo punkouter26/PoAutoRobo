@@ -13,7 +13,13 @@ public sealed class FfmpegArgsTests : IDisposable
     private static string Lines(IEnumerable<string> args) => string.Join('\n', args);
 
     [Fact]
-    public void Timeline_follows_the_narration_with_audio_overlapping_at_each_join()
+    public void The_timeline_follows_the_narration_and_an_upright_short_is_laid_out_for_its_narrow_frame()
+    {
+        Timeline_follows_the_narration_with_audio_overlapping_at_each_join();
+        An_upright_short_sizes_its_title_by_width_and_wraps_its_captions_to_the_narrow_frame();
+    }
+
+    private void Timeline_follows_the_narration_with_audio_overlapping_at_each_join()
     {
         var slots = FfmpegArgs.Timeline([S(20), S(30), S(15)]);
 
@@ -51,8 +57,7 @@ public sealed class FfmpegArgsTests : IDisposable
         return Verify(Lines(FfmpegArgs.Join("clips.txt", ["a0.wav", "a1.wav", "a2.wav"], "out.mp4")));
     }
 
-    [Fact]
-    public void An_upright_short_sizes_its_title_by_width_and_wraps_its_captions_to_the_narrow_frame()
+    private void An_upright_short_sizes_its_title_by_width_and_wraps_its_captions_to_the_narrow_frame()
     {
         var card = Lines(FfmpegArgs.ClipVideo(ClipSource.TitleCard, "title_00.txt", S(15), ExportPreset.Shorts, "clip_00.mp4"));
         CaptionSegment[] words = [new(S(0), [new WordTiming("Hello.", S(0), S(0.4))])];
@@ -102,5 +107,21 @@ public sealed class FfmpegArgsTests : IDisposable
         Assert.Null(FfmpegRunner.LocateIn(relative));                                   // a relative entry could be anyone's folder
         Assert.Null(FfmpegRunner.LocateIn("." + Path.PathSeparator + ""));
         Assert.Equal(Path.Combine(real, "ffmpeg.exe"), FfmpegRunner.LocateIn(relative + Path.PathSeparator + real));
+    }
+
+    [Fact]
+    public void Music_repeats_under_the_whole_video_dips_while_the_voice_speaks_and_ends_with_it()
+    {
+        var args = FfmpegArgs.Join("clips.txt", ["a0.wav", "a1.wav"], "out.mp4", "bed.mp3").ToList();
+        var graph = args[args.IndexOf("-filter_complex") + 1];
+
+        // The track is the input after the narration, and plays round and round.
+        Assert.Equal(["-stream_loop", "-1", "-i", "bed.mp3"], args.Skip(args.IndexOf("bed.mp3") - 3).Take(4));
+        Assert.Contains("[3:a]aformat=sample_rates=48000:channel_layouts=stereo,volume=0.25[bed]", graph);
+        Assert.Contains("[a1]asplit[voice][key]", graph);
+        Assert.Contains("[bed][key]sidechaincompress", graph);
+        Assert.Contains("[voice][ducked]amix=inputs=2:duration=first", graph);
+        Assert.Contains("[mixed]loudnorm", graph); // the mix is what is levelled, not the voice alone
+        Assert.DoesNotContain("sidechaincompress", string.Join(' ', FfmpegArgs.Join("clips.txt", ["a0.wav"], "out.mp4")));
     }
 }

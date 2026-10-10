@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -17,9 +18,10 @@ public partial class MainViewModel : ObservableObject
     private IScriptWriter _scriptWriter = new MockScriptWriter();
     private EpisodeBuilder _builder = new(new MockNarrator(), new FfmpegRunner("ffmpeg.exe"));
     private Grounding? _grounding;
-    private Func<string, string, Visuals>? _visualsFor; // null when there is no Azure connection
+    private Func<string, Quality, Visuals>? _visualsFor; // null when there is no Azure connection
     private string _imageModel = "";
     private bool _syncingClips;
+    private Prefs? _reopen; // where the user was last time, until the services are connected and it can be gone back to
 
     public MainViewModel(TrendFeed trendFeed, bool ffmpegAvailable)
     {
@@ -31,13 +33,18 @@ public partial class MainViewModel : ObservableObject
         SoundsOn = prefs.SoundsOn;
         SoundVolume = Math.Clamp(prefs.SoundVolume, 0, 1);
         DraftPictures = prefs.DraftPictures;
+        MonthlyBudget = Math.Max(0, prefs.MonthlyBudget);
         SubjectIndex = Math.Clamp(prefs.SubjectIndex, 0, SubjectChoices.Length - 1);
+        _reopen = prefs;
         Clips.CollectionChanged += OnClipsChanged;
         // A batch must not start while a single picture is being drawn: it could ask for, and pay for, the same one.
-        GeneratePictureCommand.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(IAsyncRelayCommand.IsRunning)) GenerateAllCommand.NotifyCanExecuteChanged();
-        };
+        foreach (var one in new IAsyncRelayCommand[] { GeneratePictureCommand, AnotherTakeCommand })
+            one.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName != nameof(IAsyncRelayCommand.IsRunning)) return;
+                foreach (var command in new IRelayCommand[] { GenerateAllCommand, GeneratePictureCommand, AnotherTakeCommand, MakeAllCommand })
+                    command.NotifyCanExecuteChanged();
+            };
         _ready = true;
         _ = Guard(RefreshLibraryAsync);
     }
@@ -47,7 +54,7 @@ public partial class MainViewModel : ObservableObject
     /// <summary>True once the app knows whether it is running on the live services or on stand-ins.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Notice), nameof(NoticeDetail), nameof(PicturesAvailable), nameof(HostCandidatesCost))]
-    [NotifyCanExecuteChangedFor(nameof(CreateEpisodeCommand), nameof(GenerateAllCommand), nameof(GeneratePictureCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CreateEpisodeCommand), nameof(GenerateAllCommand), nameof(GeneratePictureCommand), nameof(AnotherTakeCommand), nameof(MakeAllCommand))]
     public partial bool IsConnected { get; set; }
 
     /// <summary>Which services are simulated and why; null when everything is live.</summary>
@@ -56,15 +63,41 @@ public partial class MainViewModel : ObservableObject
     public bool FfmpegAvailable { get; }
 
     /// <param name="visualsFor">Makes the picture service for an episode folder and a quality; null when pictures are not available.</param>
-    public void Connect(IScriptWriter writer, EpisodeBuilder builder, Grounding grounding, Func<string, string, Visuals>? visualsFor, string imageModel, string? offlineMessage)
+    public void Connect(IScriptWriter writer, EpisodeBuilder builder, Grounding grounding, Func<string, Quality, Visuals>? visualsFor, string imageModel, string? offlineMessage)
     {
         (_scriptWriter, _builder, _grounding, _visualsFor, _imageModel, OfflineMessage) = (writer, builder, grounding, visualsFor, imageModel, offlineMessage);
         IsConnected = true;
+        Reopen();
     }
 
-    /// <summary>A word or two for the header when something is not as it should be; empty when all is well.</summary>
+    /// <summary>
+    /// Goes back to the episode, step and tab the app was closed on. Not when the user has already begun something
+    /// in the moment before the services answered: what they are doing now matters more than where they were.
+    /// </summary>
+    private void Reopen()
+    {
+        var last = _reopen;
+        _reopen = null;
+        if (last?.LastEpisodeFolder is not { } folder || Episode is not null || TopicInput.Length > 0 || !File.Exists(Path.Combine(folder, ProjectStore.FileName)))
+            return;
+        try
+        {
+            Open(ProjectStore.Load(folder), folder, ProjectStore.LoadSnippets(folder));
+            Step = last.Step;
+            // The tab is set once the clips page has been laid out: its tab control picks its first tab as it first appears.
+            var tab = Math.Clamp(last.InspectorTab, 0, 1);
+            if (Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread() is { } later)
+                later.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => InspectorTab = tab);
+        }
+        catch (InvalidDataException)
+        {
+            // Damaged since last time: it is still in the list of saved episodes, where opening it offers the repair.
+        }
+    }
+
+    /// <summary>A word or two for the header when something is not as it should be, or there are messages to read back; empty otherwise.</summary>
     // Empty and not null, here and wherever a page asks a question of a value: the page is not told when a value becomes null.
-    public string Notice => !IsConnected ? "Connecting…" : OfflineMessage is not null ? "Offline" : !FfmpegAvailable ? "FFmpeg missing" : "";
+    public string Notice => !IsConnected ? "Connecting…" : OfflineMessage is not null ? "Offline" : !FfmpegAvailable ? "FFmpeg missing" : Messages.Count > 0 ? "Messages" : "";
 
     public string NoticeDetail => string.Join("\n\n", new[]
     {
@@ -76,16 +109,19 @@ public partial class MainViewModel : ObservableObject
     // The lists behind the drop-downs. Each entry carries its own label, so adding a choice is one line here.
     public Choice<EpisodeLength>[] LengthChoices { get; } =
     [
-        new("Full episode · 15 to 20 clips, about 10 minutes", EpisodeLength.Full),
-        new("Short · 5 clips, about 3 minutes", EpisodeLength.Short),
-        new("Two clips · about 1 minute", EpisodeLength.TwoClips),
-        new("Quick test · 1 clip, about 30 seconds", EpisodeLength.QuickTest),
+        new("Full (15–20)", EpisodeLength.Full),
+        new("Short (5)", EpisodeLength.Short),
+        new("Two clips", EpisodeLength.TwoClips),
+        new("Quick test (1)", EpisodeLength.QuickTest),
+        // New lengths go on the end: the one last used is remembered by its place in this list.
+        new("Sampler (9)", new EpisodeLength(9, 9)),
     ];
 
     public Choice<Subject>[] SubjectChoices { get; } =
     [
-        new("Unitree R1 · grounded in the official repositories", Subject.UnitreeR1),
-        new("Any topic · written from what you type", Subject.General),
+        new("Unitree R1", Subject.UnitreeR1),
+        new("Any topic", Subject.General),
+        new("Video essay", Subject.Essay),
     ];
 
     public Choice<ExportPreset>[] ExportChoices { get; } =
@@ -109,23 +145,29 @@ public partial class MainViewModel : ObservableObject
 
     public string? EpisodeFolder { get; private set; }
 
+    // What the view model asks of the window and its views. Each starts as "nothing happens" and "the answer is no",
+    // so the view model is whole before any view exists and never has to ask whether one has been set.
+
     /// <summary>Set by the view that owns the audio player.</summary>
-    public Action<string>? PlayAudio { get; set; }
+    public Action<string> PlayAudio { get; set; } = _ => { };
 
     /// <summary>Set by the view that owns the preview player; it must let go of the file before a new preview is written.</summary>
-    public Action? ReleasePreview { get; set; }
+    public Action ReleasePreview { get; set; } = () => { };
 
     /// <summary>Set by the window: asks the user to approve something that costs money or cannot be undone. True means go ahead.</summary>
-    public Func<string, string, string, Task<bool>>? Confirm { get; set; }
+    public Func<string, string, string, Task<bool>> Confirm { get; set; } = (_, _, _) => Task.FromResult(false);
 
     /// <summary>Set by the window: asks for a line of text, given a title and what is there now. Null means the user backed out.</summary>
-    public Func<string, string, Task<string?>>? Ask { get; set; }
+    public Func<string, string, Task<string?>> Ask { get; set; } = (_, _) => Task.FromResult<string?>(null);
 
     /// <summary>Set by the window: told the job's name and whether it finished, when a long job ends.</summary>
-    public Action<string, bool>? JobFinished { get; set; }
+    public Action<string, bool> JobFinished { get; set; } = (_, _) => { };
 
     /// <summary>Set by the window: one clip of a batch is done, and whereabouts in the batch it is (0 first, 1 last).</summary>
-    public Action<double>? ClipDone { get; set; }
+    public Action<double> ClipDone { get; set; } = _ => { };
+
+    /// <summary>Set by the window: plays one of the app's own sounds.</summary>
+    public Action<Cue> PlayCue { get; set; } = _ => { };
 
     // ---- What the app remembers between runs ----
 
@@ -161,23 +203,25 @@ public partial class MainViewModel : ObservableObject
     // The radar follows the subject: R1 stories for R1 episodes, today's popular stories otherwise.
     partial void OnSubjectIndexChanged(int value)
     {
-        SavePrefs();
         if (_ready) RefreshTopicsCommand.Execute(null);
     }
 
-    partial void OnLengthIndexChanged(int value) => SavePrefs();
+    // Everything remembered is saved as it changes. Adding a choice to remember is one name here and one in SavePrefs.
+    private static readonly HashSet<string> Remembered =
+    [
+        nameof(LengthIndex), nameof(ExportPresetIndex), nameof(SoundsOn), nameof(SubjectIndex), nameof(SoundVolume), nameof(DraftPictures),
+        nameof(Step), nameof(InspectorTab), nameof(MonthlyBudget),
+    ];
 
-    partial void OnExportPresetIndexChanged(int value) => SavePrefs();
-
-    partial void OnSoundsOnChanged(bool value) => SavePrefs();
-
-    partial void OnSoundVolumeChanged(double value) => SavePrefs();
-
-    partial void OnDraftPicturesChanged(bool value) => SavePrefs();
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (Remembered.Contains(e.PropertyName ?? "")) SavePrefs();
+    }
 
     private void SavePrefs()
     {
-        if (_ready) new Prefs(LengthIndex, ExportPresetIndex, SoundsOn, SubjectIndex, SoundVolume, DraftPictures).Save();
+        if (_ready) new Prefs(LengthIndex, ExportPresetIndex, SoundsOn, SubjectIndex, SoundVolume, DraftPictures, EpisodeFolder, Step, InspectorTab, MonthlyBudget).Save();
     }
 
     // ---- Steps ----
@@ -189,10 +233,32 @@ public partial class MainViewModel : ObservableObject
         "Finish: choose the caption style, watch a preview, then render the master video.",
     ];
 
-    /// <summary>Which page is showing: 0 Topic, 1 Clips, 2 Export.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowTopic), nameof(ShowDeck), nameof(StepHint))]
-    public partial int Step { get; set; }
+    private int _step;
+
+    /// <summary>
+    /// Which page is showing: 0 Topic, 1 Clips, 2 Export. The later pages have nothing to show until there is an
+    /// episode, so asking for one then gives the first; the asker is told, and shows the page really on.
+    /// </summary>
+    public int Step
+    {
+        get => _step;
+        set
+        {
+            var wanted = value is 1 or 2 && HasEpisode ? value : 0;
+            if (wanted == _step)
+            {
+                if (wanted != value) OnPropertyChanged(nameof(Step));
+                return;
+            }
+            _step = wanted;
+            OnPropertyChanged(nameof(Step));
+            OnPropertyChanged(nameof(ShowTopic));
+            OnPropertyChanged(nameof(ShowDeck));
+            OnPropertyChanged(nameof(StepHint));
+            if (wanted == 0) _ = Guard(RefreshLibraryAsync);
+            ErrorMessage = null; // an error belongs to the page it happened on
+        }
+    }
 
     // While a script is being written the deck page shows in place of the topic page, with placeholder cards.
     public bool ShowTopic => Step == 0 && !IsCreating;
@@ -205,18 +271,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial int InspectorTab { get; set; }
 
-    partial void OnStepChanged(int value)
-    {
-        if (value > 0 && !HasEpisode) Step = 0; // the later pages have nothing to show until there is an episode
-        if (value == 0) _ = Guard(RefreshLibraryAsync);
-        ErrorMessage = null; // an error belongs to the page it happened on
-    }
-
-    /// <summary>For the keyboard shortcuts: goes to a step when it is open.</summary>
-    public void GoTo(int step)
-    {
-        if (step == 0 || HasEpisode) Step = step;
-    }
+    /// <summary>For the keyboard shortcuts.</summary>
+    public void GoTo(int step) => Step = step;
 
     // ---- Topic radar ----
 
@@ -232,13 +288,13 @@ public partial class MainViewModel : ObservableObject
             var typed = TopicInput.Trim();
             var subject = NextSubject;
             var cards = typed.Length > 0 ? await _trendFeed.SearchAsync(typed, ct)
-                : subject == Subject.General ? await _trendFeed.GetGeneralAsync(ct)
-                : await _trendFeed.GetAsync(ct);
+                : subject == Subject.UnitreeR1 ? await _trendFeed.GetAsync(ct)
+                : await _trendFeed.GetGeneralAsync(ct);
             ct.ThrowIfCancellationRequested();
             var line = typed.Split('\n')[0].Trim();
             RadarHeading = typed.Length > 0 ? $"Topic radar · reading on “{(line.Length > 60 ? line[..60] + "…" : line)}”{(cards.Count == 0 ? " · none found" : "")}"
-                : subject == Subject.General ? "Topic radar · popular today"
-                : "Topic radar · Unitree R1";
+                : subject == Subject.UnitreeR1 ? "Topic radar · Unitree R1"
+                : "Topic radar · popular today";
             Topics.Clear();
             foreach (var card in cards)
                 Topics.Add(card);
@@ -287,13 +343,19 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CreateEpisodeCommand))]
+    [NotifyPropertyChangedFor(nameof(TopicCount))]
     public partial string TopicInput { get; set; } = "";
+
+    /// <summary>How much of the room for a topic is used, said beside the box so a long paste is not cut short unnoticed.</summary>
+    public string TopicCount => TopicInput.Length >= IScriptWriter.MaxTopicLength
+        ? $"{TopicInput.Length:N0} of {IScriptWriter.MaxTopicLength:N0} characters · full: anything pasted beyond this is left out"
+        : $"{TopicInput.Length:N0} of {IScriptWriter.MaxTopicLength:N0} characters";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EpisodeTitle), nameof(HasEpisode), nameof(Runtime), nameof(Captions),
-        nameof(CaptionPresetIndex), nameof(CaptionFontSize), nameof(CaptionStroke), nameof(CaptionAccent))]
+        nameof(CaptionPresetIndex), nameof(CaptionFontSize), nameof(CaptionStroke), nameof(CaptionAccent), nameof(HasMusic), nameof(MusicLabel))]
     [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(RenderShortsCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(NarrateAllCommand),
-        nameof(CleanMediaCommand), nameof(ShowEpisodeFolderCommand), nameof(RenameEpisodeCommand))]
+        nameof(CleanMediaCommand), nameof(ShowEpisodeFolderCommand), nameof(RenameEpisodeCommand), nameof(MakeAllCommand), nameof(ReviewScriptCommand), nameof(RemoveMusicCommand))]
     public partial Episode? Episode { get; set; }
 
     [ObservableProperty]
@@ -302,6 +364,26 @@ public partial class MainViewModel : ObservableObject
     /// <summary>The outcome of the last action, shown on every step.</summary>
     [ObservableProperty]
     public partial string? StatusMessage { get; set; }
+
+    // ---- What has been said, kept to read back ----
+
+    private const int MessagesKept = 20;
+
+    /// <summary>The last things the app said, newest first, each with the time. The message bar shows only the latest.</summary>
+    public ObservableCollection<string> Messages { get; } = [];
+
+    partial void OnErrorMessageChanged(string? value) => Remember(value);
+
+    partial void OnStatusMessageChanged(string? value) => Remember(value);
+
+    private void Remember(string? message)
+    {
+        if (string.IsNullOrEmpty(message)) return;
+        Messages.Insert(0, $"{DateTime.Now:HH:mm} · {message}");
+        while (Messages.Count > MessagesKept)
+            Messages.RemoveAt(Messages.Count - 1);
+        OnPropertyChanged(nameof(Notice));
+    }
 
     /// <summary>The user closed the message bar. Clearing both means the same message, said again, shows again.</summary>
     public void DismissMessages() => (ErrorMessage, StatusMessage) = (null, null);
@@ -330,7 +412,7 @@ public partial class MainViewModel : ObservableObject
         {
             Episode.Clips.Count == 1 ? "1 clip" : $"{Episode.Clips.Count} clips",
             Durations.IsShort(total) ? $"runtime {total:m\\:ss}, shorter than the 3 minute target" : $"runtime {total:m\\:ss}",
-            spent >= 0.005 ? "spent " + SpendLog.InWords((decimal)spent) : "",
+            spent >= 0.005 ? $"spent about {SpendLog.Money((decimal)spent)}" : "",
             _usage,
         }.Where(part => part.Length > 0));
     }
@@ -341,28 +423,26 @@ public partial class MainViewModel : ObservableObject
         if (EpisodeFolder is { } folder)
         {
             Spent = SpendLog.Total(folder);
-            var (tokens, characters) = (SpendLog.Units(folder, ScriptTokens), SpendLog.Units(folder, VoiceCharacters));
+            var (tokens, characters) = (SpendLog.Units(folder, SpendLog.ScriptTokens), SpendLog.Units(folder, SpendLog.VoiceCharacters));
             _usage = string.Join(" · ", new[] { tokens > 0 ? $"{tokens:N0} script tokens" : "", characters > 0 ? $"{characters:N0} voice characters" : "" }.Where(part => part.Length > 0));
         }
         OnPropertyChanged(nameof(Runtime));
     }
 
-    private const string ScriptTokens = "script tokens";
-    private const string VoiceCharacters = "voice characters";
-    private readonly List<(string What, int Units)> _usedBeforeFolder = []; // a script is written before its episode has a folder
+    private readonly List<(string What, int Units, decimal Dollars)> _usedBeforeFolder = []; // a script is written before its episode has a folder
 
     /// <summary>
-    /// The script and voice services report what each request used. They have no price the app knows, so the
-    /// amounts are listed without one. Safe to call from any thread.
+    /// The script and voice services report what each request used, with its price when the user has given their
+    /// rates and zero when not. Safe to call from any thread.
     /// </summary>
-    public void LogUsage(string what, int units)
+    public void LogUsage(string what, int units, decimal dollars)
     {
         lock (_usedBeforeFolder)
         {
             if (EpisodeFolder is { } folder && !IsCreating)
-                SpendLog.Add(folder, what, 0, units);
+                SpendLog.Add(folder, what, dollars, units);
             else
-                _usedBeforeFolder.Add((what, units));
+                _usedBeforeFolder.Add((what, units, dollars));
         }
     }
 
@@ -404,17 +484,20 @@ public partial class MainViewModel : ObservableObject
                 ReportActivity($"Written {titles.Count} of {of} clips", 0.1 + 0.9 * Math.Min(1.0, (double)titles.Count / length.MaxClips));
                 Skeletons = [.. titles.Take(length.MaxClips), .. Enumerable.Repeat("", Math.Max(0, length.MaxClips - titles.Count))];
             });
-            var episode = VisualMix.Assign(await _scriptWriter.WriteEpisodeAsync(topic, subject, grounding, length, ct, written), MixPercentages.Default);
+            // The script chooses each clip's picture type; whatever cannot be made on this computer becomes a still.
+            Func<VisualKind, bool> canMake = CurrentVisuals is { } visuals ? visuals.CanMake : _ => false;
+            var episode = VisualMix.Settle(await _scriptWriter.WriteEpisodeAsync(topic, subject, grounding, length, ct, written), canMake);
             var folder = ProjectStore.NewFolder(AppPaths.Episodes, episode.Title); // never on top of an earlier episode
             ProjectStore.Save(episode, folder);
             ProjectStore.SaveSnippets(grounding, folder);
             lock (_usedBeforeFolder)
             {
-                foreach (var (what, units) in _usedBeforeFolder)
-                    SpendLog.Add(folder, what, 0, units);
+                foreach (var (what, units, dollars) in _usedBeforeFolder)
+                    SpendLog.Add(folder, what, dollars, units);
                 _usedBeforeFolder.Clear();
             }
             Open(episode, folder, grounding);
+            _ = ReviewAsync(quiet: true); // read by an editor while the user looks the clips over; nothing waits for it
         }
         finally
         {
@@ -427,10 +510,11 @@ public partial class MainViewModel : ObservableObject
     {
         Flush(); // a caption change to the episode being left may still be waiting to be saved
         _syncingClips = true;
-        ReleasePreview?.Invoke();
+        ReleasePreview();
         Preview = null;
         LastExport = null;
         ForgetHistory();
+        _notes.Clear();
         EpisodeFolder = folder;
         Snippets.Clear();
         foreach (var snippet in snippets)
@@ -444,7 +528,43 @@ public partial class MainViewModel : ObservableObject
         SyncCards();
         SelectedClip = Clips.FirstOrDefault();
         Step = 1;
+        SavePrefs(); // this is now the episode to come back to
         _ = Guard(ShowFootageAsync);
+    }
+
+    // ---- The editor's notes ----
+
+    private readonly Dictionary<Guid, string> _notes = []; // ponytail: not saved with the episode; ask again after reopening
+
+    /// <summary>Has the whole script read as an editor would, and marks the clips worth changing.</summary>
+    [RelayCommand(CanExecute = nameof(HasEpisode))]
+    private Task ReviewScriptAsync() => ReviewAsync(quiet: false);
+
+    /// <param name="quiet">Asked for by the app and not the user: nothing is said when it finds nothing or cannot be done.</param>
+    private async Task ReviewAsync(bool quiet)
+    {
+        if (Episode is not { } episode || EpisodeFolder is not { } folder) return;
+        try
+        {
+            var notes = await _scriptWriter.ReviewAsync(episode, CancellationToken.None);
+            if (EpisodeFolder != folder) return; // another episode was opened meanwhile
+            _notes.Clear();
+            foreach (var note in notes)
+                _notes[episode.Clips[note.Clip - 1].Id] = note.Note;
+            SyncCards();
+            if (notes.Count > 0)
+                StatusMessage = $"An editor's read of the script has a note on {(notes.Count == 1 ? "1 clip" : $"{notes.Count} clips")}. Point at a card's warning mark to read it.";
+            else if (!quiet)
+                StatusMessage = "An editor's read of the script found nothing to change.";
+        }
+        catch (Exception e) when (quiet && e is not OperationCanceledException)
+        {
+            // A help nobody asked for: when it cannot be had, the episode is no worse off.
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            ErrorMessage = Plain(e);
+        }
     }
 
     /// <summary>Footage added before cards showed a frame of it has none saved; take one now so those cards are not blank.</summary>
@@ -464,7 +584,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(HasEpisode))]
     private async Task RenameEpisodeAsync()
     {
-        if (Ask is not null && Episode is { } episode && await Ask("Rename episode", episode.Title) is { } title)
+        if (Episode is { } episode && await Ask("Rename episode", episode.Title) is { } title)
             Edit(e => EpisodeEditor.Rename(e, title));
     }
 
@@ -490,7 +610,7 @@ public partial class MainViewModel : ObservableObject
         var megabytes = unused.Sum(file => new FileInfo(file).Length) / 1048576.0;
         var message = $"{unused.Count} files ({megabytes:0.0} MB) are no longer used by any clip: recordings of earlier wording and replaced pictures. " +
             "They are deleted for good, and a removed picture would be charged again if you went back to it. Undo history is cleared.";
-        if (Confirm is null || !await Confirm("Remove unused media?", message, "Remove") || IsWorking)
+        if (!await Confirm("Remove unused media?", message, "Remove") || IsWorking)
             return;
         ForgetHistory(); // an undone edit could point at a file that is about to go
         foreach (var file in unused)

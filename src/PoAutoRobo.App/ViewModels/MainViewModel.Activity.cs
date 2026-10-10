@@ -9,11 +9,18 @@ public partial class MainViewModel
 {
     private readonly Stopwatch _activityClock = new();
     private CancellationTokenSource? _cancel;
+    private (double From, double Span) _phase = (0, 1);
+
+    /// <summary>
+    /// For a job made of several jobs: the part now starting fills the bar from <paramref name="from"/> for
+    /// <paramref name="span"/> of its length, so each part can go on reporting 0 to 1 and the bar still only moves forward.
+    /// </summary>
+    private void Phase(double from, double span) => _phase = (from, span);
 
     /// <summary>True while a script, a recording pass, a preview, a render or a batch of pictures is running. Only one runs at a time.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(RenderShortsCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(GeneratePictureCommand),
-        nameof(NarrateAllCommand), nameof(CleanMediaCommand), nameof(CancelActivityCommand), nameof(CreateEpisodeCommand))]
+        nameof(NarrateAllCommand), nameof(CleanMediaCommand), nameof(CancelActivityCommand), nameof(CreateEpisodeCommand), nameof(AnotherTakeCommand), nameof(MakeAllCommand))]
     public partial bool IsWorking { get; set; }
 
     /// <summary>What the job is, e.g. "Rendering the master video (1080p, 30 fps)".</summary>
@@ -45,6 +52,7 @@ public partial class MainViewModel
         ActivityDetail = "Starting…";
         ActivityPercent = 0;
         ActivityTime = "";
+        _phase = (0, 1);
         _activityClock.Restart();
         IsWorking = true;
         var finished = false;
@@ -70,7 +78,7 @@ public partial class MainViewModel
             foreach (var card in Clips)
                 card.Progress = 0; // no card is left showing a half-finished ring
         }
-        JobFinished?.Invoke(title, finished);
+        JobFinished(title, finished);
         return finished;
     }
 
@@ -106,6 +114,7 @@ public partial class MainViewModel
     private void ReportActivity(string detail, double fraction)
     {
         if (!IsWorking) return; // a late report after the job ended
+        fraction = _phase.From + _phase.Span * Math.Clamp(fraction, 0, 1);
         ActivityDetail = detail;
         ActivityPercent = Math.Clamp(fraction, 0, 1) * 100;
         var elapsed = _activityClock.Elapsed;

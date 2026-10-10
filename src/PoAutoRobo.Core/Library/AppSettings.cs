@@ -1,35 +1,7 @@
-using Azure;
 using Azure.Core;
 using Azure.Identity;
-using Azure.Security.KeyVault.Secrets;
 
 namespace PoAutoRobo.Core.Library;
-
-public interface ISecretSource
-{
-    /// <returns>The secret's value, or null when the vault has no secret of that name.</returns>
-    Task<string?> GetAsync(string name, CancellationToken ct);
-}
-
-/// <summary>Reads secrets from Azure Key Vault as the signed-in Azure user. Nothing is written to disk.</summary>
-public sealed class KeyVaultSecretSource(Uri vault, TokenCredential credential) : ISecretSource
-{
-    public static readonly Uri DefaultVault = new(AppSettings.Choice("POAUTOROBO_VAULT", "https://kv-poshared.vault.azure.net/"));
-
-    private readonly SecretClient _client = new(vault, credential);
-
-    public async Task<string?> GetAsync(string name, CancellationToken ct)
-    {
-        try
-        {
-            return (await _client.GetSecretAsync(name, cancellationToken: ct)).Value.Value;
-        }
-        catch (RequestFailedException e) when (e.Status == 404)
-        {
-            return null;
-        }
-    }
-}
 
 /// <summary>Connection details for the live services. Held in memory only; never saved with an episode.</summary>
 /// <param name="Endpoint">The Azure AI services resource. One resource serves script, voice, images and video.</param>
@@ -60,6 +32,31 @@ public sealed record AppSettings(Uri? Endpoint, string? GitHubToken)
     /// <summary>"gpt-image-2", once that deployment exists, holds a character's look better.</summary>
     public string ImageDeployment { get; init; } = Choice("POAUTOROBO_IMAGE_MODEL", "gpt-image-1-mini");
 
+    /// <summary>The video model's deployment (for example "sora-2"). Null until named: AI video is dear, so it is opt-in.</summary>
+    public string? VideoDeployment { get; init; } = Choice("POAUTOROBO_VIDEO_MODEL", "") is { Length: > 0 } name ? name : null;
+
+    /// <summary>
+    /// The embedding model's deployment (for example "text-embedding-3-small"). Null until named; reference passages
+    /// are then found by matching words alone.
+    /// </summary>
+    public string? EmbeddingDeployment { get; init; } = Choice("POAUTOROBO_EMBEDDING_MODEL", "") is { Length: > 0 } name ? name : null;
+
+    // What script and voice cost depends on the user's own Azure agreement, so the app carries no price for them.
+    // Each is null until given, and that service's use is then shown as an amount used, without a price.
+
+    /// <summary>Rates of the main script model, from POAUTOROBO_CHAT_RATES as "input,cached input,output" in dollars a million tokens.</summary>
+    public TokenRates? ChatRates { get; init; } = TokenRates.Parse(Choice("POAUTOROBO_CHAT_RATES", ""));
+
+    /// <summary>The same for the fast model, from POAUTOROBO_FAST_CHAT_RATES.</summary>
+    public TokenRates? FastChatRates { get; init; } = TokenRates.Parse(Choice("POAUTOROBO_FAST_CHAT_RATES", ""));
+
+    /// <summary>Dollars for a million characters spoken, from POAUTOROBO_VOICE_RATE.</summary>
+    public decimal? VoiceRate { get; init; } =
+        decimal.TryParse(Choice("POAUTOROBO_VOICE_RATE", ""), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var rate) && rate >= 0 ? rate : null;
+
+    /// <summary>Key for the Pexels stock photo library; null when there is none and stock photos are not offered.</summary>
+    public string? PexelsKey { get; init; } = Choice("POAUTOROBO_PEXELS_KEY", "") is { Length: > 0 } key ? key : null;
+
     /// <summary>Why the vault could not be read, in words fit to show the user.</summary>
     public string? LoadError { get; init; }
 
@@ -68,9 +65,10 @@ public sealed record AppSettings(Uri? Endpoint, string? GitHubToken)
         try
         {
             // Fetched together: each is a separate round trip made before the window can appear.
-            var (endpoint, gitHub) = (Get("AzureOpenAI--Endpoint"), Get("GitHub--PAT"));
-            await Task.WhenAll(endpoint, gitHub);
-            return new AppSettings(Uri.TryCreate(await endpoint, UriKind.Absolute, out var uri) ? uri : null, await gitHub);
+            var (endpoint, gitHub, pexels) = (Get("AzureOpenAI--Endpoint"), Get("GitHub--PAT"), Get("Pexels--ApiKey"));
+            await Task.WhenAll(endpoint, gitHub, pexels);
+            var settings = new AppSettings(Uri.TryCreate(await endpoint, UriKind.Absolute, out var uri) ? uri : null, await gitHub);
+            return await pexels is { } key ? settings with { PexelsKey = key } : settings; // the environment variable stands when the vault has none
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -84,5 +82,5 @@ public sealed record AppSettings(Uri? Endpoint, string? GitHubToken)
 
     // Records print every property by default; secrets must never reach a log or an error message.
     public override string ToString() =>
-        $"AppSettings {{ Endpoint = {Endpoint}, GitHubToken = {(GitHubToken is null ? "(none)" : "(set)")} }}";
+        $"AppSettings {{ Endpoint = {Endpoint}, GitHubToken = {(GitHubToken is null ? "(none)" : "(set)")}, PexelsKey = {(PexelsKey is null ? "(none)" : "(set)")} }}";
 }

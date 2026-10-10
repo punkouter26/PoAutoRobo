@@ -2,25 +2,18 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace PoAutoRobo.App.ViewModels;
 
-/// <summary>One entry in a drop-down list: the words shown and the value they stand for, kept together so the two cannot drift apart.</summary>
-public sealed record Choice<T>(string Label, T Value)
-{
-    public override string ToString() => Label; // what the list shows
-}
+/// <summary>One of a clip's earlier takes as the inspector shows it: its place among them and the picture that stands for it.</summary>
+public sealed record EarlierTake(int Index, string Picture);
 
 /// <summary>One card in the clip deck. Edits go through <paramref name="edit"/> so the episode stays the single source of truth.</summary>
 /// <param name="pickTier">Switches depth; the owner writes the depth first when the clip does not have it yet.</param>
 public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edit, Action<ClipViewModel, Tier> pickTier) : ObservableObject
 {
-    // AI video is not offered: until a video service is wired in, such a clip is drawn as one still.
-    public static Choice<VisualKind>[] KindChoices { get; } =
-    [
-        new("Still panel", VisualKind.Still), new("Panel sequence", VisualKind.MultiPanel), new("Title card", VisualKind.TitleCard),
-    ];
+    public static Choice<VisualKind>[] KindChoices { get; } = [.. Visuals.Kinds.Select(k => new Choice<VisualKind>(k.Label, k.Kind))];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Title), nameof(Heading), nameof(Summary), nameof(Warnings), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(VisualPrompt),
-        nameof(IsStale), nameof(HasUserVideo), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath))]
+        nameof(IsStale), nameof(StaleWarning), nameof(LengthWarning), nameof(HasUserVideo), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath), nameof(EarlierTakes), nameof(HasEarlierTakes))]
     public partial Clip Clip { get; set; } = clip;
 
     [ObservableProperty]
@@ -34,8 +27,13 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
 
     /// <summary>Figures and code names in the dialogue that are not in the episode's sources; empty when there are none.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Warnings))]
+    [NotifyPropertyChangedFor(nameof(Warnings), nameof(CheckWarning))]
     public partial string Unverified { get; set; } = "";
+
+    /// <summary>What an editor reading the whole script would change about this clip; empty when nothing.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Warnings), nameof(CheckWarning))]
+    public partial string Review { get; set; } = "";
 
     /// <summary>True while something is being made for this clip: a picture, a recording or a new depth.</summary>
     [ObservableProperty]
@@ -67,15 +65,23 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
     {
         get
         {
-            var kind = KindChoices.FirstOrDefault(k => k.Value == Clip.Visual.Kind)?.Label ?? (HasUserVideo ? "My video" : "Still panel");
+            var kind = KindChoices.FirstOrDefault(k => k.Value == Clip.Visual.Kind)?.Label ?? "My video";
             var length = Measured is { } real ? $"{real.TotalSeconds:0} s" : $"about {Duration.TotalSeconds:0} s";
             return $"{Clip.ActiveTier} · {kind} · {length}{(Clip.HostVisible ? "" : " · voice only")}";
         }
     }
 
-    /// <summary>Everything about this clip worth a second look, one to a line; empty when there is nothing.</summary>
-    public string Warnings =>
-        string.Join('\n', new[] { IsStale ? "The picture is out of date." : "", Durations.Warning(Clip) ?? "", Unverified }.Where(line => line.Length > 0));
+    // Three kinds of thing worth a second look, each with its own mark on the card so they can be told apart at a
+    // glance: the picture, the length, and the words themselves. Each is empty when there is nothing to say.
+
+    public string StaleWarning => IsStale ? "The picture is out of date." : "";
+
+    public string LengthWarning => Durations.Warning(Clip) ?? "";
+
+    public string CheckWarning => string.Join('\n', new[] { Unverified, Review.Length > 0 ? "Editor: " + Review : "" }.Where(line => line.Length > 0));
+
+    /// <summary>All three together, one to a line, for a screen reader; empty when there is nothing.</summary>
+    public string Warnings => string.Join('\n', new[] { StaleWarning, LengthWarning, CheckWarning }.Where(line => line.Length > 0));
 
     public string Dialogue => Clip.Active.Dialogue;
 
@@ -89,6 +95,12 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
     public string ThumbnailPath => Clip.Picture() ?? "";
 
     public bool HasUserVideo => Clip.Visual.Kind == VisualKind.UserVideo;
+
+    /// <summary>A picture for each earlier take still on disk, with its place among them, for going back to one.</summary>
+    public IReadOnlyList<EarlierTake> EarlierTakes =>
+        [.. (Clip.Visual.EarlierTakes ?? []).Select((media, index) => (Picture: Clip.PictureOf(media), index)).Where(take => take.Picture is not null).Select(take => new EarlierTake(take.index, take.Picture!))];
+
+    public bool HasEarlierTakes => EarlierTakes.Count > 0;
 
     public bool CanPickKind => !HasUserVideo;
 

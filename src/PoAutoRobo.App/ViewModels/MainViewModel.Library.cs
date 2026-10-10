@@ -43,7 +43,7 @@ public partial class MainViewModel
             }
             catch (InvalidDataException) when (File.Exists(Path.Combine(folder, ProjectStore.FileName + ".bak")))
             {
-                if (Confirm is null || !await Confirm("This episode's file is damaged", "Restore it from the copy saved just before the last change?", "Restore"))
+                if (!await Confirm("This episode's file is damaged", "Restore it from the copy saved just before the last change?", "Restore"))
                     return;
                 episode = ProjectStore.RestoreBackup(folder);
             }
@@ -73,12 +73,12 @@ public partial class MainViewModel
             ErrorMessage = "Wait for the job in progress to finish, or cancel it, before deleting this episode.";
             return;
         }
-        if (Confirm is null || !await Confirm($"Delete {summary.Title}?", "The episode's folder, with its script, voices, pictures and finished videos, goes to the Recycle Bin.", "Delete"))
+        if (!await Confirm($"Delete {summary.Title}?", "The episode's folder, with its script, voices, pictures and finished videos, goes to the Recycle Bin.", "Delete"))
             return;
         if (isOpen)
         {
             _unsaved = false; // nothing of it is worth saving now
-            ReleasePreview?.Invoke();
+            ReleasePreview();
             Preview = null;
             _syncingClips = true;
             Clips.Clear();
@@ -88,6 +88,7 @@ public partial class MainViewModel
             EpisodeFolder = null;
             ForgetHistory();
             Step = 0;
+            SavePrefs(); // there is no longer an episode to come back to
         }
         Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(summary.Folder,
             Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);

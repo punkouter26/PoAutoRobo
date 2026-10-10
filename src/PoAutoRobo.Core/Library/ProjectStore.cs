@@ -62,7 +62,8 @@ public static class ProjectStore
     {
         var sound = AssCaptions.IsHexColour(episode.Captions.AccentColor)
             // A clip always has the depth it is on; the other depths are written on demand and may be absent.
-            && episode.Clips.All(c => c is not null && c.Scripts.ContainsKey(c.ActiveTier) && c.Scripts.Values.All(script => script is not null));
+            && episode.Clips.All(c => c is not null && c.Scripts.ContainsKey(c.ActiveTier) && c.Scripts.Values.All(script => script is not null)
+                && (c.Visual.EarlierTakes ?? []).All(take => take is not null && take.All(path => path is not null)));
         if (!sound)
             throw new InvalidDataException($"{path} is missing or damaged.");
     }
@@ -76,14 +77,17 @@ public static class ProjectStore
 
         return episode with
         {
+            MusicPath = episode.MusicPath is { } music && Inside(music) ? music : null,
             Clips = [.. episode.Clips.Select(clip =>
             {
                 var visual = clip.Visual;
                 if (visual.UserVideoPath is { } video && !Inside(video))
                     return clip with { NarrationRate = 1.0, Visual = new VisualSpec(VisualKind.TitleCard) };
+                if (visual.EarlierTakes is { } takes && !takes.All(take => take.All(Inside)))
+                    visual = visual with { EarlierTakes = [.. takes.Where(take => take.All(Inside))] };
                 if (visual.MediaPaths is { } media && !media.All(Inside))
-                    return clip with { Visual = visual with { MediaPaths = [.. media.Where(Inside)] } };
-                return clip;
+                    visual = visual with { MediaPaths = [.. media.Where(Inside)] };
+                return ReferenceEquals(visual, clip.Visual) ? clip : clip with { Visual = visual };
             })],
         };
     }
@@ -152,9 +156,15 @@ public static class ProjectStore
         Save(episode with
         {
             Title = title,
+            MusicPath = episode.MusicPath is { } music ? Moved(music) : null,
             Clips = [.. episode.Clips.Select(c => c with
             {
-                Visual = c.Visual with { UserVideoPath = c.Visual.UserVideoPath is { } video ? Moved(video) : null, MediaPaths = c.Visual.MediaPaths is { } media ? [.. media.Select(Moved)] : null },
+                Visual = c.Visual with
+                {
+                    UserVideoPath = c.Visual.UserVideoPath is { } video ? Moved(video) : null,
+                    MediaPaths = c.Visual.MediaPaths is { } media ? [.. media.Select(Moved)] : null,
+                    EarlierTakes = c.Visual.EarlierTakes is { } takes ? [.. takes.Select(take => (IReadOnlyList<string>)[.. take.Select(Moved)])] : null,
+                },
             })],
         }, copy);
         return copy;

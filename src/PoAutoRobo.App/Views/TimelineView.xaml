@@ -32,6 +32,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Button x:Name="PlayButton" Width="44" Height="44" CornerRadius="22" Padding="0" Click="OnPlayPause"
                     AutomationProperties.Name="Play or pause" IsEnabled="False" ToolTipService.ToolTip="Play or pause the preview.">
@@ -41,6 +42,9 @@
                     IsEnabled="False" IsThumbToolTipEnabled="False" ValueChanged="OnScrub" AutomationProperties.Name="Position" />
             <TextBlock x:Name="TimeText" Grid.Column="2" Text="0:00 / 0:00" VerticalAlignment="Center"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <!-- Once there is a preview, this is how it is made again after the clips change -->
+            <Button x:Name="RebuildButton" Grid.Column="3" Content="Rebuild" MinHeight="44" Visibility="Collapsed" Click="OnBuildPreview"
+                    ToolTipService.ToolTip="Build the preview again, to see changes made to the clips since. Caption changes show without rebuilding." />
         </Grid>
     </Grid>
 </UserControl>

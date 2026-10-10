@@ -50,12 +50,16 @@ public sealed partial class TrendFeed(FetchText fetch)
         {
             return [.. ParseHackerNews(await fetch(FrontPage, ct)).Where(c => IsWebLink(c.Url)).Take(MaxCards)];
         }
-        catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException or InvalidOperationException or KeyNotFoundException or FormatException)
+        catch (Exception e) when (IsFeedFailure(e))
         {
             ct.ThrowIfCancellationRequested();
             return [];
         }
     }
+
+    // Everything a source can do wrong: not answer, answer slowly, or answer with something that is not the feed it promised.
+    private static bool IsFeedFailure(Exception e) =>
+        e is HttpRequestException or XmlException or JsonException or TaskCanceledException or InvalidOperationException or KeyNotFoundException or FormatException;
 
     /// <summary>The longest topic text sent as a search; a pasted outline is cut to its opening words.</summary>
     public const int MaxQueryLength = 120;
@@ -82,7 +86,7 @@ public sealed partial class TrendFeed(FetchText fetch)
             {
                 return parse(await fetch(url, ct));
             }
-            catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException or InvalidOperationException or KeyNotFoundException or FormatException)
+            catch (Exception e) when (IsFeedFailure(e))
             {
                 ct.ThrowIfCancellationRequested();
                 return [];
@@ -115,7 +119,7 @@ public sealed partial class TrendFeed(FetchText fetch)
                 var text = await fetch(source.Url, ct);
                 return source.IsHackerNews ? ParseHackerNews(text) : ParseFeed(text, source.Name);
             }
-            catch (Exception e) when (e is HttpRequestException or XmlException or JsonException or TaskCanceledException or InvalidOperationException or KeyNotFoundException or FormatException)
+            catch (Exception e) when (IsFeedFailure(e))
             {
                 ct.ThrowIfCancellationRequested();
                 return [];

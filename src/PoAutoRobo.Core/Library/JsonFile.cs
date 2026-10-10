@@ -22,7 +22,7 @@ public static class JsonFile
     {
         try
         {
-            MediaCache.EnsureFolderFor(path);
+            Files.EnsureFolderFor(path);
             File.WriteAllText(path, JsonSerializer.Serialize(value));
         }
         catch (IOException)

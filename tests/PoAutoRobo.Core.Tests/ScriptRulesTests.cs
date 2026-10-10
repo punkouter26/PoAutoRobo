@@ -13,10 +13,14 @@ public sealed class ScriptRulesTests
         return episode with { Clips = [.. episode.Clips.Select((c, i) => EpisodeEditor.WithDialogue(c, Words(wordsPerClip[i])))] };
     }
 
-    [Theory]
-    [InlineData(1, 1, 1)]     // quick test: one clip, about half a minute
-    [InlineData(15, 20, 16)]  // full
-    public async Task Mock_episode_has_the_length_asked_for_with_three_tiers_all_in_range_and_tier_b_active(int min, int max, int expected)
+    [Fact]
+    public async Task Mock_episode_has_the_length_asked_for_with_three_tiers_all_in_range_and_tier_b_active()
+    {
+        await Mock_episode_has_the_length_asked_for_with_three_tiers_all_in_range_and_tier_b_activeCase(1, 1, 1); // quick test: one clip, about half a minute
+        await Mock_episode_has_the_length_asked_for_with_three_tiers_all_in_range_and_tier_b_activeCase(15, 20, 16); // full
+    }
+
+    private async Task Mock_episode_has_the_length_asked_for_with_three_tiers_all_in_range_and_tier_b_activeCase(int min, int max, int expected)
     {
         var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", Subject.UnitreeR1, [], new EpisodeLength(min, max), Ct);
 
@@ -31,11 +35,21 @@ public sealed class ScriptRulesTests
         });
     }
 
-    [Theory]
-    [InlineData(41, "Shorter than 15 seconds")]  // 14.9s
-    [InlineData(165, null)]                      // 60.0s: the range includes its ends
-    [InlineData(166, "Longer than 60 seconds")]  // 60.4s
-    public void A_clip_is_timed_at_165_words_a_minute_and_flagged_in_plain_words_when_its_active_tier_runs_outside_15_to_60_seconds(int words, string? warning)
+    [Fact]
+    public void Clips_and_episodes_are_timed_from_their_words_and_flagged_when_too_short_or_too_long()
+    {
+        A_clip_is_timed_at_165_words_a_minute_and_flagged_in_plain_words_when_its_active_tier_runs_outside_15_to_60_seconds();
+        An_episode_runs_for_the_sum_of_its_active_tiers_and_is_flagged_under_three_minutes();
+    }
+
+    private void A_clip_is_timed_at_165_words_a_minute_and_flagged_in_plain_words_when_its_active_tier_runs_outside_15_to_60_seconds()
+    {
+        A_clip_is_timed_at_165_words_a_minute_and_flagged_in_plain_words_when_its_active_tier_runs_outside_15_to_60_secondsCase(41, "Shorter than 15 seconds"); // 14.9s
+        A_clip_is_timed_at_165_words_a_minute_and_flagged_in_plain_words_when_its_active_tier_runs_outside_15_to_60_secondsCase(165, null); // 60.0s: the range includes its ends
+        A_clip_is_timed_at_165_words_a_minute_and_flagged_in_plain_words_when_its_active_tier_runs_outside_15_to_60_secondsCase(166, "Longer than 60 seconds"); // 60.4s
+    }
+
+    private void A_clip_is_timed_at_165_words_a_minute_and_flagged_in_plain_words_when_its_active_tier_runs_outside_15_to_60_secondsCase(int words, string? warning)
     {
         var clip = EpisodeOf(words).Clips[0]; // tiers A and C still hold three-word test lines; only the active tier counts
 
@@ -43,8 +57,7 @@ public sealed class ScriptRulesTests
         Assert.Equal(warning, Durations.Warning(clip));
     }
 
-    [Fact]
-    public void An_episode_runs_for_the_sum_of_its_active_tiers_and_is_flagged_under_three_minutes()
+    private void An_episode_runs_for_the_sum_of_its_active_tiers_and_is_flagged_under_three_minutes()
     {
         Assert.Equal(TimeSpan.FromSeconds(60 + 20), Durations.Total(EpisodeOf(165, 55)));
         Assert.True(Durations.IsShort(Durations.Total(EpisodeOf(165, 165, 164))));   // 2:59.6

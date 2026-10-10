@@ -1,31 +1,46 @@
 using System.ComponentModel;
-using System.Numerics;
-using Microsoft.Graphics.Canvas.Effects;
+using ComputeSharp.D2D1.WinUI;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using PoAutoRobo.App.ViewModels;
+using Windows.Foundation;
 using Windows.UI;
 using Windows.UI.ViewManagement;
 
 namespace PoAutoRobo.App.Views;
 
-public sealed partial class RadarPanel : UserControl
+/// <summary>Step 1: the topic form, the saved episodes and the stories to take a topic from.</summary>
+public sealed partial class TopicPage : UserControl
 {
     private MainViewModel? _viewModel;
     private bool _inFront = true;
-    private Color _accent; // read on the UI thread; the backdrop is drawn on its own
+    private bool _shimmering;
+    private PixelShaderEffect<Nebula>? _nebula; // made and used on the drawing thread only
 
-    public RadarPanel() => InitializeComponent();
+    // Read by the drawing thread, set by the page.
+    private Color _accent;
+    private volatile bool _fetching;
+    private float _energy;
+
+    public TopicPage() => InitializeComponent();
 
     public MainViewModel? ViewModel
     {
         get => _viewModel;
         set
         {
-            if (_viewModel is not null) _viewModel.PropertyChanged -= OnViewModelChanged;
+            if (_viewModel is not null)
+            {
+                _viewModel.PropertyChanged -= OnViewModelChanged;
+                _viewModel.RefreshTopicsCommand.PropertyChanged -= OnRefreshChanged;
+            }
             _viewModel = value;
-            if (value is not null) value.PropertyChanged += OnViewModelChanged;
+            if (value is not null)
+            {
+                value.PropertyChanged += OnViewModelChanged;
+                value.RefreshTopicsCommand.PropertyChanged += OnRefreshChanged;
+            }
             Bindings.Update();
             value?.RefreshTopicsCommand.Execute(null); // topics load on launch; the button reloads them
         }
@@ -56,34 +71,38 @@ public sealed partial class RadarPanel : UserControl
         if (e.PropertyName == nameof(MainViewModel.ShowTopic)) PaceBackdrop();
     }
 
+    // While stories are fetched the placeholder rows catch the light, and the backdrop quickens.
+    private void OnRefreshChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        var fetching = ViewModel?.RefreshTopicsCommand.IsRunning == true;
+        _fetching = fetching;
+        if (fetching == _shimmering) return;
+        _shimmering = fetching;
+        Ui.Shimmer(fetching);
+    }
+
     // Drawn only while it can be seen: this page showing, and the app in front.
     private void PaceBackdrop() => Backdrop.Paused = !(_inFront && ViewModel?.ShowTopic == true);
 
-    // ponytail: the graphics card's own noise generator, tinted and drifting. A hand-written shader would need a
-    // compiled shader file shipped with the app; write one if this ever looks too plain.
     private void OnDrawBackdrop(ICanvasAnimatedControl sender, CanvasAnimatedDrawEventArgs args)
     {
-        var seconds = (float)args.Timing.TotalTime.TotalSeconds;
-        var accent = _accent;
-        var drift = new Vector2(seconds * 14, seconds * 9);
-        using var cloud = new TurbulenceEffect
-        {
-            Size = new Vector2((float)sender.Size.Width, (float)sender.Size.Height),
-            Frequency = new Vector2(0.003f),
-            Octaves = 2,
-            Noise = TurbulenceEffectNoise.FractalSum,
-            Offset = drift,
-        };
-        // Every point takes the accent colour; how bright the cloud is there decides only how much of it shows.
-        using var tinted = new ColorMatrixEffect
-        {
-            Source = cloud,
-            ColorMatrix = new Matrix5x4 { M14 = 0.22f, M51 = accent.R / 255f, M52 = accent.G / 255f, M53 = accent.B / 255f },
-        };
-        args.DrawingSession.DrawImage(tinted, -drift); // the cloud is made at its drifted position, so it is drawn back over the page
+        _energy += ((_fetching ? 1f : 0f) - _energy) * 0.05f; // eased, so the change is felt and not seen to switch
+        var (accent, size) = (_accent, sender.Size);
+        _nebula ??= new PixelShaderEffect<Nebula>();
+        _nebula.ConstantBuffer = new Nebula(
+            (float)args.Timing.TotalTime.TotalSeconds, new float2((float)size.Width, (float)size.Height),
+            new float3(accent.R / 255f, accent.G / 255f, accent.B / 255f), _energy);
+        // The cloud has no edges of its own, so it is told which part of it to draw: the backdrop's own area.
+        args.DrawingSession.DrawImage(_nebula, 0, 0, new Rect(0, 0, size.Width, size.Height));
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e) => Backdrop.RemoveFromVisualTree(); // Win2D controls must be detached explicitly or they leak
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        Backdrop.RemoveFromVisualTree(); // Win2D controls must be detached explicitly or they leak
+        _nebula?.Dispose();
+        if (_shimmering) Ui.Shimmer(false);
+        _shimmering = false;
+    }
 
     // ---- Saved episodes and stories ----
 

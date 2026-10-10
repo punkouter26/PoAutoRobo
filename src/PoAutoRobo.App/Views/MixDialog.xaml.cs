@@ -1,13 +1,23 @@
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using PoAutoRobo.App.ViewModels;
 
 namespace PoAutoRobo.App.Views;
 
 public sealed partial class MixDialog : ContentDialog
 {
-    public MixDialog(MixPercentages current)
+    // Each look with the words shown for it, kept together so the list cannot drift out of step with the looks there are.
+    private static readonly Choice<Look>[] Looks =
+    [
+        new("Comic book", Look.Comic), new("Photograph", Look.Photoreal), new("Flat vector", Look.FlatVector), new("Cinematic", Look.Cinematic),
+    ];
+
+    public MixDialog(MixPercentages current, Look look, bool hostVisible)
     {
         InitializeComponent();
+        LookBox.ItemsSource = Looks;
+        LookBox.SelectedIndex = Math.Max(0, Array.FindIndex(Looks, choice => choice.Value == look));
+        HostSwitch.IsOn = hostVisible;
         StillSlider.Value = current.Still;
         PanelsSlider.Value = current.MultiPanel;
         TitleSlider.Value = current.TitleCard;
@@ -15,8 +25,11 @@ public sealed partial class MixDialog : ContentDialog
     }
 
     /// <summary>The shares as currently set; only applied when they add up to 100.</summary>
-    // AI video has no slider and always gets none: until a video service is wired in it would only be a still.
-    public MixPercentages Mix => new((int)StillSlider.Value, (int)PanelsSlider.Value, 0, (int)TitleSlider.Value);
+    public MixPercentages Mix => new((int)StillSlider.Value, (int)PanelsSlider.Value, (int)TitleSlider.Value);
+
+    public Look Look => (LookBox.SelectedItem as Choice<Look>)?.Value ?? Look.Comic;
+
+    public bool HostVisible => HostSwitch.IsOn;
 
     private void OnChanged(object sender, RangeBaseValueChangedEventArgs e) => Update();
 

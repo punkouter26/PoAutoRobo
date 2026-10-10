@@ -1,0 +1,9 @@
+# Text is stored with one kind of line ending and checked out with the one this system uses, so a file never
+# shows as changed just because of who last saved it.
+* text=auto
+
+# Never text, whatever they look like.
+*.png binary
+*.ico binary
+*.wav binary
+*.mp4 binary

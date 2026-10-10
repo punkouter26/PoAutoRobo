@@ -85,7 +85,13 @@ public sealed class ClipEditingTests
     }
 
     [Fact]
-    public void Switching_tier_updates_dialogue_duration_and_visual_prompt_for_that_clip_only_and_marks_its_picture_stale()
+    public void A_clips_depth_can_be_switched_once_written_and_switching_touches_that_clip_alone()
+    {
+        Switching_tier_updates_dialogue_duration_and_visual_prompt_for_that_clip_only_and_marks_its_picture_stale();
+        A_depth_not_written_yet_cannot_be_switched_to_until_it_is_added_and_adding_never_replaces_one_already_there();
+    }
+
+    private void Switching_tier_updates_dialogue_duration_and_visual_prompt_for_that_clip_only_and_marks_its_picture_stale()
     {
         var target = _episode.Clips[2];
 
@@ -105,8 +111,7 @@ public sealed class ClipEditingTests
         Assert.False(EpisodeEditor.SetTier(withPicture, target.Id, Tier.B).Clips[2].Visual.Stale); // already on B: nothing changed
     }
 
-    [Fact]
-    public void A_depth_not_written_yet_cannot_be_switched_to_until_it_is_added_and_adding_never_replaces_one_already_there()
+    private void A_depth_not_written_yet_cannot_be_switched_to_until_it_is_added_and_adding_never_replaces_one_already_there()
     {
         // As a live script arrives: depth B only.
         var episode = EpisodeEditor.Update(_episode, Target.Id, c => c with { Scripts = new Dictionary<Tier, TierScript> { [Tier.B] = c.Scripts[Tier.B] } });

@@ -21,7 +21,13 @@ public sealed class NarratorTests : IDisposable
     }
 
     [Fact]
-    public void Wav_duration_is_read_from_the_header_and_a_file_that_is_not_a_wav_is_rejected()
+    public async Task Audio_length_is_read_from_the_file_and_the_mock_narrator_writes_audio_that_agrees_with_its_timings()
+    {
+        Wav_duration_is_read_from_the_header_and_a_file_that_is_not_a_wav_is_rejected();
+        await Mock_narrator_writes_audio_whose_length_and_word_timings_agree_and_a_faster_rate_shortens_it();
+    }
+
+    private void Wav_duration_is_read_from_the_header_and_a_file_that_is_not_a_wav_is_rejected()
     {
         var path = Path.Combine(_folder, "a.wav");
         WriteSilentWav(path, 12.5);
@@ -35,8 +41,14 @@ public sealed class NarratorTests : IDisposable
 
     // The three below speak with the voice built into Windows, so they count as integration tests.
 
-    [Fact]
-    public async Task Mock_narrator_writes_a_wav_whose_duration_matches_the_file()
+    private async Task Mock_narrator_writes_audio_whose_length_and_word_timings_agree_and_a_faster_rate_shortens_it()
+    {
+        await Mock_narrator_writes_a_wav_whose_duration_matches_the_file();
+        await Mock_narrator_gives_one_timing_per_word_in_order_within_the_audio();
+        await Faster_rate_gives_shorter_audio();
+    }
+
+    private async Task Mock_narrator_writes_a_wav_whose_duration_matches_the_file()
     {
         var path = Path.Combine(_folder, "line.wav");
 
@@ -47,8 +59,7 @@ public sealed class NarratorTests : IDisposable
         Assert.Equal(WavInfo.Duration(path), narration.Duration);
     }
 
-    [Fact]
-    public async Task Mock_narrator_gives_one_timing_per_word_in_order_within_the_audio()
+    private async Task Mock_narrator_gives_one_timing_per_word_in_order_within_the_audio()
     {
         var narration = await new MockNarrator().SynthesizeAsync(Line, Path.Combine(_folder, "line.wav"), 1.0, CancellationToken.None);
 
@@ -58,8 +69,7 @@ public sealed class NarratorTests : IDisposable
         Assert.True(narration.Words[^1].Start + narration.Words[^1].Duration <= narration.Duration + TimeSpan.FromMilliseconds(1));
     }
 
-    [Fact]
-    public async Task Faster_rate_gives_shorter_audio()
+    private async Task Faster_rate_gives_shorter_audio()
     {
         var narrator = new MockNarrator();
 

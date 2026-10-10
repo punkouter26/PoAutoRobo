@@ -9,6 +9,26 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
 
+            <!-- The app's measurements, named once. Change one here and every page that uses it follows. -->
+            <!-- Room between a page's edge and what is on it, and between the header's edge and its controls. -->
+            <Thickness x:Key="PagePadding">16</Thickness>
+            <Thickness x:Key="HeaderPadding">16,4</Thickness>
+            <Thickness x:Key="DeckPadding">12</Thickness>
+            <!-- Room between neighbouring things: controls in a group, then groups, then columns. -->
+            <x:Double x:Key="GapSmall">8</x:Double>
+            <x:Double x:Key="Gap">12</x:Double>
+            <x:Double x:Key="GapLarge">16</x:Double>
+            <!-- The fixed column beside each page's main area. Each narrows in a small window; see the pages' own states. -->
+            <GridLength x:Key="FormColumn">380</GridLength>
+            <GridLength x:Key="InspectorColumn">360</GridLength>
+            <GridLength x:Key="ExportColumn">280</GridLength>
+            <!-- A clip card's size, shared with the placeholder cards shown while a script is written. -->
+            <x:Double x:Key="CardWidth">176</x:Double>
+            <x:Double x:Key="CardPictureHeight">99</x:Double>
+            <!-- A saved episode in the list on the topic page. -->
+            <x:Double x:Key="LibraryItemWidth">264</x:Double>
+            <x:Double x:Key="LibraryItemHeight">64</x:Double>
+
             <!-- The app's few shared looks, named once so every view uses the same ones. -->
             <!-- Small grey supporting text: counts, hints, source lines. -->
             <Style x:Key="QuietText" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
@@ -27,19 +47,35 @@
                 <Setter Property="CornerRadius" Value="4" />
                 <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
             </Style>
+            <!-- A mark on a clip's picture for something worth a second look. Each kind of thing has its own colour and sign. -->
+            <Style x:Key="Mark" TargetType="Border">
+                <Setter Property="Padding" Value="5,3" />
+                <Setter Property="CornerRadius" Value="4" />
+            </Style>
             <!-- The heading over a group of controls. -->
             <Style x:Key="SectionHeading" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
                 <Setter Property="Margin" Value="0,8,0,0" />
             </Style>
-            <!-- A clip card's size, shared with the placeholder cards shown while a script is written. -->
-            <x:Double x:Key="CardWidth">176</x:Double>
-            <x:Double x:Key="CardPictureHeight">99</x:Double>
-            <!-- A square button that shows only an icon. -->
+            <!-- A square button that shows only an icon, large enough to hit with a finger. -->
             <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
-                <Setter Property="Width" Value="40" />
-                <Setter Property="Height" Value="36" />
+                <Setter Property="Width" Value="44" />
+                <Setter Property="Height" Value="44" />
                 <Setter Property="Padding" Value="0" />
             </Style>
+
+            <!--
+              What a placeholder is filled with while its content loads: a soft band of light that crosses the whole
+              window, so every placeholder catches it in turn. One brush, moved by the window, shared by them all.
+              Mid grey at low strength, which reads as lighter than a dark page and darker than a light one.
+            -->
+            <LinearGradientBrush x:Key="ShimmerBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="600,0" SpreadMethod="Repeat">
+                <LinearGradientBrush.Transform>
+                    <TranslateTransform />
+                </LinearGradientBrush.Transform>
+                <GradientStop Offset="0" Color="#22808080" />
+                <GradientStop Offset="0.5" Color="#66808080" />
+                <GradientStop Offset="1" Color="#22808080" />
+            </LinearGradientBrush>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

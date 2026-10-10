@@ -6,12 +6,12 @@ namespace PoAutoRobo.Core.Voice;
 /// <summary>The host's voice from Azure AI Speech, with a measured timing for every word.</summary>
 public sealed class AzureNarrator(AppSettings settings) : INarrator
 {
-    /// <summary>Told what each recording used ("voice characters" and how many), for the episode's running cost.</summary>
-    public Action<string, int>? Used { get; set; }
+    /// <summary>Told what each recording used: its name in the spend log, how many characters, and their price when the rate is known.</summary>
+    public Action<string, int, decimal>? Used { get; set; }
 
     public async Task<Narration> SynthesizeAsync(string text, string outputPath, double rate, CancellationToken ct)
     {
-        MediaCache.EnsureFolderFor(outputPath);
+        Files.EnsureFolderFor(outputPath);
         var config = SpeechConfig.FromEndpoint(settings.Endpoint, settings.Credential);
         config.SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Riff48Khz16BitMonoPcm);
         var boundaries = new List<(string Text, bool IsWord, TimeSpan Start, TimeSpan Length)>();
@@ -30,7 +30,7 @@ public sealed class AzureNarrator(AppSettings settings) : INarrator
                 throw new InvalidOperationException($"The voice service could not speak this line. {SpeechSynthesisCancellationDetails.FromResult(result).ErrorDetails}");
         }
 
-        Used?.Invoke("voice characters", text.Length);
+        Used?.Invoke(SpendLog.VoiceCharacters, text.Length, (settings.VoiceRate ?? 0) * text.Length / 1_000_000m);
         return new Narration(outputPath, WavInfo.Duration(outputPath), MergeBoundaries(boundaries));
     }
 

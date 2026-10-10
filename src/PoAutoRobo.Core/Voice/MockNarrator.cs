@@ -11,7 +11,7 @@ public sealed class MockNarrator : INarrator
         synthesizer.Options.SpeakingRate = rate;
         using var speech = await synthesizer.SynthesizeTextToStreamAsync(text).AsTask(ct);
 
-        MediaCache.EnsureFolderFor(outputPath);
+        Files.EnsureFolderFor(outputPath);
         await using (var file = File.Create(outputPath))
             await speech.AsStreamForRead().CopyToAsync(file, ct);
 

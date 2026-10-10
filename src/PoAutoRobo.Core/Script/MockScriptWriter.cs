@@ -34,7 +34,7 @@ public sealed class MockScriptWriter : IScriptWriter
         var clips = Outline.Take(Math.Clamp(Outline.Length, length.MinClips, length.MaxClips)).Select(o => new Clip(
             Guid.NewGuid(), o.Title, Tier.B,
             Enum.GetValues<Tier>().ToDictionary(t => t, t => Script(topic, o.Title, o.Pose, t)),
-            new VisualSpec(VisualKind.TitleCard), HostVisible: true)).ToList();
+            new VisualSpec(VisualKind.TitleCard), HostVisible: subject != Subject.Essay)).ToList();
         return Task.FromResult(new Episode(topic, topic, clips, MixSeed: Random.Shared.Next()) { Subject = subject });
     }
 
@@ -66,6 +66,25 @@ public sealed class MockScriptWriter : IScriptWriter
             $"{episode.Title}: {string.Join(", ", episode.Clips.Select(c => c.Title))}.",
             [.. episode.Clips.Select(c => c.Title.ToLowerInvariant())],
             ["#robotics"]));
+
+    /// <summary>What the scene shows, as words that fade in over a bar that fills: enough to exercise the renderer offline.</summary>
+    public Task<IReadOnlyList<ClipNote>> ReviewAsync(Episode episode, CancellationToken ct) => Task.FromResult<IReadOnlyList<ClipNote>>([]);
+
+    public Task<Scene> WriteSceneAsync(SceneRequest request, CancellationToken ct, Scene? failed = null, string? problem = null) => Task.FromResult(new Scene(
+        $"""
+        <svg viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+          <rect width="1920" height="1080" fill="#101828"/>
+          <rect id="bar" x="160" y="620" width="0" height="24" rx="12" fill="#f79009"/>
+          <text id="words" x="960" y="500" text-anchor="middle" font-family="Segoe UI" font-size="96" font-weight="700" fill="#ffffff">{System.Net.WebUtility.HtmlEncode(string.Join(' ', Durations.SplitWords(request.Shows).Take(5)))}</text>
+        </svg>
+        """,
+        """
+        function render(t, duration) {
+          const p = Math.min(1, Math.max(0, t / (duration * 0.85)));
+          document.getElementById('bar').setAttribute('width', 1600 * p * (2 - p));
+          document.getElementById('words').setAttribute('opacity', Math.min(1, t * 2));
+        }
+        """));
 
     public Task<string> RewriteToLengthAsync(string dialogue, int targetWords, CancellationToken ct)
     {

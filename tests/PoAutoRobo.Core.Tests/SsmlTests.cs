@@ -11,7 +11,19 @@ public sealed class SsmlTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
     [Fact]
-    public void Document_names_the_voice_the_excited_style_and_a_rate_kept_within_ten_percent()
+    public void The_voice_document_is_well_formed_and_spoken_punctuation_joins_the_word_before_it()
+    {
+        The_voice_document_names_voice_style_and_rate_and_dialogue_cannot_add_markup_to_it();
+        Punctuation_marks_join_the_word_before_them();
+    }
+
+    private void The_voice_document_names_voice_style_and_rate_and_dialogue_cannot_add_markup_to_it()
+    {
+        Document_names_the_voice_the_excited_style_and_a_rate_kept_within_ten_percent();
+        Dialogue_cannot_inject_markup();
+    }
+
+    private void Document_names_the_voice_the_excited_style_and_a_rate_kept_within_ten_percent()
     {
         var doc = XDocument.Parse(Ssml.Build("Hello there.", "en-US-DavisNeural", 0.93));
 
@@ -27,8 +39,7 @@ public sealed class SsmlTests : IDisposable
         Assert.Contains("rate=\"-10%\"", Ssml.Build("x", "v", 0.2));
     }
 
-    [Fact]
-    public void Dialogue_cannot_inject_markup()
+    private void Dialogue_cannot_inject_markup()
     {
         const string hostile = "Torque < 5 & rising </prosody><break time=\"10s\"/> \"quoted\"";
 
@@ -38,8 +49,7 @@ public sealed class SsmlTests : IDisposable
         Assert.Empty(doc.Descendants(Speak + "break"));
     }
 
-    [Fact]
-    public void Punctuation_marks_join_the_word_before_them()
+    private void Punctuation_marks_join_the_word_before_them()
     {
         (string Text, bool IsWord, double Start, double Length)[] events =
         [

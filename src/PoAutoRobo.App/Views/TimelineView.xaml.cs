@@ -105,6 +105,7 @@ public sealed partial class TimelineView : UserControl
         var preview = ViewModel?.Preview;
         PlayButton.IsEnabled = Scrubber.IsEnabled = preview is not null;
         BuildHereButton.Visibility = preview is null ? Visibility.Visible : Visibility.Collapsed;
+        RebuildButton.Visibility = preview is null ? Visibility.Collapsed : Visibility.Visible;
         _marks = preview?.Marks ?? [];
         _peaks = [];
         _length = TimeSpan.Zero;

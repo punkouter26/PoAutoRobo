@@ -2,19 +2,23 @@
     x:Class="PoAutoRobo.App.Views.MixDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Visual mix"
+    Title="Look and visual mix"
     PrimaryButtonText="Apply"
     SecondaryButtonText="Re-roll"
     CloseButtonText="Close"
     DefaultButton="Primary">
     <StackPanel Width="380" Spacing="12">
+        <ComboBox x:Name="LookBox" Header="Look of every picture and animation" HorizontalAlignment="Stretch"
+                  ToolTipService.ToolTip="The art direction for the whole episode. Changing it marks the pictures you already have as out of date." />
+        <ToggleSwitch x:Name="HostSwitch" Header="Host in every clip" OnContent="On screen" OffContent="Voiceover only"
+                      ToolTipService.ToolTip="Shows or hides the host in every clip at once. Each clip still has its own switch." />
         <TextBlock TextWrapping="Wrap"
-                   Text="Choose what share of clips gets each kind of picture. Clips using your own video, and clips whose picture type you set by hand, are left as they are." />
+                   Text="The script chose a picture type for each clip. These sliders deal the plain ones (stills, panel sequences and title cards) afresh by share. Everything else is left as it is: animations, charts, photographs and footage, your own video, and any clip whose picture type you set by hand." />
         <Slider x:Name="StillSlider" Header="Still panel: one picture with a slow pan and zoom" Maximum="100" StepFrequency="5" ValueChanged="OnChanged" />
         <Slider x:Name="PanelsSlider" Header="Panel sequence: three pictures cut to the voice" Maximum="100" StepFrequency="5" ValueChanged="OnChanged" />
         <Slider x:Name="TitleSlider" Header="Title card: text only, no cost" Maximum="100" StepFrequency="5" ValueChanged="OnChanged" />
         <TextBlock x:Name="TotalText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
         <TextBlock Style="{StaticResource QuietText}"
-                   Text="Re-roll keeps the current shares and deals them to different clips." />
+                   Text="Re-roll keeps the shares last applied and deals them to different clips. A clip that changes type starts without a picture; Undo puts it back." />
     </StackPanel>
 </ContentDialog>
