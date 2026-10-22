@@ -13,10 +13,10 @@ public sealed class FfmpegArgsTests : IDisposable
     private static string Lines(IEnumerable<string> args) => string.Join('\n', args);
 
     [Fact]
-    public void The_timeline_follows_the_narration_and_an_upright_short_is_laid_out_for_its_narrow_frame()
+    public Task The_timeline_follows_the_narration_and_a_teaser_is_laid_out_upright_over_a_blurred_copy_of_its_moments()
     {
         Timeline_follows_the_narration_with_audio_overlapping_at_each_join();
-        An_upright_short_sizes_its_title_by_width_and_wraps_its_captions_to_the_narrow_frame();
+        return A_teaser_joins_its_moments_and_lays_them_out_for_the_narrow_frame();
     }
 
     private void Timeline_follows_the_narration_with_audio_overlapping_at_each_join()
@@ -90,18 +90,24 @@ public sealed class FfmpegArgsTests : IDisposable
         return Verify(Lines(FfmpegArgs.Join("clips.txt", ["a0.wav", "a1.wav", "a2.wav"], "out.mp4")));
     }
 
-    private void An_upright_short_sizes_its_title_by_width_and_wraps_its_captions_to_the_narrow_frame()
+    private Task A_teaser_joins_its_moments_and_lays_them_out_for_the_narrow_frame()
     {
-        var card = Lines(FfmpegArgs.ClipVideo(ClipSource.TitleCard, "title_00.txt", S(15), ExportPreset.Shorts, "clip_00.mp4"));
-        CaptionSegment[] words = [new(S(0), [new WordTiming("Hello.", S(0), S(0.4))])];
+        TeaserCut[] cuts = [new("clip_a.mp4", "a.wav", S(2), S(6)), new("clip_b.mp4", "b.wav", S(0), S(4))];
+        var args = Lines(FfmpegArgs.TeaserVideo(cuts, "teaser_hook.txt", "teaser_channel.txt", "teaser.ass", "teaser.mp4"));
 
-        Assert.Contains("s=1080x1920", card);
-        Assert.Contains("fontsize=w/12", card); // sized by height, a title would run off the sides
+        // Each moment is a stretch of a finished clip and of its sound; the words are drawn, never run.
+        Assert.Contains("-ss\n2.000\n-t\n6.000\n-i\nclip_a.mp4\n-ss\n2.000\n-t\n6.000\n-i\na.wav", args);
+        Assert.Equal(2, args.Split("expansion=none").Length - 1);
+        // A hook is broken into short lines, so eight words fit the narrow frame.
+        Assert.Equal("It fell twice, then\nit climbed all three", FfmpegArgs.HookLines("It fell twice, then it climbed all three"));
+        CaptionSegment[] words = [new(S(0), [new WordTiming("Hello.", S(0), S(0.4))])];
         var upright = AssCaptions.Build(words, new CaptionStyle(), portrait: true);
         Assert.Contains("PlayResX: 1080", upright);
         Assert.Contains("PlayResY: 1920", upright);
         Assert.Contains("WrapStyle: 0", upright);
         Assert.Contains("PlayResX: 1920", AssCaptions.Build(words, new CaptionStyle())); // the master is unchanged
+
+        return Verify(args + "\n--- no channel name, no captions ---\n" + Lines(FfmpegArgs.TeaserVideo(cuts[..1], "teaser_hook.txt", null, null, "teaser.mp4")));
     }
 
     [Fact]

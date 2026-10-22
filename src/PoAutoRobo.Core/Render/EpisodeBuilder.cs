@@ -169,19 +169,82 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         return output;
     }
 
-    /// <summary>One upright video per clip, captions burned in, for phone-first video sites.</summary>
-    /// <returns>The folder holding them, inside the episode's export folder.</returns>
-    public async Task<string> ExportShortsAsync(Episode episode, string folder, CaptionStyle captions, IProgress<RenderProgress>? progress, CancellationToken ct)
+    /// <summary>
+    /// How long each clip's picture runs in the finished episode: the lengths teasers are cut within. Records any voice
+    /// not yet recorded, which an episode ready to export has already done.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, TimeSpan>> ClipLengthsAsync(Episode episode, string folder, CancellationToken ct)
     {
-        var shorts = Path.Combine(folder, "export", "shorts");
-        var count = episode.Clips.Count;
-        for (var i = 0; i < count; i++)
+        var narrations = new List<Narration>(episode.Clips.Count);
+        foreach (var clip in episode.Clips)
+            narrations.Add(await NarrateClipAsync(clip, folder, ct));
+        var slots = FfmpegArgs.Timeline([.. narrations.Select(n => n.Duration)]);
+        return episode.Clips.Select((c, i) => (c.Id, slots[i].VideoLength)).ToDictionary(p => p.Id, p => p.VideoLength);
+    }
+
+    /// <summary>
+    /// Renders each teaser as an upright video: its moments cut from the clips' finished pictures (drawn at 1080p
+    /// without captions, through the clip cache, and only for the clips the teasers use) and from their sound.
+    /// Nothing is generated: no picture, voice or model is asked for anything.
+    /// </summary>
+    /// <returns>The folder holding them, inside the episode's export folder.</returns>
+    public async Task<string> ExportTeasersAsync(Episode episode, string folder, IReadOnlyList<Teaser> teasers, CaptionStyle captions, Brand? brand,
+        IProgress<RenderProgress>? progress, CancellationToken ct)
+    {
+        const double DrawShare = 0.6; // drawing the clips is most of the work; each teaser is then one short encode
+        var output = Path.Combine(folder, "export", "teasers");
+        Directory.CreateDirectory(output);
+        var narrations = new List<Narration>(episode.Clips.Count);
+        foreach (var clip in episode.Clips)
+            narrations.Add(await NarrateClipAsync(clip, folder, ct));
+        var slots = FfmpegArgs.Timeline([.. narrations.Select(n => n.Duration)]);
+        var place = episode.Clips.Select((c, i) => (c.Id, i)).ToDictionary(p => p.Id, p => p.i);
+        var used = teasers.SelectMany(t => t.Moments).Select(m => place[m.ClipId]).Distinct().Order().ToList();
+
+        var work = Files.NewScratchFolder("teasers");
+        ForgetOldClips();
+        try
         {
-            var (clip, at) = (episode.Clips[i], i);
-            var part = progress is null ? null : new Relay<RenderProgress>(p => progress.Report(new RenderProgress($"Short {at + 1} of {count} · {p.Activity}", (at + p.Fraction) / count)));
-            await RenderAsync(episode with { Clips = [clip] }, folder, ExportPreset.Shorts, captions, null, Path.Combine(shorts, $"{i + 1:00}-{ProjectStore.Slug(clip.Title)}.mp4"), part, ct);
+            CopyTitleFont(work);
+            var pictures = await DrawClipsAsync(episode, narrations, i => slots[i], ExportPreset.Hd30, null, used, work, new MediaCache(ClipCacheFolder),
+                (activity, fraction, clips) => progress?.Report(new RenderProgress(activity, DrawShare * fraction, clips)), ct);
+            var number = episode.Number > 0 ? $"{episode.Number:00}-" : "";
+            var channel = brand is { Kit.ChannelName: var name } && name.Trim().Length > 0 ? name.Trim() : null;
+            for (var t = 0; t < teasers.Count; t++)
+            {
+                var teaser = teasers[t];
+                progress?.Report(new RenderProgress($"Cutting teaser {t + 1} of {teasers.Count} · {teaser.Hook}", DrawShare + (1 - DrawShare) * t / teasers.Count));
+                // Each moment's words, timed from where the moment falls in the teaser, become its captions.
+                var segments = new List<CaptionSegment>();
+                var at = TimeSpan.Zero;
+                foreach (var moment in teaser.Moments)
+                {
+                    var words = narrations[place[moment.ClipId]].Words.Where(w => w.Start >= moment.Start && w.Start < moment.Start + moment.Length).ToList();
+                    segments.Add(new CaptionSegment(at - moment.Start, words));
+                    at += moment.Length;
+                }
+                await File.WriteAllTextAsync(Path.Combine(work, "teaser_hook.txt"), FfmpegArgs.HookLines(teaser.Hook), ct);
+                await File.WriteAllTextAsync(Path.Combine(work, "teaser.ass"), AssCaptions.Build(segments, captions, portrait: true), ct);
+                if (channel is not null)
+                    await File.WriteAllTextAsync(Path.Combine(work, "teaser_channel.txt"), channel, ct);
+                List<TeaserCut> cuts = [.. teaser.Moments.Select(m => new TeaserCut(pictures[place[m.ClipId]]!, narrations[place[m.ClipId]].AudioPath, m.Start, m.Length))];
+                var file = Path.Combine(output, $"{number}{ProjectStore.Slug(episode.Title)}-teaser-{t + 1}.mp4");
+                await ffmpeg.RunAsync(FfmpegArgs.TeaserVideo(cuts, "teaser_hook.txt", channel is null ? null : "teaser_channel.txt", "teaser.ass", file), work, teaser.Length, null, ct);
+            }
+            progress?.Report(new RenderProgress("Done", 1));
+            return output;
         }
-        return shorts;
+        finally
+        {
+            try
+            {
+                Directory.Delete(work, recursive: true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Leftover scratch in the temp folder is harmless; it must not turn finished teasers into an error.
+            }
+        }
     }
 
     /// <summary>Small, fast render with no captions burned in; the preview draws them live so style changes show at once.</summary>
@@ -221,63 +284,13 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
             var slots = FfmpegArgs.Timeline([.. sounds.Select(n => n.Duration)]);
             var segments = narrations.Select((n, i) => new CaptionSegment(slots[i + first].Start, n.Words)).ToList();
 
-            // Every clip is encoded once, finished (captions and fades included), several at a time. The join then only
-            // copies them, so the slow work is spread across the processor's cores and nothing is encoded twice.
             CopyTitleFont(work);
-            var pictures = new string[count];
-            var done = new double[count];      // how far each clip has got, 0 to 1
-            var inHand = new SortedSet<int>();
-            var gate = new object();
-            void ReportDrawing()
-            {
-                // Called under the lock, so reports leave in order and the bar never steps backwards.
-                var finished = done.Count(d => d >= 1);
-                var names = inHand.Count == 0 ? "" : " · working on: " + string.Join(", ", inHand.Select(i => episode.Clips[i].Title));
-                progress?.Report(new RenderProgress($"Drawing clips · {finished} of {count} done{names}", VoiceShare + DrawShare * done.Sum() / count, [.. done]));
-            }
-            lock (gate) ReportDrawing();
-
-            var workers = Math.Clamp(Environment.ProcessorCount / 3, 1, 4);
-            await Parallel.ForEachAsync(Enumerable.Range(0, count), new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = ct }, async (i, token) =>
-            {
-                var (clip, slot) = (episode.Clips[i], slots[i + first]);
-                var (source, input) = PictureFor(clip);
-                var panels = PanelsFor(clip);
-                // Whatever decides how the clip looks, besides the command line itself: the text and the files it reads.
-                var made = new List<string>(panels.Count > 1 ? panels.Select(Stamp) : source == ClipSource.TitleCard ? [clip.Title] : [Stamp(input)]);
-                if (source == ClipSource.TitleCard)
-                {
-                    input = $"title_{i:00}.txt"; // read by name from the working folder, which avoids filter-path escaping
-                    await File.WriteAllTextAsync(Path.Combine(work, input), clip.Title, token);
-                }
-                string? captionFile = null;
-                if (captions is not null)
-                {
-                    captionFile = $"captions_{i:00}.ass"; // timed from the start of this clip
-                    // The first clip of each beat names it with a strap, so the viewer sees where the episode has got to.
-                    // ponytail: burned in with the captions, so the preview (captions drawn live) shows none; draw it there too if it is missed.
-                    var strap = clip.Beat is { } beat && (i == 0 || episode.Clips[i - 1].Beat != beat) ? beat : null;
-                    var text = AssCaptions.Build([new CaptionSegment(TimeSpan.Zero, narrations[i].Words)], captions, preset.Portrait, strap);
-                    await File.WriteAllTextAsync(Path.Combine(work, captionFile), text, token);
-                    made.Add(text);
-                }
-                // The camera move comes from the clip itself, so a clip keeps its move when the order changes.
-                IReadOnlyList<string> Args(string to) =>
-                    panels.Count == 2 && clip.Visual.Kind == VisualKind.Parallax ? FfmpegArgs.ParallaxVideo(panels[0], panels[1], slot.VideoLength, preset, to, captionFile)
-                    : panels.Count > 1 ? FfmpegArgs.PanelsVideo(panels, slot.VideoLength, preset, to, captionFile)
-                    : FfmpegArgs.ClipVideo(source, input, slot.VideoLength, preset, to, captionFile, clip.Id.ToByteArray()[0] % 4);
-                // The scratch files are named for the clip's place in the order; that is taken out so a moved clip is still found.
-                var command = string.Join('\n', Args("clip.mp4")).Replace($"_{i:00}.", "_.");
-
-                lock (gate) { inHand.Add(i); ReportDrawing(); }
-                pictures[i] = await cache.GetOrCreateAsync([command, .. made], ".mp4", scratch =>
-                    ffmpeg.RunAsync(Args(scratch), work, slot.VideoLength, new Relay<double>(p => { lock (gate) { done[i] = Math.Min(p, 0.99); ReportDrawing(); } }), token));
-                lock (gate) { done[i] = 1; inHand.Remove(i); ReportDrawing(); }
-            });
+            var pictures = await DrawClipsAsync(episode, narrations, i => slots[i + first], preset, captions, [.. Enumerable.Range(0, count)], work, cache,
+                (activity, fraction, clips) => progress?.Report(new RenderProgress(activity, VoiceShare + DrawShare * fraction, clips)), ct);
 
             // The bookends' pictures run exactly their slots, which the crossfade into the next clip shortens a little.
-            List<string> joined = ends is null ? [.. pictures]
-                : [await BookendPictureAsync(true, ends, episode, preset, slots[0].VideoLength, work, cache, ct), .. pictures,
+            List<string> joined = ends is null ? [.. pictures.OfType<string>()]
+                : [await BookendPictureAsync(true, ends, episode, preset, slots[0].VideoLength, work, cache, ct), .. pictures.OfType<string>(),
                     await BookendPictureAsync(false, ends, episode, preset, slots[^1].VideoLength, work, cache, ct)];
             await File.WriteAllTextAsync(Path.Combine(work, "clips.txt"), FfmpegArgs.ClipList(joined), ct);
             var total = slots[^1].Start + slots[^1].VideoLength;
@@ -307,6 +320,71 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
                 // Leftover scratch in the temp folder is harmless; it must not turn a finished render into an error.
             }
         }
+    }
+
+    /// <summary>
+    /// Encodes the finished picture of each clip asked for (captions and fades included), several at a time, through
+    /// the clip cache. A join then only copies them, so the slow work is spread across the processor's cores and
+    /// nothing is encoded twice.
+    /// </summary>
+    /// <param name="slotOf">The slot each clip fills on the timeline, by its place in the episode.</param>
+    /// <param name="which">The places of the clips to draw; the others are left null.</param>
+    /// <param name="report">Told how the drawing is going: in words, how far through it is (0 to 1), and how far each clip has got.</param>
+    private async Task<string?[]> DrawClipsAsync(Episode episode, IReadOnlyList<Narration> narrations, Func<int, Slot> slotOf, ExportPreset preset, CaptionStyle? captions,
+        IReadOnlyList<int> which, string work, MediaCache cache, Action<string, double, double[]>? report, CancellationToken ct)
+    {
+        var count = episode.Clips.Count;
+        var pictures = new string?[count];
+        var done = new double[count];      // how far each clip has got, 0 to 1
+        var inHand = new SortedSet<int>();
+        var gate = new object();
+        void ReportDrawing()
+        {
+            // Called under the lock, so reports leave in order and the bar never steps backwards.
+            var finished = done.Count(d => d >= 1);
+            var names = inHand.Count == 0 ? "" : " · working on: " + string.Join(", ", inHand.Select(i => episode.Clips[i].Title));
+            report?.Invoke($"Drawing clips · {finished} of {which.Count} done{names}", done.Sum() / Math.Max(1, which.Count), [.. done]);
+        }
+        lock (gate) ReportDrawing();
+
+        var workers = Math.Clamp(Environment.ProcessorCount / 3, 1, 4);
+        await Parallel.ForEachAsync(which, new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = ct }, async (i, token) =>
+        {
+            var (clip, slot) = (episode.Clips[i], slotOf(i));
+            var (source, input) = PictureFor(clip);
+            var panels = PanelsFor(clip);
+            // Whatever decides how the clip looks, besides the command line itself: the text and the files it reads.
+            var made = new List<string>(panels.Count > 1 ? panels.Select(Stamp) : source == ClipSource.TitleCard ? [clip.Title] : [Stamp(input)]);
+            if (source == ClipSource.TitleCard)
+            {
+                input = $"title_{i:00}.txt"; // read by name from the working folder, which avoids filter-path escaping
+                await File.WriteAllTextAsync(Path.Combine(work, input), clip.Title, token);
+            }
+            string? captionFile = null;
+            if (captions is not null)
+            {
+                captionFile = $"captions_{i:00}.ass"; // timed from the start of this clip
+                // The first clip of each beat names it with a strap, so the viewer sees where the episode has got to.
+                // ponytail: burned in with the captions, so the preview (captions drawn live) shows none; draw it there too if it is missed.
+                var strap = clip.Beat is { } beat && (i == 0 || episode.Clips[i - 1].Beat != beat) ? beat : null;
+                var text = AssCaptions.Build([new CaptionSegment(TimeSpan.Zero, narrations[i].Words)], captions, preset.Portrait, strap);
+                await File.WriteAllTextAsync(Path.Combine(work, captionFile), text, token);
+                made.Add(text);
+            }
+            // The camera move comes from the clip itself, so a clip keeps its move when the order changes.
+            IReadOnlyList<string> Args(string to) =>
+                panels.Count == 2 && clip.Visual.Kind == VisualKind.Parallax ? FfmpegArgs.ParallaxVideo(panels[0], panels[1], slot.VideoLength, preset, to, captionFile)
+                : panels.Count > 1 ? FfmpegArgs.PanelsVideo(panels, slot.VideoLength, preset, to, captionFile)
+                : FfmpegArgs.ClipVideo(source, input, slot.VideoLength, preset, to, captionFile, clip.Id.ToByteArray()[0] % 4);
+            // The scratch files are named for the clip's place in the order; that is taken out so a moved clip is still found.
+            var command = string.Join('\n', Args("clip.mp4")).Replace($"_{i:00}.", "_.");
+
+            lock (gate) { inHand.Add(i); ReportDrawing(); }
+            pictures[i] = await cache.GetOrCreateAsync([command, .. made], ".mp4", scratch =>
+                ffmpeg.RunAsync(Args(scratch), work, slot.VideoLength, new Relay<double>(p => { lock (gate) { done[i] = Math.Min(p, 0.99); ReportDrawing(); } }), token));
+            lock (gate) { done[i] = 1; inHand.Remove(i); ReportDrawing(); }
+        });
+        return pictures;
     }
 
     /// <summary>How long the series intro runs.</summary>

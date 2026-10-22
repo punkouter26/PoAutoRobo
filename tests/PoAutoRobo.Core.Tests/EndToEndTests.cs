@@ -131,6 +131,41 @@ public sealed class EndToEndTests : IDisposable
     }
 
     [FfmpegFact]
+    public async Task Three_teasers_are_cut_upright_from_the_finished_clips_without_asking_for_anything_new()
+    {
+        // Lines long enough that the clips between them hold ten-second teasers.
+        const string Line = "The robot leans forward, lifts one foot onto the first step, shifts its weight across, and then brings the other foot up beside it.";
+        var three = await ThreeClipEpisodeAsync();
+        var episode = three with { Number = 3, Clips = [.. three.Clips.Select(c => EpisodeEditor.WithDialogue(c, Line))] };
+        var voice = new MockNarrator();
+        var narrator = Substitute.For<INarrator>();
+        narrator.SynthesizeAsync(default!, default!, default, default).ReturnsForAnyArgs(call =>
+            voice.SynthesizeAsync(call.ArgAt<string>(0), call.ArgAt<string>(1), call.ArgAt<double>(2), call.ArgAt<CancellationToken>(3)));
+        var builder = new EpisodeBuilder(narrator, Ffmpeg);
+        var lengths = await builder.ClipLengthsAsync(episode, _folder, default); // the voices, recorded as for the master
+        narrator.ClearReceivedCalls();
+
+        var teasers = Teasers.ByRule(episode, lengths);
+        var folder = await builder.ExportTeasersAsync(episode, _folder, teasers, new CaptionStyle(), new Brand(new SeriesKit { ChannelName = "Teaching the R1" }, _folder), null, default);
+
+        await narrator.DidNotReceiveWithAnyArgs().SynthesizeAsync(default!, default!, default, default); // nothing new is made, or paid for
+        var files = Directory.GetFiles(folder, "*.mp4");
+        Assert.InRange(teasers.Count, 2, Teasers.MaxTeasers); // three unless two would be the same cut
+        Assert.Equal(teasers.Count, files.Length);
+        Assert.All(files, file => Assert.StartsWith("03-", Path.GetFileName(file)));
+        foreach (var file in files)
+        {
+            var probe = await Ffmpeg.ProbeAsync(["-v", "error", "-show_entries", "stream=codec_name,width,height,r_frame_rate", "-of", "default=nw=1", file], default);
+            Assert.Contains("codec_name=h264", probe);
+            Assert.Contains("codec_name=aac", probe);
+            Assert.Contains("width=1080", probe);
+            Assert.Contains("height=1920", probe);
+            Assert.Contains("r_frame_rate=30/1", probe);
+            Assert.InRange(await Ffmpeg.ProbeDurationAsync(file, default), Teasers.Target - Teasers.Tolerance, Teasers.Target + Teasers.Tolerance);
+        }
+    }
+
+    [FfmpegFact]
     public async Task A_film_that_keeps_its_own_sound_is_heard_in_the_export_and_no_voice_is_recorded_for_it()
     {
         // A film whose sound stops a second before its picture, and one with no sound track at all.

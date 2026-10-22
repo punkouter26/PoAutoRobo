@@ -81,7 +81,8 @@ public static class Teasers
             new("How it turned out", Ending()),
         ], lengths);
 
-        // Ten seconds from the start of one clip, running on into the ones after it.
+        // Ten seconds from the start of one clip, running on into the ones after it; near the end of the episode, the
+        // close of the clips before it make up the rest.
         List<TeaserMoment> Forward(int from)
         {
             var moments = new List<TeaserMoment>();
@@ -90,6 +91,13 @@ public static class Teasers
             {
                 var take = Min(left, lengths[clips[i].Id]);
                 moments.Add(new TeaserMoment(clips[i].Id, TimeSpan.Zero, take));
+                left -= take;
+            }
+            for (var i = from - 1; i >= 0 && moments.Count < MaxMoments && left >= MinMoment; i--)
+            {
+                var length = lengths[clips[i].Id];
+                var take = Min(left, length);
+                moments.Insert(0, new TeaserMoment(clips[i].Id, length - take, take));
                 left -= take;
             }
             return moments;

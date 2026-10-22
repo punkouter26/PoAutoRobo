@@ -9,11 +9,14 @@ public sealed record ExportPreset(int Width, int Height, int Fps)
     public static readonly ExportPreset Uhd30 = new(3840, 2160, 30);
     public static readonly ExportPreset Uhd60 = new(3840, 2160, 60);
 
-    /// <summary>Upright, for one clip at a time on phone-first video sites.</summary>
-    public static readonly ExportPreset Shorts = new(1080, 1920, 30);
+    /// <summary>Upright, for teasers on phone-first video sites.</summary>
+    public static readonly ExportPreset Upright = new(1080, 1920, 30);
 
     public bool Portrait => Height > Width;
 }
+
+/// <summary>One moment of a teaser as FFmpeg cuts it: a stretch of a finished clip picture and of that clip's sound.</summary>
+public sealed record TeaserCut(string Picture, string Sound, TimeSpan Start, TimeSpan Length);
 
 /// <summary>How the series intro and outro look: the accent colour (#RRGGBB) and the kit's logo and mascot pictures, each null when there is none.</summary>
 public sealed record BookendLook(string Accent, string? Logo, string? Mascot);
@@ -207,6 +210,41 @@ public static class FfmpegArgs
     private static string TextStyle(string size, string x, string y, double appears) =>
         $"fontfile={TitleFontFile}:fontcolor=white:fontsize={size}:x={x}:y={y}:borderw=3:bordercolor=black@0.35:" +
         FormattableString.Invariant($"alpha='min(1,max(0,(t-{appears:0.0})/0.5))'");
+
+    /// <summary>
+    /// An upright teaser: its moments cut from the finished clips and their sound and joined, the 16:9 picture centred
+    /// over a blurred, enlarged copy of itself, the hook across the top, captions, and the channel's name in a bar at
+    /// the foot. Its sound is levelled like the master's.
+    /// </summary>
+    /// <param name="hookFile">Text files in the working folder, as for a title card: the words are drawn, never run.</param>
+    public static IReadOnlyList<string> TeaserVideo(IReadOnlyList<TeaserCut> cuts, string hookFile, string? channelFile, string? captionsFile, string output)
+    {
+        var (w, h, fps) = ExportPreset.Upright;
+        var length = TimeSpan.FromTicks(cuts.Sum(c => c.Length.Ticks));
+        var graph = new List<string>
+        {
+            $"{string.Concat(cuts.Select((_, i) => $"[{2 * i}:v][{2 * i + 1}:a]"))}concat=n={cuts.Count}:v=1:a=1[cv][ca]",
+            $"[cv]fps={fps},split[back][front]",
+            $"[back]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},boxblur=24:2[bg]",
+            $"[front]scale={w}:-2[fg]",
+            "[bg][fg]overlay=(W-w)/2:(H-h)/2" +
+                (captionsFile is null ? "" : $",ass={captionsFile}") +
+                $",drawtext=textfile={hookFile}:expansion=none:fontfile={TitleFontFile}:fontcolor=white:fontsize=w/15:line_spacing=14:x=(w-text_w)/2:y=h*0.09:box=1:boxcolor=black@0.5:boxborderw=28" +
+                (channelFile is null ? "" : $",drawbox=x=0:y=ih-150:w=iw:h=150:color=black@0.55:t=fill,drawtext=textfile={channelFile}:expansion=none:fontfile={TitleFontFile}:fontcolor=white:fontsize=48:x=(w-text_w)/2:y=h-102") +
+                $",fade=t=in:st=0:d={Seconds(Fade)},fade=t=out:st={Seconds(length - Fade)}:d={Seconds(Fade)},format=yuv420p[v]",
+            $"[ca]loudnorm=I={TargetLufs.ToString(CultureInfo.InvariantCulture)}:TP=-1.5:LRA=11,aresample=48000[aout]",
+        };
+        return
+        [
+            .. cuts.SelectMany(c => new[] { "-ss", Seconds(c.Start), "-t", Seconds(c.Length), "-i", c.Picture, "-ss", Seconds(c.Start), "-t", Seconds(c.Length), "-i", c.Sound }),
+            "-filter_complex", string.Join(';', graph), "-map", "[v]", "-map", "[aout]",
+            "-t", Seconds(length), .. Encode(ExportPreset.Upright), "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-y", output,
+        ];
+    }
+
+    /// <summary>A hook broken into lines of at most four words, so it fits across the narrow frame.</summary>
+    public static string HookLines(string hook) =>
+        string.Join('\n', Durations.SplitWords(hook).Chunk(4).Select(line => string.Join(' ', line)));
 
     /// <summary>The last filters on every clip: captions over the picture, then the fades over both.</summary>
     private static string Finish(TimeSpan length, string? captionsFile) =>

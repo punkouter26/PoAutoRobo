@@ -126,16 +126,6 @@ public partial class MainViewModel
         StatusMessage = $"Saved {Path.GetFileName(video)}, with its chapter list{withNotes} beside it.{bookends}";
     }
 
-    /// <summary>One upright video per clip, for phone-first video sites. Each clip already stands on its own.</summary>
-    [RelayCommand(CanExecute = nameof(CanRender))]
-    private Task RenderShortsAsync() => RunActivityAsync("Rendering one upright short per clip", async ct =>
-    {
-        var (episode, folder, captions, progress) = (Episode!, EpisodeFolder!, Captions, RenderProgress());
-        LastExport = await Task.Run(() => _builder.ExportShortsAsync(episode, folder, captions, progress, ct), ct);
-        SyncCards();
-        StatusMessage = episode.Clips.Count == 1 ? "Saved 1 short." : $"Saved {episode.Clips.Count} shorts, one for each clip.";
-    });
-
     // Not while one picture is being drawn, for the reason a batch of pictures may not start then.
     private bool CanMakeAll => CanRender && !GeneratePictureCommand.IsRunning && !AnotherTakeCommand.IsRunning;
 

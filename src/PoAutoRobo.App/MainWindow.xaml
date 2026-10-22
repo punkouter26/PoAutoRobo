@@ -288,7 +288,6 @@
                         <!-- The thing to do next once there is a preview; until then that is building the preview, on the screen beside this. -->
                         <Button x:Name="RenderButton" HorizontalAlignment="Stretch" MinHeight="44" Content="Render master video" Style="{x:Bind local:Ui.Primary(ViewModel.HasPreview), Mode=OneWay}" Command="{x:Bind ViewModel.RenderCommand}"
                                 ToolTipService.ToolTip="Build the finished video file with voice, pictures and captions, plus a chapter list, subtitles, a thumbnail and an upload description. A full episode can take several minutes the first time; clips that have not changed since the last render are not drawn again." />
-                        <Button x:Name="ShortsButton" HorizontalAlignment="Stretch" MinHeight="44" ToolTipService.ToolTip="Build one upright 1080 by 1920 video for each clip, captions included, for phone-first video sites." Content="Render a short per clip" Command="{x:Bind ViewModel.RenderShortsCommand}" />
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
