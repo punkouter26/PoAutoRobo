@@ -5,7 +5,8 @@ namespace PoAutoRobo.Core.Library;
 
 /// <summary>One saved episode as the library lists it.</summary>
 /// <param name="Thumbnail">The first generated picture still on disk, or null.</param>
-public sealed record EpisodeSummary(string Folder, string Title, string? Thumbnail, int Clips, TimeSpan Runtime, DateTime Saved)
+/// <param name="Number">Where the episode comes in the series; 0 when it has no number.</param>
+public sealed record EpisodeSummary(string Folder, string Title, string? Thumbnail, int Clips, TimeSpan Runtime, DateTime Saved, int Number = 0)
 {
     public string Details => Clips == 0 ? "Damaged · open to restore" : $"{(Clips == 1 ? "1 clip" : $"{Clips} clips")} · {Runtime:m\\:ss}";
 
@@ -108,13 +109,16 @@ public static class ProjectStore
             try
             {
                 var episode = Load(folder);
-                return new EpisodeSummary(folder, episode.Title, episode.Cover(), episode.Clips.Count, Durations.Total(episode), saved);
+                return new EpisodeSummary(folder, episode.Title, episode.Cover(), episode.Clips.Count, Durations.Total(episode), saved, episode.Number);
             }
             catch (InvalidDataException)
             {
                 return new EpisodeSummary(folder, Path.GetFileName(folder), null, 0, TimeSpan.Zero, saved);
             }
         })];
+
+    /// <summary>The number the next episode of the series gets: one more than the highest saved, so a gap is never filled.</summary>
+    public static int NextNumber(string root) => Summaries(root).Select(s => s.Number).DefaultIfEmpty(0).Max() + 1;
 
     private const string SnippetsFile = "grounding.json";
 
@@ -181,10 +185,11 @@ public static class ProjectStore
         return slug.Length == 0 ? "episode" : slug;
     }
 
-    // A folder for a new episode that does not collide with one already saved under the same title.
-    public static string NewFolder(string root, string title)
+    // A folder for a new episode that does not collide with one already saved under the same title. A numbered
+    // episode's folder starts with its number, so the folders sort in the order of the series.
+    public static string NewFolder(string root, string title, int number = 0)
     {
-        var slug = Slug(title);
+        var slug = Slug(number > 0 ? $"{number:00} {title}" : title);
         var folder = Path.Combine(root, slug);
         for (var n = 2; Directory.Exists(folder); n++)
             folder = Path.Combine(root, $"{slug}-{n}");

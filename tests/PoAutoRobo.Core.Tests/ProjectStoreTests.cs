@@ -181,4 +181,38 @@ public sealed class ProjectStoreTests : IDisposable
         Assert.Equal([second, first], ProjectStore.ListEpisodes(_folder));
         Assert.Empty(ProjectStore.ListEpisodes(Path.Combine(_folder, "missing")));
     }
+
+    [Fact]
+    public void An_episode_keeps_its_number_structure_beats_and_sound_choices_and_the_next_one_is_numbered_after_the_highest()
+    {
+        Assert.Equal(1, ProjectStore.NextNumber(_folder)); // the first episode of the series
+
+        var episode = Change(NewEpisode(2) with { Number = 7, Structure = BeatStructure.HookFirst }, 0, c => c with { Beat = "Hook", OwnSound = true });
+        var seventh = ProjectStore.NewFolder(_folder, "Walking on stairs", episode.Number);
+        ProjectStore.Save(episode, seventh);
+        var reopened = ProjectStore.Load(seventh);
+
+        Assert.Equal(Path.Combine(_folder, "07-walking-on-stairs"), seventh);
+        Assert.Equal((7, BeatStructure.HookFirst), (reopened.Number, reopened.Structure));
+        Assert.Equal(("Hook", true), (reopened.Clips[0].Beat, reopened.Clips[0].OwnSound));
+        Assert.Equal((null, false), (reopened.Clips[1].Beat, reopened.Clips[1].OwnSound));
+        Assert.Equal(7, Assert.Single(ProjectStore.Summaries(_folder)).Number);
+
+        // Saved before episodes were numbered: no number, the story structure, and every clip narrated.
+        var older = Path.Combine(_folder, "older");
+        ProjectStore.Save(NewEpisode(1), older);
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(older, ProjectStore.FileName)))!.AsObject();
+        Assert.True(json.Remove("Number") && json.Remove("Structure"));
+        foreach (var clip in json["Clips"]!.AsArray().Select(c => c!.AsObject()))
+            Assert.True(clip.Remove("Beat") && clip.Remove("OwnSound"));
+        File.WriteAllText(Path.Combine(older, ProjectStore.FileName), json.ToJsonString());
+        var old = ProjectStore.Load(older);
+        Assert.Equal((0, BeatStructure.Story, null, false), (old.Number, old.Structure, old.Clips[0].Beat, old.Clips[0].OwnSound));
+
+        Assert.Equal(8, ProjectStore.NextNumber(_folder));
+        Assert.Equal(["Goal", "Try", "Fail", "Fix", "Result", "Recap"], BeatPlan.Beats(BeatStructure.Story).Select(b => b.Name));
+        Assert.Equal(["Try", "Fail", "Result"], BeatPlan.Beats(BeatStructure.Story).Where(b => b.ForFootage).Select(b => b.Name));
+        Assert.Equal(["Concept", "Setup", "Demo", "Recap"], BeatPlan.Beats(BeatStructure.Tutorial).Select(b => b.Name));
+        Assert.Equal(["Hook", "Explain", "Demo", "Next time"], BeatPlan.Beats(BeatStructure.HookFirst).Select(b => b.Name));
+    }
 }

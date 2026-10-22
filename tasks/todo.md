@@ -11,7 +11,7 @@ Unit tests stay at or under 100. The count after each task is shown where it cha
 - [x] **T5 Remove `Subject` from Core and the spec notice.** Check: an old `"Subject": "General"` file loads; **93** tests green; SPEC §7/§12 updated.
 
 ## B. Series data
-- [ ] **T6 Episode number, structure, beat, own-sound fields; numbered folders.** Check: round trip, old file defaults, next number = highest + 1; **94**.
+- [x] **T6 Episode number, structure, beat, own-sound fields; numbered folders.** Check: round trip, old file defaults, next number = highest + 1; **94**.
 - [ ] **T7 `SeriesKit` and `UseSeriesLook`.** Check: save and load, damaged-file fallback, pure look change; **95**.
 
 ## C. Script around the lesson

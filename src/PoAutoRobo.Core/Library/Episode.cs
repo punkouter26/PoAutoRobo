@@ -55,6 +55,12 @@ public sealed record Clip(
 
     /// <summary>Speaking pace multiplier; moves off 1.0 only to fit narration to the user's footage.</summary>
     public double NarrationRate { get; init; } = 1.0;
+
+    /// <summary>The name of the beat the clip belongs to; null for clips written before episodes had beats.</summary>
+    public string? Beat { get; init; }
+
+    /// <summary>The user's footage plays with its own sound instead of being narrated over.</summary>
+    public bool OwnSound { get; init; }
 }
 
 /// <summary>
@@ -73,6 +79,12 @@ public sealed record Episode(
     int MixSeed)
 {
     public CaptionStyle Captions { get; init; } = new();
+
+    /// <summary>Where the episode comes in the series, from 1; 0 for episodes saved before they were numbered.</summary>
+    public int Number { get; init; }
+
+    /// <summary>The shape the episode is told in. Episodes saved before there was a choice are stories.</summary>
+    public BeatStructure Structure { get; init; }
 
     public MixPercentages Mix { get; init; } = MixPercentages.Default;
 
