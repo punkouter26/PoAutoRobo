@@ -6,11 +6,11 @@ namespace PoAutoRobo.Core.Library;
 public static class JsonFile
 {
     /// <summary>The saved value, or <paramref name="fallback"/> when the file is absent or unreadable.</summary>
-    public static T Load<T>(string path, T fallback)
+    public static T Load<T>(string path, T fallback, JsonSerializerOptions? options = null)
     {
         try
         {
-            return JsonSerializer.Deserialize<T>(File.ReadAllText(path)) ?? fallback;
+            return JsonSerializer.Deserialize<T>(File.ReadAllText(path), options) ?? fallback;
         }
         catch (Exception e) when (e is IOException or JsonException)
         {
@@ -18,12 +18,12 @@ public static class JsonFile
         }
     }
 
-    public static void Save<T>(string path, T value)
+    public static void Save<T>(string path, T value, JsonSerializerOptions? options = null)
     {
         try
         {
             Files.EnsureFolderFor(path);
-            File.WriteAllText(path, JsonSerializer.Serialize(value));
+            File.WriteAllText(path, JsonSerializer.Serialize(value, options));
         }
         catch (IOException)
         {

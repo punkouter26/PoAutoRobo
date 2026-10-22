@@ -171,6 +171,16 @@ public static class EpisodeEditor
             return c with { Visual = c.Visual with { MediaPaths = chosen, EarlierTakes = kept, Stale = false } };
         });
 
+    /// <summary>
+    /// Gives the episode the series look: its art direction, its caption style and, when the series has one, its
+    /// music (<paramref name="music"/>, already copied into the episode folder). Clips and words are left alone.
+    /// </summary>
+    public static Episode UseSeriesLook(Episode episode, SeriesKit kit, string? music)
+    {
+        var styled = SetLook(episode, kit.Look) with { Captions = kit.Captions, MusicPath = music ?? episode.MusicPath };
+        return styled == episode ? episode : styled;
+    }
+
     /// <summary>Sets the music played under the narration; null takes it away.</summary>
     public static Episode SetMusic(Episode episode, string? path) => episode.MusicPath == path ? episode : episode with { MusicPath = path };
 

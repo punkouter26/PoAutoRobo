@@ -12,7 +12,7 @@ Unit tests stay at or under 100. The count after each task is shown where it cha
 
 ## B. Series data
 - [x] **T6 Episode number, structure, beat, own-sound fields; numbered folders.** Check: round trip, old file defaults, next number = highest + 1; **94**.
-- [ ] **T7 `SeriesKit` and `UseSeriesLook`.** Check: save and load, damaged-file fallback, pure look change; **95**.
+- [x] **T7 `SeriesKit` and `UseSeriesLook`.** Check: save and load, damaged-file fallback, pure look change; **95**.
 
 ## C. Script around the lesson
 - [ ] **T8 Lesson, beats and footage placement in the script writer; Standard length 6–10.** Check: prompt snapshot diff read and accepted; every footage file placed exactly once (mock and `Repair`); **96**.
