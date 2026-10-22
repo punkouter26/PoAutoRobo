@@ -30,10 +30,12 @@ public sealed class TeasersTests
             new("Too short to save", [new(Clip(2), S(0), S(3))]),                                               // a four-second clip has no ten seconds in it
             new("Nowhere", [new(Guid.NewGuid(), S(0), S(10))]),                                                 // a clip that is not there
             new("Three moments", [new(Clip(0), S(1), S(3)), new(Clip(2), S(0), S(3)), new(Clip(3), S(2), S(3)), new(Clip(4), S(0), S(5))]), // a fourth is one too many
+            new("A flash at the end", [new(Clip(1), S(0), S(5)), new(Clip(3), S(0), S(4.2)), new(Clip(4), S(0), S(0.6))]), // too short to see, and its time made up
         ];
         var held = Teasers.Fit(suggested, lengths);
         Assert.All(held, Holds);
-        Assert.Equal(["one two three four five six seven eight", "Three moments"], held.Select(t => t.Hook));
+        Assert.Equal(["one two three four five six seven eight", "Three moments", "A flash at the end"], held.Select(t => t.Hook));
+        Assert.Equal(2, held[2].Moments.Count);
         Assert.Equal(3, held[1].Moments.Count);
         Assert.Equal((Clip(1), S(2)), (held[0].Moments[0].ClipId, held[0].Moments[0].Start)); // moved back so ten seconds fit inside the clip
 

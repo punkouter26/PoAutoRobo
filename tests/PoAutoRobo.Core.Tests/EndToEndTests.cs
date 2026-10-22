@@ -124,6 +124,11 @@ public sealed class EndToEndTests : IDisposable
         // The captions are where the clips are: after the intro.
         Assert.StartsWith($"1\n00:00:0{(int)slots[1].Start.TotalSeconds},", File.ReadAllText(Path.ChangeExtension(output, null) + ".srt"));
 
+        // The preview's waveform reads every slot's sound after the render is done, the intro's and outro's included.
+        var preview = await Builder.PreviewAsync(episode, _folder, brand, null, default);
+        Assert.Equal(["Intro", .. episode.Clips.Select(c => c.Title), "Outro"], preview.Marks.Select(m => m.Title));
+        Assert.All(preview.Marks, m => Assert.True(File.Exists(m.AudioPath), m.Title));
+
         // Without a channel name there is nothing to put in an intro, so the episode is exported without one.
         var plain = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), brand with { Kit = new SeriesKit() }, null, default);
         var bare = FfmpegArgs.Timeline([.. narration.Select(n => n.Duration)])[^1];

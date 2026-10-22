@@ -394,6 +394,10 @@ public partial class MainViewModel
     /// <summary>Copies a file into the episode's imports folder under <paramref name="name"/>, and gives the copy's path.</summary>
     private static async Task<string> ImportAsync(string path, string folder, string name, CancellationToken ct)
     {
+        // Already in the episode (a film being narrated again, say): used where it is, never copied a second time.
+        var imports = Path.GetFullPath(Path.Combine(folder, "imports"));
+        if (string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), imports, StringComparison.OrdinalIgnoreCase))
+            return Path.GetFullPath(path);
         var copy = Path.Combine(folder, "imports", name);
         Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
         if (!string.Equals(Path.GetFullPath(path), copy, StringComparison.OrdinalIgnoreCase))

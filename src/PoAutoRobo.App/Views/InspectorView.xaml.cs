@@ -65,11 +65,14 @@ public sealed partial class InspectorView : UserControl
             ViewModel?.AttachVideoCommand.Execute(file.Path);
     }
 
-    // The switch also moves when another clip is selected; only a change the user made is passed on.
-    private void OnOwnSoundToggled(object sender, RoutedEventArgs e)
+    // The switch also moves when another clip is selected; only a change the user made is passed on. Afterwards it is
+    // set from the clip again, so a switch that could not be made (a film too short to narrate over) springs back.
+    private async void OnOwnSoundToggled(object sender, RoutedEventArgs e)
     {
-        if (ViewModel?.SelectedClip is { } clip && OwnSoundSwitch.IsOn != clip.OwnSound)
-            ViewModel.SetOwnSoundCommand.Execute(OwnSoundSwitch.IsOn);
+        if (ViewModel?.SelectedClip is not { } clip || OwnSoundSwitch.IsOn == clip.OwnSound) return;
+        await ViewModel.SetOwnSoundCommand.ExecuteAsync(OwnSoundSwitch.IsOn);
+        if (ViewModel.SelectedClip is { } now)
+            OwnSoundSwitch.IsOn = now.OwnSound;
     }
 
     // Applied when the box loses focus, not per keystroke: each apply can ask the model whether the picture still fits.

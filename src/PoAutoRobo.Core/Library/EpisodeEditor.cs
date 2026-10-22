@@ -114,7 +114,13 @@ public static class EpisodeEditor
         });
 
     public static Episode RemoveVideo(Episode episode, Guid clipId) =>
-        Update(episode, clipId, c => c with { NarrationRate = 1.0, OwnSound = false, Visual = new VisualSpec(VisualKind.TitleCard) });
+        Update(episode, clipId, c => Narratable(c with { NarrationRate = 1.0, OwnSound = false, Visual = new VisualSpec(VisualKind.TitleCard) }));
+
+    /// <summary>
+    /// A clip that is to be narrated needs words to say. One that played a film with its own sound may have none, so it
+    /// is given its title until the user writes some.
+    /// </summary>
+    internal static Clip Narratable(Clip clip) => clip.OwnSound || clip.Active.Dialogue.Trim().Length > 0 ? clip : WithDialogue(clip, clip.Title);
 
     /// <summary>
     /// Plays the clip's film with its own sound, or narrates over it again. Only a clip with a film has a sound of its

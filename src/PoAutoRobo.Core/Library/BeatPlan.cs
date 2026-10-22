@@ -45,7 +45,7 @@ public static class BeatPlan
             .ToHashSet();
         // The one that stays takes the file's sound choice from the owner's note, whatever the clip said before.
         clips = [.. clips.Select(c => c.Visual.UserVideoPath is not { } path ? c
-            : !keepers.Contains(c.Id) ? c with { Visual = new VisualSpec(VisualKind.TitleCard), OwnSound = false }
+            : !keepers.Contains(c.Id) ? EpisodeEditor.Narratable(c with { Visual = new VisualSpec(VisualKind.TitleCard), OwnSound = false })
             : footage.FirstOrDefault(n => string.Equals(n.Path, path, StringComparison.OrdinalIgnoreCase)) is { } note ? WithFootage(c, note) : c)];
 
         // A file left out gets a clip of its own, at the end of the footage beat that has the least footage so far.

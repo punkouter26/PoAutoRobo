@@ -280,7 +280,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
             var ends = brand is { Kit.ChannelName: var channel } && channel.Trim().Length > 0 ? brand : null;
             var first = ends is null ? 0 : 1;
             List<Narration> sounds = ends is null ? [.. narrations]
-                : [await BookendSoundAsync(true, ends, work, ct), .. narrations, await BookendSoundAsync(false, ends, work, ct)];
+                : [await BookendSoundAsync(true, ends, work, cache, ct), .. narrations, await BookendSoundAsync(false, ends, work, cache, ct)];
             var slots = FfmpegArgs.Timeline([.. sounds.Select(n => n.Duration)]);
             var segments = narrations.Select((n, i) => new CaptionSegment(slots[i + first].Start, n.Words)).ToList();
 
@@ -401,19 +401,23 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         CopyTitleFont(work);
         var sample = new Episode("Your next lesson", "", [], 0) { Number = number };
         var cache = new MediaCache(ClipCacheFolder);
-        var sound = await BookendSoundAsync(true, brand, work, ct);
+        var sound = await BookendSoundAsync(true, brand, work, cache, ct);
         var picture = await BookendPictureAsync(true, brand, sample, Draft, IntroLength, work, cache, ct);
         var output = Path.Combine(work, "intro-preview.mp4");
         await ffmpeg.RunAsync(["-i", picture, "-i", sound.AudioPath, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-shortest", "-y", output], work, null, null, ct);
         return output;
     }
 
-    /// <summary>The sound of the series intro (its sting, or silence) or outro (silence: the music plays on under it), in the working folder.</summary>
-    private async Task<Narration> BookendSoundAsync(bool intro, Brand brand, string work, CancellationToken ct)
+    /// <summary>
+    /// The sound of the series intro (its sting, or silence) or outro (silence: the music plays on under it). Kept in
+    /// the clip cache, not the working folder, because the preview's waveform reads it after the render has finished.
+    /// </summary>
+    private async Task<Narration> BookendSoundAsync(bool intro, Brand brand, string work, MediaCache cache, CancellationToken ct)
     {
         var length = intro ? IntroLength : brand.Kit.Outro;
-        var sound = Path.Combine(work, intro ? "intro.wav" : "outro.wav");
-        await ffmpeg.RunAsync(FfmpegArgs.FootageSound(intro ? SeriesKit.PathOf(brand.Folder, brand.Kit.Sting) : null, length, sound), work, null, null, ct);
+        var sting = intro ? SeriesKit.PathOf(brand.Folder, brand.Kit.Sting) : null;
+        var sound = await cache.GetOrCreateAsync([string.Join('\n', FfmpegArgs.FootageSound(sting is null ? null : "sting", length, "out.wav")), .. sting is null ? [] : new[] { Stamp(sting) }], ".wav",
+            scratch => ffmpeg.RunAsync(FfmpegArgs.FootageSound(sting, length, scratch), work, null, null, ct));
         return new Narration(sound, length, []);
     }
 
@@ -426,7 +430,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         var (kit, name) = (brand.Kit, intro ? "intro" : "outro");
         // The words, read by name from the working folder like a title card's; a line with nothing to say is left out.
         var lines = intro
-            ? new (string Key, string Text)[] { ("channel", brand.ChannelName), ("tagline", kit.Tagline), ("title", episode.Number > 0 ? $"#{episode.Number} · {episode.Title}" : episode.Title) }
+            ? new (string Key, string Text)[] { ("channel", brand.ChannelName), ("tagline", kit.Tagline), ("title", TitleLine(episode)) }
             : [("channel", brand.ChannelName), ("next", NextTime(episode) is { } next ? $"Next time: {next}" : "")];
         string? File(string key) => lines.First(l => l.Key == key).Text.Trim() is { Length: > 0 } ? $"{name}_{key}.txt" : null;
         foreach (var (key, text) in lines.Where(l => l.Text.Trim().Length > 0))
@@ -438,6 +442,13 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
             : FfmpegArgs.OutroVideo(look, File("channel")!, File("next"), length, preset, to);
         List<string> made = [string.Join('\n', Args("clip.mp4")), .. lines.Select(l => l.Text), .. new[] { look.Logo, look.Mascot }.OfType<string>().Select(Stamp)];
         return await cache.GetOrCreateAsync(made, ".mp4", scratch => ffmpeg.RunAsync(Args(scratch), work, length, null, ct));
+    }
+
+    /// <summary>The intro's line for the episode, "#7 · Walking up stairs"; never empty, as the intro always draws it.</summary>
+    private static string TitleLine(Episode episode)
+    {
+        var title = episode.Title.Trim() is { Length: > 0 } named ? named : "A new lesson";
+        return episode.Number > 0 ? $"#{episode.Number} · {title}" : title;
     }
 
     /// <summary>What the outro says comes next: the title of a "Next time" clip, when the episode has one.</summary>

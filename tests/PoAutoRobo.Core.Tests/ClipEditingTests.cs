@@ -193,6 +193,10 @@ public sealed class ClipEditingTests
         Assert.Same(own, EpisodeEditor.SetOwnSound(own, Target.Id, true)); // already so: nothing to undo
         Assert.Same(_episode, EpisodeEditor.SetOwnSound(_episode, Target.Id, true)); // a clip with no film has no sound of its own
 
+        // A film kept with its own sound and no words: once it is gone the clip is narrated, so it needs words.
+        var silent = EpisodeEditor.Update(own, Target.Id, c => EpisodeEditor.WithDialogue(c, ""));
+        Assert.Equal(Target.Title, EpisodeEditor.RemoveVideo(silent, Target.Id).Clips[1].Active.Dialogue);
+
         var removed = EpisodeEditor.RemoveVideo(own, Target.Id).Clips[1];
 
         Assert.Equal(new VisualSpec(VisualKind.TitleCard), removed.Visual);

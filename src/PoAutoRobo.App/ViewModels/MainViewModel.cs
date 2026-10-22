@@ -26,7 +26,7 @@ public partial class MainViewModel : ObservableObject
     {
         FfmpegAvailable = ffmpegAvailable;
         var prefs = Prefs.Load();
-        LengthIndex = Math.Clamp(prefs.LengthIndex, 0, LengthChoices.Length - 1);
+        LengthIndex = Math.Max(0, Array.FindIndex(LengthChoices, c => c.Label == prefs.Length));
         ExportPresetIndex = Math.Clamp(prefs.ExportPresetIndex, 0, ExportChoices.Length - 1);
         SoundsOn = prefs.SoundsOn;
         SoundVolume = Math.Clamp(prefs.SoundVolume, 0, 1);
@@ -107,8 +107,8 @@ public partial class MainViewModel : ObservableObject
     // The lists behind the drop-downs. Each entry carries its own label, so adding a choice is one line here.
     public Choice<EpisodeLength>[] LengthChoices { get; } =
     [
+        // The one last used is remembered by its label, so the list can change without a saved choice meaning another.
         new("Standard (3–5 minutes)", EpisodeLength.Standard),
-        // New lengths go on the end: the one last used is remembered by its place in this list.
         new("Quick test (1)", EpisodeLength.QuickTest),
     ];
 
@@ -193,7 +193,7 @@ public partial class MainViewModel : ObservableObject
 
     private void SavePrefs()
     {
-        if (_ready) new Prefs(LengthIndex, ExportPresetIndex, SoundsOn, SoundVolume, DraftPictures, EpisodeFolder, Step, InspectorTab, MonthlyBudget, StructureIndex).Save();
+        if (_ready) new Prefs(LengthChoices[Math.Clamp(LengthIndex, 0, LengthChoices.Length - 1)].Label, ExportPresetIndex, SoundsOn, SoundVolume, DraftPictures, EpisodeFolder, Step, InspectorTab, MonthlyBudget, StructureIndex).Save();
     }
 
     // ---- Steps ----

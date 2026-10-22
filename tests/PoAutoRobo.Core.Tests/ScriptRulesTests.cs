@@ -59,7 +59,7 @@ public sealed class ScriptRulesTests
             Clips =
             [
                 Named(written.Clips[0], "Result") with { Visual = new VisualSpec(VisualKind.UserVideo, KindLocked: true, UserVideoPath: footage[0].Path) },
-                Named(written.Clips[1], "Goal") with { Visual = new VisualSpec(VisualKind.UserVideo, KindLocked: true, UserVideoPath: footage[0].Path) },
+                BeatPlan.WithFootage(Named(written.Clips[1], "Goal"), footage[0]), // with its own sound, so no words
                 Named(written.Clips[2], "Montage"),
                 .. Enumerable.Range(0, 9).Select(i => Named(EpisodeEditor.NewClip(), "Recap")),
             ],
@@ -67,6 +67,10 @@ public sealed class ScriptRulesTests
         var repaired = BeatPlan.Repair(strayed, footage, maxClips: 10);
         PlacedOnce(repaired);
         Assert.Equal(10, repaired.Clips.Count); // trimmed, never by dropping the owner's footage
+        // The clip that loses the film is narrated again, so it is given words to say.
+        var demoted = repaired.Clips.Single(c => c.Id == written.Clips[1].Id);
+        Assert.Equal((VisualKind.TitleCard, false), (demoted.Visual.Kind, demoted.OwnSound));
+        Assert.NotEmpty(demoted.Active.Dialogue.Trim());
         Assert.Equal("Goal", repaired.Clips[0].Beat); // order follows the structure; "Montage" stays with the beat before it
         Assert.Equal(footage[0].Path, repaired.Clips.Single(c => c.Beat == "Result" && c.Visual.UserVideoPath == footage[0].Path).Visual.UserVideoPath);
 

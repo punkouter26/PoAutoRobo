@@ -118,7 +118,10 @@ public static class ProjectStore
         })];
 
     /// <summary>The number the next episode of the series gets: one more than the highest saved, so a gap is never filled.</summary>
-    public static int NextNumber(string root) => Summaries(root).Select(s => s.Number).DefaultIfEmpty(0).Max() + 1;
+    public static int NextNumber(string root) => NextNumber(Summaries(root));
+
+    /// <summary>The number the next episode gets, from the library already listed.</summary>
+    public static int NextNumber(IEnumerable<EpisodeSummary> library) => library.Select(s => s.Number).DefaultIfEmpty(0).Max() + 1;
 
     private const string SnippetsFile = "grounding.json";
 

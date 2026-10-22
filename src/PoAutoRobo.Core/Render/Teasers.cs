@@ -34,14 +34,17 @@ public static class Teasers
         var kept = new List<Teaser>();
         foreach (var teaser in suggested)
         {
+            // A moment too short to read is left out first, so the others can make up its time.
             var moments = teaser.Moments.Where(m => lengths.ContainsKey(m.ClipId)).Take(MaxMoments)
-                .Select(m => m with { Length = Clamp(m.Length, TimeSpan.Zero, lengths[m.ClipId]) }).ToList();
+                .Select(m => m with { Length = Clamp(m.Length, TimeSpan.Zero, lengths[m.ClipId]) })
+                .Where(m => m.Length >= MinMoment).ToList();
             var total = TimeSpan.FromTicks(moments.Sum(m => m.Length.Ticks));
 
-            // Too long: the later moments give up time first. Too short: the later moments take more of their clip.
+            // Too long: the later moments give up time first, never below a readable length. Too short: the later
+            // moments take more of their clip.
             for (var i = moments.Count - 1; i >= 0 && total > Target + Tolerance; i--)
             {
-                var cut = Min(total - Target, moments[i].Length);
+                var cut = Min(total - Target, moments[i].Length - MinMoment);
                 moments[i] = moments[i] with { Length = moments[i].Length - cut };
                 total -= cut;
             }

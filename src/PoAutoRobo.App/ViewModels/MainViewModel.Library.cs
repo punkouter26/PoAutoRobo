@@ -12,6 +12,8 @@ public partial class MainViewModel
     private int _libraryRequest;
 
     /// <summary>Lists the saved episodes again. Read off the UI thread: it opens every episode's file, often in a synced folder.</summary>
+    private int _suggestedNumber = 1; // the episode number last filled in, so a number the user typed is left alone
+
     public async Task RefreshLibraryAsync()
     {
         var request = ++_libraryRequest;
@@ -20,7 +22,10 @@ public partial class MainViewModel
         Library.Clear();
         foreach (var summary in summaries)
             Library.Add(summary);
-        EpisodeNumber = summaries.Select(s => s.Number).DefaultIfEmpty(0).Max() + 1; // the next in the series
+        // The next in the series, unless the user has typed a number of their own since it was last filled in.
+        var next = ProjectStore.NextNumber(summaries);
+        if (double.IsNaN(EpisodeNumber) || (int)EpisodeNumber == _suggestedNumber) EpisodeNumber = next;
+        _suggestedNumber = next;
         OnPropertyChanged(nameof(HasLibrary));
     }
 
