@@ -245,7 +245,7 @@ public partial class MainViewModel
         card.IsBusy = true;
         await Guard(async () =>
         {
-            var script = await _scriptWriter.WriteTierAsync(episode.Topic, episode.Subject, card.Clip, tier, CancellationToken.None);
+            var script = await _scriptWriter.WriteTierAsync(episode.Topic, card.Clip, tier, CancellationToken.None);
             // The episode may have been closed or swapped while the depth was being written.
             Edit(e => e.Clips.Any(c => c.Id == card.Id) ? EpisodeEditor.SetTier(EpisodeEditor.AddTier(e, card.Id, tier, script), card.Id, tier) : e);
         });

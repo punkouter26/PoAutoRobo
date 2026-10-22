@@ -160,8 +160,9 @@ These are the rules in `CLAUDE.md`, which win if the two ever differ. In short:
 ## 7. Behaviour rules
 
 **Subject.** Every episode is an R1 episode: grounded in the official repositories and held to the R1 accuracy rules,
-as R1 episodes are today. An `episode.json` saved as General or Essay still opens, now as an R1 episode, with a
-one-line notice. Its script is not rewritten.
+as R1 episodes are today. An `episode.json` saved as General or Essay still opens, now as an R1 episode: the old
+subject field is simply no longer read, and the script is not rewritten. (No notice is shown, by decision on
+2026-10-22: noticing would mean keeping the removed subjects in the code.)
 
 **Beat structures.** Picked when the episode is created and saved with it. Each beat has a name (shown as the section
 strap and the chapter title prefix), a clip range, and a hint whether real footage belongs there:
@@ -278,7 +279,7 @@ call a paid endpoint without an action by the owner; loosen `SceneRenderer`'s lo
 | Episode number already used | Allowed with a warning; the folder name gets a suffix |
 | Teaser suggestion moment outside a clip, or total not 10 s ±0.5 s | Trimmed or padded from the same clip; dropped if it can't be fixed |
 | Episode under 10 s of content | "Suggest teasers" disabled |
-| Old General or Essay `episode.json` | Opens as R1, with a notice (§7) |
+| Old General or Essay `episode.json` | Opens as R1 (§7) |
 | Model declines, or its reply is cut off | As today: a plain message saying which, and nothing is saved |
 | Export or teaser render cancelled, or FFmpeg fails | Partial file deleted; last 20 log lines shown |
 

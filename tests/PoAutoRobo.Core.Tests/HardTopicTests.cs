@@ -34,7 +34,7 @@ public sealed class HardTopicTests(ITestOutputHelper output)
         Episode episode;
         try
         {
-            episode = await writer.WriteEpisodeAsync(topic, Subject.General, [], EpisodeLength.TwoClips, Ct);
+            episode = await writer.WriteEpisodeAsync(topic, [], EpisodeLength.TwoClips, Ct);
         }
         catch (ScriptDeclinedException declined)
         {

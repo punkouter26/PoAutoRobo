@@ -74,9 +74,6 @@ public sealed record Episode(
 {
     public CaptionStyle Captions { get; init; } = new();
 
-    /// <summary>Episodes saved before any-topic episodes existed have no value here and are Unitree R1 episodes.</summary>
-    public Subject Subject { get; init; }
-
     public MixPercentages Mix { get; init; } = MixPercentages.Default;
 
     /// <summary>Episodes saved before there was a choice have no value here and are comic-book episodes.</summary>

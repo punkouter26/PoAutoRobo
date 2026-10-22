@@ -57,6 +57,12 @@ public sealed class ProjectStoreTests : IDisposable
         Assert.Throws<InvalidDataException>(() => ProjectStore.Load(_folder));
         Assert.Equal(first.Title, ProjectStore.RestoreBackup(_folder).Title);
         Assert.Equal(first.Title, ProjectStore.Load(_folder).Title);
+
+        // A file saved when episodes could be about any topic or be essays still opens: the subject is no longer read.
+        var path = Path.Combine(_folder, "episode.json");
+        File.WriteAllText(path, File.ReadAllText(path).Replace("\"Title\": \"Balance\",", "\"Title\": \"Balance\", \"Subject\": \"Essay\","));
+        Assert.Contains("Essay", File.ReadAllText(path));
+        Assert.Equal(first.Title, ProjectStore.Load(_folder).Title);
     }
 
     // ---- An episode file can be edited by anyone who can reach the folder, so it is not trusted ----

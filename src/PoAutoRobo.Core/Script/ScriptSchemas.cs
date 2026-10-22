@@ -4,63 +4,23 @@ namespace PoAutoRobo.Core.Script;
 /// <summary>The prompts and reply shapes sent to the model. Kept apart from the plumbing so they can be read and tuned.</summary>
 internal static class ScriptSchemas
 {
-    /// <summary>Everything that differs between an R1 episode and an any-topic one. The prompts themselves are written once.</summary>
-    /// <param name="EpisodeAbout">Ends "educational video ...".</param>
-    /// <param name="ClipAbout">Follows "one clip of an educational video"; empty when there is nothing to add.</param>
-    /// <param name="Narrator">Who is speaking, as a whole sentence.</param>
-    /// <param name="Structure">How the clips relate to one another.</param>
-    private sealed record Brief(string EpisodeAbout, string ClipAbout, string Narrator, string Structure, string Depths, string Accuracy, string ClipFacts);
+    // Who and what every script is about: the Unitree R1, voiced by a cartoon version of itself.
+    private const string EpisodeAbout = "about the Unitree R1 EDU humanoid robot";
+    private const string ClipAbout = " about the Unitree R1 EDU humanoid robot";
+    private const string Narrator = "The narrator is a confident, energetic cartoon version of the R1 itself, speaking in the first person to the viewer.";
+    private const string Structure = "Each clip covers one self-contained subtopic and still makes sense if the clips are reordered.";
 
-    private static string HostSpeaks(string host) => $"The narrator is a confident, energetic {host}, speaking in the first person to the viewer.";
-
-    private const string StandAlone = "Each clip covers one self-contained subtopic and still makes sense if the clips are reordered.";
-
-    private static readonly Brief R1 = new(
-        "about the Unitree R1 EDU humanoid robot",
-        " about the Unitree R1 EDU humanoid robot",
-        HostSpeaks("cartoon version of the R1 itself"),
-        StandAlone,
-        """
+    private const string Depths = """
         - a: mainstream and accessible. Everyday analogies and intuitive physical explanations. No jargon.
         - b: applied developer. Practical workflows, sim-to-real considerations, reward terms and operating parameters.
         - c: advanced systems engineer. Control rates, actuator limits, coordinate frames and policy formulation.
-        """,
-        """
+        """;
+
+    private const string Accuracy = """
         - Use specific numbers, joint names, API names and control rates only when they appear in the reference snippets. Otherwise speak in general terms.
         - Do not say or imply that Isaac Lab officially supports the R1. Unitree's Isaac Lab repository (unitree_rl_lab) lists Go2, H1 and G1 only; R1 training is supported in its MuJoCo repository (unitree_rl_mjlab).
         - Never invent quotes, benchmarks or release dates.
-        """,
-        "numbers, joint names and API names");
-
-    // The same host and the same three depths, without the R1 rules or the repositories.
-    private static readonly Brief General = new(
-        "on the topic you are given",
-        "",
-        HostSpeaks("cartoon robot host"),
-        StandAlone,
-        """
-        - a: mainstream and accessible. Everyday analogies and intuitive explanations. No jargon.
-        - b: applied practitioner. How it is actually done: practical steps, trade-offs and common mistakes.
-        - c: advanced specialist. The underlying mechanisms, limits and precise terminology.
-        """,
-        """
-        - Use specific numbers, names, dates and statistics only when they appear in the topic text. Otherwise speak in general terms.
-        - Never invent quotes, benchmarks or release dates.
-        """,
-        "numbers and names");
-
-    // No host, and the clips are one argument in a fixed order: the video essay.
-    private static readonly Brief Essay = General with
-    {
-        Narrator = "The narrator is an unseen voice, calm and curious, who never appears on screen and never refers to themselves.",
-        Structure = """
-            The clips tell one story in order. The first is a hook: a question or a surprising claim. The middle clips build
-            the argument a step at a time, each raising the stakes. The last delivers the payoff and answers the hook.
-            Build each clip on one concrete visual metaphor (nested dolls, a set of scales, a tower) and never on a presenter.
-            """,
-    };
-
-    private static Brief For(Subject subject) => subject switch { Subject.General => General, Subject.Essay => Essay, _ => R1 };
+        """;
 
     private const string TierFields = """
         - dialogue: what the narrator says, 60 to 110 words, plain spoken sentences with no lists, headings or stage directions.
@@ -93,92 +53,80 @@ internal static class ScriptSchemas
         """;
 
     /// <param name="kinds">The picture types that can be made here; the model chooses among these alone.</param>
-    public static string System(Subject subject, IReadOnlyList<KindInfo> kinds)
-    {
-        var brief = For(subject);
-        return $"""
-            You write the script for a fast-paced educational video {brief.EpisodeAbout}.
-            {brief.Narrator}
+    public static string System(IReadOnlyList<KindInfo> kinds) => $"""
+        You write the script for a fast-paced educational video {EpisodeAbout}.
+        {Narrator}
 
-            {Scope}
+        {Scope}
 
-            Break the topic into the number of clips the request asks for. {brief.Structure}
-            Give every clip a short title of two to five words.
+        Break the topic into the number of clips the request asks for. {Structure}
+        Give every clip a short title of two to five words.
 
-            Write every clip at depth b of these three depths:
-            {brief.Depths}
+        Write every clip at depth b of these three depths:
+        {Depths}
 
-            Give every clip a "kind": the picture type that shows its idea best. Vary them, so that the video never looks
-            the same for long, and choose a costly or plain type only where it earns its place. The types:
-            {KindList(kinds)}
+        Give every clip a "kind": the picture type that shows its idea best. Vary them, so that the video never looks
+        the same for long, and choose a costly or plain type only where it earns its place. The types:
+        {KindList(kinds)}
 
-            {DrawablePictures}
+        {DrawablePictures}
 
-            For each clip give, under "b":
-            {TierFields}
+        For each clip give, under "b":
+        {TierFields}
 
-            Accuracy rules:
-            {brief.Accuracy}
+        Accuracy rules:
+        {Accuracy}
 
-            {Fence}
-            """;
-    }
+        {Fence}
+        """;
 
     // ---- The same script written in pieces, so that one clip turned away does not lose the rest ----
 
     /// <summary>Plans the video without writing it: a title, and for each clip its title, picture type and what it covers.</summary>
-    public static string OutlineSystem(Subject subject, IReadOnlyList<KindInfo> kinds)
-    {
-        var brief = For(subject);
-        return $"""
-            You plan a fast-paced educational video {brief.EpisodeAbout}. You do not write its script yet.
+    public static string OutlineSystem(IReadOnlyList<KindInfo> kinds) => $"""
+        You plan a fast-paced educational video {EpisodeAbout}. You do not write its script yet.
 
-            {Scope}
+        {Scope}
 
-            Break the topic into the number of clips the request asks for. {brief.Structure}
-            Give the video a title, and for every clip:
-            - title: two to five words.
-            - kind: the picture type that shows its idea best. Vary them. The types:
-            {KindList(kinds)}
-            - about: one sentence saying what the clip covers.
+        Break the topic into the number of clips the request asks for. {Structure}
+        Give the video a title, and for every clip:
+        - title: two to five words.
+        - kind: the picture type that shows its idea best. Vary them. The types:
+        {KindList(kinds)}
+        - about: one sentence saying what the clip covers.
 
-            {DrawablePictures}
+        {DrawablePictures}
 
-            {Fence}
-            """;
-    }
+        {Fence}
+        """;
 
     public static string Outline(IReadOnlyList<KindInfo> kinds) => $$"""
         { "type": "object", "properties": { "title": { "type": "string" }, "clips": { "type": "array", "items": { "type": "object", "properties": { "title": { "type": "string" }, "kind": { "type": "string", "enum": [{{string.Join(", ", kinds.Select(k => $"\"{k.Key}\""))}}] }, "about": { "type": "string" } }, "required": ["title", "kind", "about"], "additionalProperties": false } } }, "required": ["title", "clips"], "additionalProperties": false }
         """;
 
     /// <summary>Writes one clip of a video that has been planned, at depth b.</summary>
-    public static string ClipSystem(Subject subject)
-    {
-        var brief = For(subject);
-        return $"""
-            You write one clip of a fast-paced educational video{brief.ClipAbout}. The whole video is already planned: the
-            request gives the plan and says which clip is yours. Write that clip alone, so that it follows from the one
-            before it and leaves the later ones their own ground.
-            {brief.Narrator}
+    public const string ClipSystem = $"""
+        You write one clip of a fast-paced educational video{ClipAbout}. The whole video is already planned: the
+        request gives the plan and says which clip is yours. Write that clip alone, so that it follows from the one
+        before it and leaves the later ones their own ground.
+        {Narrator}
 
-            {Scope}
+        {Scope}
 
-            Write it at depth b of these three depths:
-            {brief.Depths}
+        Write it at depth b of these three depths:
+        {Depths}
 
-            Give:
-            {TierFields}
+        Give:
+        {TierFields}
 
-            The request names the clip's picture type and says what its visualPrompt must be.
-            {DrawablePictures}
+        The request names the clip's picture type and says what its visualPrompt must be.
+        {DrawablePictures}
 
-            Accuracy rules:
-            {brief.Accuracy}
+        Accuracy rules:
+        {Accuracy}
 
-            {Fence}
-            """;
-    }
+        {Fence}
+        """;
 
     /// <summary>Thinks of another picture for a clip whose picture the picture model would not draw.</summary>
     public const string RethinkSystem = $"""
@@ -196,28 +144,24 @@ internal static class ScriptSchemas
         { "type": "object", "properties": { "diagram": { "type": "string" }, "searchWords": { "type": "string" } }, "required": ["diagram", "searchWords"], "additionalProperties": false }
         """;
 
-    public static string TierSystem(Subject subject)
-    {
-        var brief = For(subject);
-        return $"""
-            You rewrite one clip of an educational video{brief.ClipAbout} at a different depth.
-            {brief.Narrator}
-            The three depths are:
-            {brief.Depths}
+    public const string TierSystem = $"""
+        You rewrite one clip of an educational video{ClipAbout} at a different depth.
+        {Narrator}
+        The three depths are:
+        {Depths}
 
-            {Scope}
+        {Scope}
 
-            Cover the same subtopic as the existing script, at the depth the request names. Give:
-            {TierFields}
+        Cover the same subtopic as the existing script, at the depth the request names. Give:
+        {TierFields}
 
-            The request names the clip's picture type and says what its visualPrompt must be.
-            {DrawablePictures}
+        The request names the clip's picture type and says what its visualPrompt must be.
+        {DrawablePictures}
 
-            Use only the {brief.ClipFacts} that appear in the existing script; add none of your own.
+        Use only the numbers, joint names and API names that appear in the existing script; add none of your own.
 
-            {Fence}
-            """;
-    }
+        {Fence}
+        """;
 
     public const string Tier = """
         { "type": "object", "properties": { "dialogue": { "type": "string" }, "visualPrompt": { "type": "string" }, "pose": { "type": "string" } }, "required": ["dialogue", "visualPrompt", "pose"], "additionalProperties": false }

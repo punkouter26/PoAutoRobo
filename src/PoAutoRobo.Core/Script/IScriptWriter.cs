@@ -17,10 +17,10 @@ public interface IScriptWriter
 
     /// <summary>Writes every clip at depth B only; the other depths are written when first asked for.</summary>
     /// <param name="clipsWritten">Given the titles of the clips finished so far, as the script arrives.</param>
-    Task<Episode> WriteEpisodeAsync(string topic, Subject subject, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<IReadOnlyList<string>>? clipsWritten = null);
+    Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<IReadOnlyList<string>>? clipsWritten = null);
 
     /// <summary>Writes one clip at a depth it does not have yet, from the depth it is on now.</summary>
-    Task<TierScript> WriteTierAsync(string topic, Subject subject, Clip clip, Tier tier, CancellationToken ct);
+    Task<TierScript> WriteTierAsync(string topic, Clip clip, Tier tier, CancellationToken ct);
 
     /// <summary>True when the edit changes the core action, tool or physical subject, so the visual no longer fits.</summary>
     Task<bool> CoreChangedAsync(string oldDialogue, string newDialogue, CancellationToken ct);

@@ -22,7 +22,7 @@ public sealed class ScriptRulesTests
 
     private async Task Mock_episode_has_the_length_asked_for_with_three_tiers_all_in_range_and_tier_b_activeCase(int min, int max, int expected)
     {
-        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", Subject.UnitreeR1, [], new EpisodeLength(min, max), Ct);
+        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], new EpisodeLength(min, max), Ct);
 
         Assert.Equal(expected, episode.Clips.Count);
         Assert.Equal(expected, episode.Clips.Select(c => c.Id).Distinct().Count());

@@ -33,7 +33,7 @@ public sealed class EndToEndTests : IDisposable
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=800x600", "-frames:v", "1", image], _folder, null, null, default);
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=320x240:r=25:d=1", "-pix_fmt", "yuv420p", video], _folder, null, null, default);
 
-        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", Subject.UnitreeR1, [], EpisodeLength.Full, default);
+        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], EpisodeLength.Full, default);
         static Clip Short(Clip c, VisualSpec visual) => c with
         {
             Visual = visual,
@@ -108,7 +108,7 @@ public sealed class EndToEndTests : IDisposable
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_SLOW_OUT") is not { Length: > 0 } keep)
             return;
-        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", Subject.UnitreeR1, [], EpisodeLength.Full, default);
+        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], EpisodeLength.Full, default);
 
         var output = await Builder.ExportAsync(episode, _folder, ExportPreset.Hd30, new CaptionStyle(), null, default);
 

@@ -94,7 +94,7 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
         });
     }
 
-    public async Task<Episode> WriteEpisodeAsync(string topic, Subject subject, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<IReadOnlyList<string>>? clipsWritten = null)
+    public async Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<IReadOnlyList<string>>? clipsWritten = null)
     {
         var prompt = new StringBuilder().AppendLine($"Number of clips: {length.InWords}.").AppendLine().Append(Fenced("topic", "", Capped(topic)));
         foreach (var snippet in grounding)
@@ -115,7 +115,7 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
         };
 
         IReadOnlyList<KindInfo> kinds = [.. Visuals.Kinds.Where(k => CanMake(k.Kind))];
-        var (system, schema) = (ScriptSchemas.System(subject, kinds), ScriptSchemas.Episode(kinds));
+        var (system, schema) = (ScriptSchemas.System(kinds), ScriptSchemas.Episode(kinds));
         EpisodeDto draft;
         try
         {
@@ -138,7 +138,7 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
         catch (ScriptDeclinedException declined) when (declined.By != DeclinedBy.RequestFilter)
         {
             Note?.Invoke($"{declined.What} Writing it one clip at a time, so that only the clip in question is lost.");
-            draft = await WriteInPiecesAsync(prompt.ToString(), subject, kinds, length, clipsWritten, ct);
+            draft = await WriteInPiecesAsync(prompt.ToString(), kinds, length, clipsWritten, ct);
         }
         if (draft.Clips.Count < length.MinClips)
             throw new InvalidDataException($"The script came back with only {draft.Clips.Count} clips. Please try again.");
@@ -146,8 +146,8 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
         var clips = draft.Clips.Take(length.MaxClips).Select(c => new Clip(
             Guid.NewGuid(), c.Title, Tier.B,
             new Dictionary<Tier, TierScript> { [Tier.B] = new(c.B.Dialogue, c.B.VisualPrompt, c.B.Pose) },
-            new VisualSpec(Visuals.KindFor(c.Kind)), HostVisible: subject != Subject.Essay)).ToList();
-        return new Episode(draft.Title, topic, clips, MixSeed: Random.Shared.Next()) { Subject = subject };
+            new VisualSpec(Visuals.KindFor(c.Kind)), HostVisible: true)).ToList();
+        return new Episode(draft.Title, topic, clips, MixSeed: Random.Shared.Next());
     }
 
     /// <summary>What a clip the model would not write says until the user writes it.</summary>
@@ -158,9 +158,9 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
     /// write, under the title and picture the plan gave it, and the rest are written as usual.
     /// </summary>
     /// <param name="request">The request as it was made for the whole script: the number of clips, the topic and the references.</param>
-    private async Task<EpisodeDto> WriteInPiecesAsync(string request, Subject subject, IReadOnlyList<KindInfo> kinds, EpisodeLength length, IProgress<IReadOnlyList<string>>? clipsWritten, CancellationToken ct)
+    private async Task<EpisodeDto> WriteInPiecesAsync(string request, IReadOnlyList<KindInfo> kinds, EpisodeLength length, IProgress<IReadOnlyList<string>>? clipsWritten, CancellationToken ct)
     {
-        var outline = await Ask<OutlineDto>(settings.ChatDeployment, ScriptSchemas.OutlineSystem(subject, kinds), request, "outline", ScriptSchemas.Outline(kinds), null, ct);
+        var outline = await Ask<OutlineDto>(settings.ChatDeployment, ScriptSchemas.OutlineSystem(kinds), request, "outline", ScriptSchemas.Outline(kinds), null, ct);
         var planned = outline.Clips.Take(length.MaxClips).ToList();
         var plan = string.Join('\n', planned.Select((c, i) => $"{i + 1}. {c.Title}: {c.About}"));
         var clips = new List<ClipDto>(planned.Count);
@@ -174,7 +174,7 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
                 .AppendLine(kinds.FirstOrDefault(k => k.Key == clip.Kind) is { } kind ? $"Picture type: {kind.Key}. {kind.Brief}" : "Picture type: title. visualPrompt: the title.");
             try
             {
-                clips.Add(new ClipDto(clip.Title, await Ask<TierDto>(settings.ChatDeployment, ScriptSchemas.ClipSystem(subject), mine.ToString(), "tier", ScriptSchemas.Tier, null, ct), clip.Kind));
+                clips.Add(new ClipDto(clip.Title, await Ask<TierDto>(settings.ChatDeployment, ScriptSchemas.ClipSystem, mine.ToString(), "tier", ScriptSchemas.Tier, null, ct), clip.Kind));
             }
             catch (ScriptDeclinedException)
             {
@@ -238,7 +238,7 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
     }
 
     // The topic is not sent: a new depth may use only what the existing script already says.
-    public async Task<TierScript> WriteTierAsync(string topic, Subject subject, Clip clip, Tier tier, CancellationToken ct)
+    public async Task<TierScript> WriteTierAsync(string topic, Clip clip, Tier tier, CancellationToken ct)
     {
         var request = new StringBuilder()
             .AppendLine($"Depth to write: {tier.ToString().ToLowerInvariant()}")
@@ -246,7 +246,7 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
             // A title and its words were written by a model, from repository passages anyone can edit, so they are fenced like those passages.
             .Append(Fenced("existing", " what=\"the clip's title\"", clip.Title))
             .Append(Fenced("existing", $" depth=\"{clip.ActiveTier.ToString().ToLowerInvariant()}\"", clip.Active.Dialogue));
-        var script = await Ask<TierDto>(settings.FastChatDeployment, ScriptSchemas.TierSystem(subject), request.ToString(), "tier", ScriptSchemas.Tier, null, ct);
+        var script = await Ask<TierDto>(settings.FastChatDeployment, ScriptSchemas.TierSystem, request.ToString(), "tier", ScriptSchemas.Tier, null, ct);
         return new TierScript(script.Dialogue, script.VisualPrompt, script.Pose);
     }
 

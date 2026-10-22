@@ -66,7 +66,7 @@ public sealed class VisualKindsTests : IDisposable
         EqualityComparer<Episode>.Create((a, b) => a!.Clips.Select(c => c.Visual).SequenceEqual(b!.Clips.Select(c => c.Visual)));
 
     [Fact]
-    public async Task The_model_is_offered_only_the_kinds_that_can_be_made_its_choice_becomes_the_clips_kind_and_an_essay_has_no_host()
+    public async Task The_model_is_offered_only_the_kinds_that_can_be_made_and_its_choice_becomes_the_clips_kind()
     {
         var calls = new List<(string System, string Schema)>();
         var writer = new AzureScriptWriter(AppSettings.Offline, (_, system, _, _, schema, _, _) =>
@@ -76,18 +76,12 @@ public sealed class VisualKindsTests : IDisposable
         })
         { CanMake = kind => kind != VisualKind.AiVideo };
 
-        var essay = await writer.WriteEpisodeAsync("AI reviewing AI", Subject.Essay, [], EpisodeLength.QuickTest, Ct);
-        var hosted = await writer.WriteEpisodeAsync("AI reviewing AI", Subject.General, [], EpisodeLength.QuickTest, Ct);
+        var episode = await writer.WriteEpisodeAsync("Teaching the R1 to wave", [], EpisodeLength.QuickTest, Ct);
 
-        Assert.Equal(VisualKind.Chart, essay.Clips[0].Visual.Kind);
-        Assert.False(essay.Clips[0].HostVisible);
-        Assert.True(hosted.Clips[0].HostVisible);
+        Assert.Equal(VisualKind.Chart, episode.Clips[0].Visual.Kind);
         Assert.Contains("\"chart\"", calls[0].Schema);
         Assert.DoesNotContain("\"video\"", calls[0].Schema);
         Assert.DoesNotContain("- video:", calls[0].System);
-        Assert.Contains("hook", calls[0].System);              // an essay is one argument in order
-        Assert.Contains("unseen voice", calls[0].System);
-        Assert.Contains("reordered", calls[1].System);         // the hosted kind is still stand-alone clips
         Assert.Equal(VisualKind.TitleCard, Visuals.KindFor("no-such-kind"));
     }
 
@@ -256,7 +250,7 @@ public sealed class VisualKindsTests : IDisposable
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=800x600", "-frames:v", "1", setting], _folder, null, null, default);
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "color=c=red@0.0:s=600x400,format=rgba", "-frames:v", "1", subject], _folder, null, null, default);
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=320x240:r=25:d=0.4", "-pix_fmt", "yuv420p", shot], _folder, null, null, default);
-        var mock = await new MockScriptWriter().WriteEpisodeAsync("Layers", Subject.Essay, [], new EpisodeLength(3, 3), default);
+        var mock = await new MockScriptWriter().WriteEpisodeAsync("Layers", [], new EpisodeLength(3, 3), default);
         Clip Short(int i, VisualSpec visual) => mock.Clips[i] with
         {
             Visual = visual,

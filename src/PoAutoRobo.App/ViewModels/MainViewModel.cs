@@ -415,7 +415,7 @@ public partial class MainViewModel : ObservableObject
             });
             // The script chooses each clip's picture type; whatever cannot be made on this computer becomes a still.
             Func<VisualKind, bool> canMake = CurrentVisuals is { } visuals ? visuals.CanMake : _ => false;
-            var episode = VisualMix.Settle(await _scriptWriter.WriteEpisodeAsync(topic, Subject.UnitreeR1, grounding, length, ct, written), canMake);
+            var episode = VisualMix.Settle(await _scriptWriter.WriteEpisodeAsync(topic, grounding, length, ct, written), canMake);
             var folder = ProjectStore.NewFolder(AppPaths.Episodes, episode.Title); // never on top of an earlier episode
             ProjectStore.Save(episode, folder);
             ProjectStore.SaveSnippets(grounding, folder);

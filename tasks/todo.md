@@ -4,11 +4,11 @@ How each task is built (see `plan.md`): failing test → pass → unit suite →
 Unit tests stay at or under 100. The count after each task is shown where it changes.
 
 ## A. Clearing out
-- [ ] **T1 Move `IsWebLink` to `Files`.** Check: `ProjectStore` has no `TrendFeed` reference; its test lives with `Files`; 98 tests green.
-- [ ] **T2 Take Topic Radar out of the app.** Check: no radar UI, commands or `TrendFeed.Create()` in the app; the app builds and starts.
-- [ ] **T3 Delete `TrendFeed`, its tests and the Syndication package.** Check: `git grep Syndication` finds nothing; **94** tests green.
-- [ ] **T4 Stop offering subjects in the UI.** Check: no "About" box; every new episode is grounded in the repositories.
-- [ ] **T5 Remove `Subject` from Core and the spec notice.** Check: an old `"Subject": "General"` file loads; **93** tests green; SPEC §7/§12 updated.
+- [x] **T1 Move `IsWebLink` to `Files`.** Check: `ProjectStore` has no `TrendFeed` reference; its test lives with `Files`; 98 tests green.
+- [x] **T2 Take Topic Radar out of the app.** Check: no radar UI, commands or `TrendFeed.Create()` in the app; the app builds and starts.
+- [x] **T3 Delete `TrendFeed`, its tests and the Syndication package.** Check: `git grep Syndication` finds nothing; **94** tests green.
+- [x] **T4 Stop offering subjects in the UI.** Check: no "About" box; every new episode is grounded in the repositories.
+- [x] **T5 Remove `Subject` from Core and the spec notice.** Check: an old `"Subject": "General"` file loads; **93** tests green; SPEC §7/§12 updated.
 
 ## B. Series data
 - [ ] **T6 Episode number, structure, beat, own-sound fields; numbered folders.** Check: round trip, old file defaults, next number = highest + 1; **94**.
