@@ -3,14 +3,12 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:PoAutoRobo.App.Views"
-    xmlns:app="using:PoAutoRobo.App"
     xmlns:library="using:PoAutoRobo.Core.Library"
-    xmlns:script="using:PoAutoRobo.Core.Script"
     xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
     Loaded="OnLoaded" Unloaded="OnUnloaded" ActualThemeChanged="OnThemeChanged">
-    <!-- Left: start something new. Right: carry on with something saved, or take a story from the radar. -->
+    <!-- Left: start something new. Right: carry on with something saved. -->
     <Grid>
-        <!-- In a small window the form gives some of its width to the stories. -->
+        <!-- In a small window the form gives some of its width to the saved episodes. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
                 <VisualState x:Name="Roomy">
@@ -59,7 +57,7 @@
                     HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.CreateEpisodeCommand}" />
         </Grid>
 
-        <!-- A slow cloud of light in the accent colour, worked out on the graphics card behind the saved episodes and stories -->
+        <!-- A slow cloud of light in the accent colour, worked out on the graphics card behind the saved episodes -->
         <canvas:CanvasAnimatedControl x:Name="Backdrop" Grid.Column="1" Draw="OnDrawBackdrop" ClearColor="Transparent" IsHitTestVisible="False" IsTabStop="False"
                                       AutomationProperties.AccessibilityView="Raw" />
 
@@ -101,41 +99,6 @@
                         </DataTemplate>
                     </GridView.ItemTemplate>
                 </GridView>
-
-                <Grid>
-                    <TextBlock x:Name="RadarHeadingText" Text="{x:Bind ViewModel.RadarHeading, Mode=OneWay}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,52,0" />
-                    <Button x:Name="RefreshTopicsButton" HorizontalAlignment="Right" Style="{StaticResource IconButton}" Command="{x:Bind ViewModel.RefreshTopicsCommand}" AutomationProperties.Name="Refresh topics" ToolTipService.ToolTip="Look for new stories.">
-                        <SymbolIcon Symbol="Refresh" />
-                    </Button>
-                </Grid>
-                <!-- While stories are fetched: rows in the shape of the ones on their way -->
-                <StackPanel x:Name="TopicSkeleton" Spacing="{StaticResource GapSmall}" Visibility="{x:Bind ViewModel.RefreshTopicsCommand.IsRunning, Mode=OneWay}" AutomationProperties.AccessibilityView="Raw">
-                    <Border Height="92" CornerRadius="6" Background="{StaticResource ShimmerBrush}" />
-                    <Border Height="92" CornerRadius="6" Background="{StaticResource ShimmerBrush}" />
-                    <Border Height="92" CornerRadius="6" Background="{StaticResource ShimmerBrush}" />
-                </StackPanel>
-                <ItemsControl x:Name="TopicCards" ItemsSource="{x:Bind ViewModel.Topics}" Visibility="{x:Bind app:Ui.Hide(ViewModel.RefreshTopicsCommand.IsRunning), Mode=OneWay}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="script:TopicCard">
-                            <Grid ColumnSpacing="{StaticResource Gap}" Padding="12" Margin="0,0,0,8" CornerRadius="6" Background="{ThemeResource ControlFillColorDefaultBrush}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" Style="{ThemeResource BodyStrongTextBlockStyle}" ToolTipService.ToolTip="{x:Bind Title}" />
-                                    <TextBlock Text="{x:Bind Summary}" MaxLines="2" TextTrimming="CharacterEllipsis" Style="{StaticResource QuietText}" ToolTipService.ToolTip="{x:Bind Summary}" />
-                                    <HyperlinkButton Padding="0" NavigateUri="{x:Bind Url}">
-                                        <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" TextWrapping="Wrap">
-                                            <Run Text="{x:Bind Source}" /><Run Text="  " /><Run Text="{x:Bind Interest}" />
-                                        </TextBlock>
-                                    </HyperlinkButton>
-                                </StackPanel>
-                                <Button Grid.Column="1" Content="Adopt topic" MinHeight="44" VerticalAlignment="Center" Tag="{x:Bind}" Click="OnAdoptTopic" ToolTipService.ToolTip="Use this story as the episode topic and start writing the script straight away." />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
             </StackPanel>
         </ScrollViewer>
     </Grid>

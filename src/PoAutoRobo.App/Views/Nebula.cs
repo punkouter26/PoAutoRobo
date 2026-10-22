@@ -11,18 +11,17 @@ namespace PoAutoRobo.App.Views;
 /// <param name="time">Seconds since the page appeared.</param>
 /// <param name="size">The backdrop's size in pixels.</param>
 /// <param name="accent">The colour of the light, each part 0 to 1.</param>
-/// <param name="energy">0 at rest, 1 while stories are being fetched: the folds brighten and quicken.</param>
 [D2DInputCount(0)]
 [D2DRequiresScenePosition]
 [D2DShaderProfile(D2D1ShaderProfile.PixelShader50)]
 [D2DGeneratedPixelShaderDescriptor]
-internal readonly partial struct Nebula(float time, float2 size, float3 accent, float energy) : ID2D1PixelShader
+internal readonly partial struct Nebula(float time, float2 size, float3 accent) : ID2D1PixelShader
 {
     public float4 Execute()
     {
         // The same scale in both directions, so the folds are not stretched by the window's shape.
         float2 p = D2D.GetScenePosition().XY / size.Y * 2.4f;
-        float t = time * (0.05f + 0.07f * energy);
+        float t = time * 0.05f;
 
         // Noise bent by noise, twice over: the first bend gives the folds, the second the wisps inside them.
         float2 q = new(Cloud(p + new float2(0f, t)), Cloud(p + new float2(5.2f, 1.3f - t)));
@@ -31,7 +30,7 @@ internal readonly partial struct Nebula(float time, float2 size, float3 accent, 
 
         // The colour leans towards its neighbour on the wheel where the folds run deepest, so it is never one flat tint.
         float3 colour = Hlsl.Lerp(accent, accent.ZXY, Hlsl.Saturate(r.X * 0.7f));
-        float light = Hlsl.Saturate(folds * folds * 1.9f + 0.25f * Hlsl.Length(q) - 0.18f) * (0.24f + 0.20f * energy);
+        float light = Hlsl.Saturate(folds * folds * 1.9f + 0.25f * Hlsl.Length(q) - 0.18f) * 0.24f;
 
         // Fades out towards the left edge, where the page's form begins.
         light *= Hlsl.SmoothStep(0f, 0.25f, D2D.GetScenePosition().X / size.X);

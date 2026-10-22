@@ -22,7 +22,7 @@ public partial class App : Application
         // The window opens straight away, on stand-in services. The real ones are connected below once the vault
         // answers, which can take a second or two and up to twenty when there is no network.
         var ffmpeg = FfmpegRunner.Locate();
-        var viewModel = new MainViewModel(TrendFeed.Create(), ffmpegAvailable: ffmpeg is not null);
+        var viewModel = new MainViewModel(ffmpegAvailable: ffmpeg is not null);
         _window = new MainWindow(viewModel);
         _window.Closed += (_, _) => JsonFile.Save(AppPaths.WindowState, windowState.ToDictionary(p => p.Key, p => p.Value?.ToString()));
         _window.AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico"));

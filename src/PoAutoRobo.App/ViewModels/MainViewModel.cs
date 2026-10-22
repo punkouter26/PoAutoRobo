@@ -11,7 +11,6 @@ namespace PoAutoRobo.App.ViewModels;
 /// </summary>
 public partial class MainViewModel : ObservableObject
 {
-    private readonly TrendFeed _trendFeed;
     private readonly bool _ready; // false while the constructor restores saved choices, so restoring them saves and fetches nothing
 
     // Simulated until Connect is called: the window opens before the Azure sign-in has answered.
@@ -23,9 +22,8 @@ public partial class MainViewModel : ObservableObject
     private bool _syncingClips;
     private Prefs? _reopen; // where the user was last time, until the services are connected and it can be gone back to
 
-    public MainViewModel(TrendFeed trendFeed, bool ffmpegAvailable)
+    public MainViewModel(bool ffmpegAvailable)
     {
-        _trendFeed = trendFeed;
         FfmpegAvailable = ffmpegAvailable;
         var prefs = Prefs.Load();
         LengthIndex = Math.Clamp(prefs.LengthIndex, 0, LengthChoices.Length - 1);
@@ -196,16 +194,6 @@ public partial class MainViewModel : ObservableObject
 
     private Subject NextSubject => SubjectChoices[Math.Clamp(SubjectIndex, 0, SubjectChoices.Length - 1)].Value;
 
-    /// <summary>What the radar is showing: stories on the subject, or stories about the topic typed.</summary>
-    [ObservableProperty]
-    public partial string RadarHeading { get; set; } = "Topic radar";
-
-    // The radar follows the subject: R1 stories for R1 episodes, today's popular stories otherwise.
-    partial void OnSubjectIndexChanged(int value)
-    {
-        if (_ready) RefreshTopicsCommand.Execute(null);
-    }
-
     // Everything remembered is saved as it changes. Adding a choice to remember is one name here and one in SavePrefs.
     private static readonly HashSet<string> Remembered =
     [
@@ -228,7 +216,7 @@ public partial class MainViewModel : ObservableObject
 
     private static readonly string[] StepHints =
     [
-        "Pick the one topic for this episode: type your own, adopt a story, or open an episode you saved earlier.",
+        "Pick the one topic for this episode: type your own, or open an episode you saved earlier.",
         "Shape the clips: drag them into order, edit and audition each one's words, then give each its picture.",
         "Finish: choose the caption style, watch a preview, then render the master video.",
     ];
@@ -273,71 +261,6 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>For the keyboard shortcuts.</summary>
     public void GoTo(int step) => Step = step;
-
-    // ---- Topic radar ----
-
-    public ObservableCollection<TopicCard> Topics { get; } = [];
-
-    [RelayCommand]
-    private async Task RefreshTopicsAsync(CancellationToken ct)
-    {
-        try
-        {
-            // Never throws for a dead source. R1 falls back to sample topics; the other lists are simply empty.
-            // A topic already typed comes first: the radar shows stories about that, whatever the subject is set to.
-            var typed = TopicInput.Trim();
-            var subject = NextSubject;
-            var cards = typed.Length > 0 ? await _trendFeed.SearchAsync(typed, ct)
-                : subject == Subject.UnitreeR1 ? await _trendFeed.GetAsync(ct)
-                : await _trendFeed.GetGeneralAsync(ct);
-            ct.ThrowIfCancellationRequested();
-            var line = typed.Split('\n')[0].Trim();
-            RadarHeading = typed.Length > 0 ? $"Topic radar · reading on “{(line.Length > 60 ? line[..60] + "…" : line)}”{(cards.Count == 0 ? " · none found" : "")}"
-                : subject == Subject.UnitreeR1 ? "Topic radar · Unitree R1"
-                : "Topic radar · popular today";
-            Topics.Clear();
-            foreach (var card in cards)
-                Topics.Add(card);
-        }
-        catch (OperationCanceledException)
-        {
-            // Asking again (a new subject, the refresh button) cancels the request before it. Left uncaught, that
-            // cancellation leaves the command as an unhandled error and closes the app.
-        }
-    }
-
-    private int _radarRequest;
-
-    // The radar follows the topic box, once the typing pauses. Not during a job: adopting a story fills the box
-    // and starts the script, and the stories on show should stay put while it is written.
-    partial void OnTopicInputChanged(string value)
-    {
-        if (!_adopting) RefreshTopicsSoon();
-    }
-
-    private async void RefreshTopicsSoon()
-    {
-        var request = ++_radarRequest;
-        await Task.Delay(700);
-        if (request == _radarRequest && _ready && !IsWorking) RefreshTopicsCommand.Execute(null);
-    }
-
-    /// <summary>Takes a card as the episode's one topic and starts writing.</summary>
-    [RelayCommand]
-    private async Task AdoptTopicAsync(TopicCard card)
-    {
-        // Running a command directly skips its own "can this run now" check, so it is asked here: without it a
-        // second click, or a click during a render, would start (and pay for) a second script.
-        if (IsWorking) return;
-        _adopting = true; // the box is about to be filled with this story; that is not the user asking for others
-        TopicInput = card.Summary.Length > 0 ? $"{card.Title}\n\n{card.Summary}" : card.Title;
-        _radarRequest++;
-        _adopting = false;
-        if (CreateEpisodeCommand.CanExecute(null))
-            await CreateEpisodeCommand.ExecuteAsync(null);
-    }
-
-    private bool _adopting;
 
     // ---- Episode ----
 
