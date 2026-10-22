@@ -142,9 +142,19 @@ public sealed class AzureScriptWriterTests
     {
         _replies.Enqueue(EpisodeJson(15));
 
-        await Writer.WriteEpisodeAsync(Lesson.Of("x"), [], EpisodeLength.Standard, Ct);
+        var episode = await Writer.WriteEpisodeAsync(Lesson.Of("x"), [], EpisodeLength.Standard, Ct);
 
-        await Verify(_calls[0].System + "\n\n--- schema ---\n" + _calls[0].Schema);
+        // Teasers are suggested by the fast model from the finished script, which reaches it fenced, numbered and timed.
+        _replies.Enqueue("""{ "teasers": [ { "hook": "It fell. Then it climbed.", "moments": [ { "clip": 2, "start": 0.5, "length": 10 } ] } ] }""");
+        var lengths = episode.Clips.ToDictionary(c => c.Id, _ => TimeSpan.FromSeconds(12));
+        var teasers = await Writer.SuggestTeasersAsync(episode, lengths, Ct);
+
+        Assert.Equal(Settings.FastChatDeployment, _calls[1].Deployment);
+        Assert.Equal(new TeaserMoment(episode.Clips[1].Id, TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(10)), teasers[0].Moments[0]);
+        Assert.Equal(Teasers.MaxTeasers, teasers.Count); // the rules fill in for suggestions the model did not make
+        Assert.StartsWith("<existing what=\"the finished script\">\nClip 1 (", _calls[1].User);
+        Assert.Contains($"\nClip 2 ({episode.Clips[1].Beat}, 12.0 s): {episode.Clips[1].Title}\n", _calls[1].User);
+        await Verify(_calls[0].System + "\n\n--- schema ---\n" + _calls[0].Schema + "\n\n--- teasers ---\n" + _calls[1].System + "\n\n--- schema ---\n" + _calls[1].Schema);
     }
 
     [Fact]

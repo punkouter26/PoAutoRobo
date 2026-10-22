@@ -292,6 +292,23 @@ internal static class ScriptSchemas
         { "type": "object", "properties": { "dialogue": { "type": "string" } }, "required": ["dialogue"], "additionalProperties": false }
         """;
 
+    public const string TeasersSystem = $"""
+        You cut teasers for other video sites from a finished episode of a series about teaching a robot new skills.
+        Each teaser is ten seconds long, upright, and makes someone want to watch the whole episode. The clips are
+        numbered and timed. Give three teasers, each different:
+        - hook: a line of at most eight words shown over the whole teaser. Plain and specific, no hashtags.
+        - moments: one to three stretches of the episode, in the order they play, adding up to ten seconds: each with
+          its clip number, where in that clip it starts (seconds from the clip's start) and how long it runs.
+        Prefer the owner's own films of the robot, the moment something fails or works, and the result. Use only
+        what the script says happens.
+
+        {Fence}
+        """;
+
+    public const string Teasers = """
+        { "type": "object", "properties": { "teasers": { "type": "array", "items": { "type": "object", "properties": { "hook": { "type": "string" }, "moments": { "type": "array", "items": { "type": "object", "properties": { "clip": { "type": "integer" }, "start": { "type": "number" }, "length": { "type": "number" } }, "required": ["clip", "start", "length"], "additionalProperties": false } } }, "required": ["hook", "moments"], "additionalProperties": false } } }, "required": ["teasers"], "additionalProperties": false }
+        """;
+
     public const string PublishSystem = $"""
         You write the upload details for an educational video from its script. Give:
         - titles: three alternative video titles, each under 70 characters.

@@ -77,6 +77,9 @@ public sealed class MockScriptWriter : IScriptWriter
     public Task<bool> CoreChangedAsync(string oldDialogue, string newDialogue, CancellationToken ct) =>
         Task.FromResult(Durations.SharedWords(oldDialogue, newDialogue) < 0.5);
 
+    public Task<IReadOnlyList<Teaser>> SuggestTeasersAsync(Episode episode, IReadOnlyDictionary<Guid, TimeSpan> lengths, CancellationToken ct) =>
+        Task.FromResult(Teasers.ByRule(episode, lengths));
+
     public Task<PublishNotes> WritePublishNotesAsync(Episode episode, CancellationToken ct) =>
         Task.FromResult(new PublishNotes(
             [episode.Title],

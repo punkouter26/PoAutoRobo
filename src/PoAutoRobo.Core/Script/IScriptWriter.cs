@@ -42,4 +42,11 @@ public interface IScriptWriter
 
     /// <summary>Titles, a description and tags to upload with the finished video, written from its script.</summary>
     Task<PublishNotes> WritePublishNotesAsync(Episode episode, CancellationToken ct);
+
+    /// <summary>
+    /// Three ten-second teasers for other video sites, cut from the finished episode, held to <see cref="Teasers"/>'
+    /// rules. Where too few suggestions keep to them, teasers made by the rules alone fill in.
+    /// </summary>
+    /// <param name="lengths">How long each clip runs in the finished episode.</param>
+    Task<IReadOnlyList<Teaser>> SuggestTeasersAsync(Episode episode, IReadOnlyDictionary<Guid, TimeSpan> lengths, CancellationToken ct);
 }

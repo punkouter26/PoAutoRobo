@@ -28,6 +28,9 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
     private sealed record DriftDto(bool CoreChanged);
     private sealed record RewriteDto(string Dialogue);
     private sealed record ReviewDto(List<ClipNote> Notes);
+    private sealed record MomentDto(int Clip, double Start, double Length);
+    private sealed record TeaserDto(string Hook, List<MomentDto> Moments);
+    private sealed record TeasersDto(List<TeaserDto> Teasers);
     private sealed record PlannedClipDto(string Title, string Kind, string About, string Beat = "", int Footage = 0, bool Host = false);
     private sealed record OutlineDto(string Title, List<PlannedClipDto> Clips);
 
@@ -279,6 +282,19 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
     public async Task<string> RewriteToLengthAsync(string dialogue, int targetWords, CancellationToken ct) =>
         (await Ask<RewriteDto>(settings.ChatDeployment, ScriptSchemas.RewriteSystem,
             $"Rewrite the line below to about {targetWords} words.\n" + Fenced("existing", "", dialogue), "rewrite", ScriptSchemas.Rewrite, null, ct)).Dialogue;
+
+    public async Task<IReadOnlyList<Teaser>> SuggestTeasersAsync(Episode episode, IReadOnlyDictionary<Guid, TimeSpan> lengths, CancellationToken ct)
+    {
+        // Numbered and timed, so the model can name a moment by clip and second; fenced, as a model wrote it.
+        var script = string.Join("\n\n", episode.Clips.Select((c, i) => FormattableString.Invariant(
+            $"Clip {i + 1} ({c.Beat ?? "no beat"}, {(lengths.TryGetValue(c.Id, out var length) ? length.TotalSeconds : 0):0.0} s): {c.Title}\n{(c.OwnSound ? "[the owner's film, with its own sound] " : "")}{c.Active.Dialogue}")));
+        var reply = await Ask<TeasersDto>(settings.FastChatDeployment, ScriptSchemas.TeasersSystem, Fenced("existing", " what=\"the finished script\"", script), "teasers", ScriptSchemas.Teasers, null, ct);
+        var suggested = reply.Teasers.Where(t => t is not null).Select(t => new Teaser(t.Hook, [.. t.Moments
+            .Where(m => m is not null && m.Clip >= 1 && m.Clip <= episode.Clips.Count)
+            .Select(m => new TeaserMoment(episode.Clips[m.Clip - 1].Id, TimeSpan.FromSeconds(Math.Max(0, m.Start)), TimeSpan.FromSeconds(Math.Max(0, m.Length))))]));
+        // The model's numbers are not trusted further than the rules allow; the rules' own teasers fill any gap.
+        return Teasers.Fit([.. suggested, .. Teasers.ByRule(episode, lengths)], lengths);
+    }
 
     public Task<PublishNotes> WritePublishNotesAsync(Episode episode, CancellationToken ct) =>
         Ask<PublishNotes>(settings.FastChatDeployment, ScriptSchemas.PublishSystem,
