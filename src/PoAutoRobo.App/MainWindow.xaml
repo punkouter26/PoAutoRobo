@@ -132,6 +132,10 @@
                     </AppBarButton.Flyout>
                 </AppBarButton>
                 <CommandBar.SecondaryCommands>
+                    <AppBarButton x:Name="SeriesButton" Label="Series…" Click="OnSeries"
+                                  ToolTipService.ToolTip="The channel's name, logo, sounds and mascot for every intro and outro, and the look new episodes start in." />
+                    <AppBarButton x:Name="SeriesLookItem" Label="Use the series look" Command="{x:Bind ViewModel.UseSeriesLookCommand}"
+                                  ToolTipService.ToolTip="Gives this episode the series' picture style, captions and music. Undo puts it back." />
                     <AppBarButton x:Name="HostButton" Label="Choose host…" Click="OnHostSetup" IsEnabled="{x:Bind ViewModel.PicturesAvailable, Mode=OneWay}"
                                   ToolTipService.ToolTip="Choose the cartoon robot that presents every episode. Once locked, every new picture keeps the same character." />
                     <AppBarButton x:Name="MixButton" Label="Look and visual mix…" Click="OnVisualMix" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}"

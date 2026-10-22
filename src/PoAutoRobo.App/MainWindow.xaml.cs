@@ -275,6 +275,13 @@ public sealed partial class MainWindow : WindowEx
         }
     }
 
+    private async void OnSeries(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Views.SeriesDialog(ViewModel) { XamlRoot = Content.XamlRoot };
+        dialog.Opened += (opened, _) => Ui.PopIn(opened.Content as UIElement ?? opened);
+        await dialog.ShowAsync();
+    }
+
     private async void OnHostSetup(object sender, RoutedEventArgs e)
     {
         var dialog = new Views.HostSetupDialog(ViewModel) { XamlRoot = Content.XamlRoot };

@@ -2,6 +2,13 @@ using System.Text.Json;
 
 namespace PoAutoRobo.Core.Render;
 
+/// <summary>The series brand kit and the folder holding its files, for the intro and outro.</summary>
+public sealed record Brand(SeriesKit Kit, string Folder)
+{
+    /// <summary>The channel's name as the intro and outro show it; a stand-in until one is set.</summary>
+    public string ChannelName => Kit.ChannelName.Trim() is { Length: > 0 } name ? name : "Your channel";
+}
+
 /// <summary>Turns an episode into narration files and a finished video inside the episode folder.</summary>
 public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
 {
@@ -204,7 +211,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         {
             // Every clip is encoded once, finished (captions and fades included), several at a time. The join then only
             // copies them, so the slow work is spread across the processor's cores and nothing is encoded twice.
-            File.Copy(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeuib.ttf"), Path.Combine(work, FfmpegArgs.TitleFontFile), overwrite: true);
+            CopyTitleFont(work);
             var pictures = new string[count];
             var done = new double[count];      // how far each clip has got, 0 to 1
             var inHand = new SortedSet<int>();
@@ -276,6 +283,59 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
             }
         }
     }
+
+    /// <summary>How long the series intro runs.</summary>
+    public static readonly TimeSpan IntroLength = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// A short draft of the series intro, with its sound, for the brand kit's own preview. It is made in the scratch
+    /// folder, which the app clears at launch.
+    /// </summary>
+    /// <returns>The video's path.</returns>
+    public async Task<string> PreviewIntroAsync(Brand brand, int number, CancellationToken ct)
+    {
+        var work = Files.NewScratchFolder("intro");
+        CopyTitleFont(work);
+        var sample = new Episode("Your next lesson", "", [], 0) { Number = number };
+        var (picture, sound) = await BookendAsync(true, brand, sample, Draft, work, new MediaCache(ClipCacheFolder), ct);
+        var output = Path.Combine(work, "intro-preview.mp4");
+        await ffmpeg.RunAsync(["-i", picture, "-i", sound, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-shortest", "-y", output], work, null, null, ct);
+        return output;
+    }
+
+    /// <summary>
+    /// The series intro or outro for an episode: its picture (cached like a clip's, so an unchanged kit and title cost
+    /// nothing to draw again) and its sound, the intro's sting or the outro's silence, in the render's working folder.
+    /// </summary>
+    private async Task<(string Picture, string Sound)> BookendAsync(bool intro, Brand brand, Episode episode, ExportPreset preset, string work, MediaCache cache, CancellationToken ct)
+    {
+        var (kit, length, name) = (brand.Kit, intro ? IntroLength : brand.Kit.Outro, intro ? "intro" : "outro");
+        // The words, read by name from the working folder like a title card's; a line with nothing to say is left out.
+        var lines = intro
+            ? new (string Key, string Text)[] { ("channel", brand.ChannelName), ("tagline", kit.Tagline), ("title", episode.Number > 0 ? $"#{episode.Number} · {episode.Title}" : episode.Title) }
+            : [("channel", brand.ChannelName), ("next", NextTime(episode) is { } next ? $"Next time: {next}" : "")];
+        string? File(string key) => lines.First(l => l.Key == key).Text.Trim() is { Length: > 0 } ? $"{name}_{key}.txt" : null;
+        foreach (var (key, text) in lines.Where(l => l.Text.Trim().Length > 0))
+            await System.IO.File.WriteAllTextAsync(Path.Combine(work, $"{name}_{key}.txt"), text.Trim(), ct);
+
+        var look = new BookendLook(kit.Captions.AccentColor, SeriesKit.PathOf(brand.Folder, kit.Logo), SeriesKit.PathOf(brand.Folder, kit.Mascot));
+        IReadOnlyList<string> Args(string to) => intro
+            ? FfmpegArgs.IntroVideo(look, File("channel")!, File("tagline"), File("title")!, length, preset, to)
+            : FfmpegArgs.OutroVideo(look, File("channel")!, File("next"), length, preset, to);
+        List<string> made = [string.Join('\n', Args("clip.mp4")), .. lines.Select(l => l.Text), .. new[] { look.Logo, look.Mascot }.OfType<string>().Select(Stamp)];
+        var picture = await cache.GetOrCreateAsync(made, ".mp4", scratch => ffmpeg.RunAsync(Args(scratch), work, length, null, ct));
+
+        var sound = Path.Combine(work, name + ".wav");
+        await ffmpeg.RunAsync(FfmpegArgs.FootageSound(intro ? SeriesKit.PathOf(brand.Folder, kit.Sting) : null, length, sound), work, null, null, ct);
+        return (picture, sound);
+    }
+
+    /// <summary>What the outro says comes next: the title of a "Next time" clip, when the episode has one.</summary>
+    private static string? NextTime(Episode episode) => episode.Clips.LastOrDefault(c => c.Beat == "Next time")?.Title;
+
+    // Title cards and bookends read their font from the working folder: this FFmpeg build has no font lookup by name.
+    private static void CopyTitleFont(string work) =>
+        File.Copy(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeuib.ttf"), Path.Combine(work, FfmpegArgs.TitleFontFile), overwrite: true);
 
     /// <summary>A file's identity for the clip cache: replacing or editing it makes the clip that reads it draw again.</summary>
     private static string Stamp(string path)

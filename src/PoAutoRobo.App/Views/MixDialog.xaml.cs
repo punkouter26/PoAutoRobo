@@ -6,11 +6,7 @@ namespace PoAutoRobo.App.Views;
 
 public sealed partial class MixDialog : ContentDialog
 {
-    // Each look with the words shown for it, kept together so the list cannot drift out of step with the looks there are.
-    private static readonly Choice<Look>[] Looks =
-    [
-        new("Comic book", Look.Comic), new("Photograph", Look.Photoreal), new("Flat vector", Look.FlatVector), new("Cinematic", Look.Cinematic),
-    ];
+    private static Choice<Look>[] Looks => MainViewModel.LookChoices;
 
     public MixDialog(MixPercentages current, Look look, bool hostVisible)
     {

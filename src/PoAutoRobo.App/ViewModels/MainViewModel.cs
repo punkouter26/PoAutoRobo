@@ -318,7 +318,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EpisodeTitle), nameof(HasEpisode), nameof(Runtime), nameof(Captions),
         nameof(CaptionPresetIndex), nameof(CaptionFontSize), nameof(CaptionStroke), nameof(CaptionAccent), nameof(HasMusic), nameof(MusicLabel))]
-    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(RenderShortsCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(NarrateAllCommand),
+    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(RenderShortsCommand), nameof(UseSeriesLookCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(NarrateAllCommand),
         nameof(CleanMediaCommand), nameof(ShowEpisodeFolderCommand), nameof(RenameEpisodeCommand), nameof(MakeAllCommand), nameof(ReviewScriptCommand), nameof(RemoveMusicCommand))]
     public partial Episode? Episode { get; set; }
 
