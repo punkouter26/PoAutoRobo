@@ -243,7 +243,7 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
         var request = new StringBuilder()
             .AppendLine($"Depth to write: {tier.ToString().ToLowerInvariant()}")
             .AppendLine(Visuals.Kinds.FirstOrDefault(k => k.Kind == clip.Visual.Kind) is { } kind ? $"Picture type: {kind.Key}. {kind.Brief}" : "Picture type: the user's own footage. visualPrompt: one sentence describing a picture that would suit the clip.").AppendLine()
-            // A title and its words were written by a model from a topic that may have come from a news feed, so they are fenced like the topic.
+            // A title and its words were written by a model, from repository passages anyone can edit, so they are fenced like those passages.
             .Append(Fenced("existing", " what=\"the clip's title\"", clip.Title))
             .Append(Fenced("existing", $" depth=\"{clip.ActiveTier.ToString().ToLowerInvariant()}\"", clip.Active.Dialogue));
         var script = await Ask<TierDto>(settings.FastChatDeployment, ScriptSchemas.TierSystem(subject), request.ToString(), "tier", ScriptSchemas.Tier, null, ct);

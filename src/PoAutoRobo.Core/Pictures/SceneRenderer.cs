@@ -32,7 +32,7 @@ public sealed class SceneRenderer(string browserPath, FfmpegRunner ffmpeg)
             .Select(root => Path.Combine(Environment.GetFolderPath(root), "Microsoft", "Edge", "Application", "msedge.exe"))
             .FirstOrDefault(File.Exists);
 
-    // The scene is written by a model from a topic that may have come from a news feed, so it is not trusted. The
+    // The scene is written by a model, from repository passages anyone can edit, so it is not trusted. The
     // page's policy lets it run its own script and nothing else: no network, no files, no other pages.
     public static string Page(Scene scene) => $$"""
         <!doctype html>

@@ -265,7 +265,7 @@ public sealed class AzureScriptWriterTests
         Assert.Equal((Settings.FastChatDeployment, "review"), (_calls[0].Deployment, _calls[0].SchemaName));
         Assert.StartsWith("<existing>\nClip 1: ", _calls[0].User);
 
-        // Words a model wrote from a news feed reach the other prompts as material too, and each prompt says so.
+        // Words a model wrote reach the other prompts as material too, and each prompt says so.
         _replies.Enqueue("""{ "coreChanged": false }""");
         _replies.Enqueue("""{ "dialogue": "Shorter." }""");
         await Writer.CoreChangedAsync("First.", "Second.", Ct);
