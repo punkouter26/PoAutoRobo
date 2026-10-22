@@ -1,0 +1,25 @@
+﻿-i
+fall.mp4
+-map
+0:a:0
+-af
+aformat=sample_rates=48000:channel_layouts=stereo,apad
+-vn
+-t
+6.000
+-c:a
+pcm_s16le
+-y
+own.wav
+--- a film with no sound ---
+-f
+lavfi
+-i
+anullsrc=r=48000:cl=stereo
+-vn
+-t
+6.000
+-c:a
+pcm_s16le
+-y
+own.wav

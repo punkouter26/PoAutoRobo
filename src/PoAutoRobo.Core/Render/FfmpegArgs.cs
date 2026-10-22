@@ -152,6 +152,18 @@ public static class FfmpegArgs
         "-r", preset.Fps.ToString(CultureInfo.InvariantCulture), "-video_track_timescale", "90000",
     ];
 
+    /// <summary>
+    /// The sound of the owner's film as a track exactly <paramref name="length"/> long, in the narration's form, so it
+    /// takes a narration's place in the timeline. A film with no sound track (null) gives silence of that length.
+    /// </summary>
+    public static IReadOnlyList<string> FootageSound(string? video, TimeSpan length, string output) =>
+    [
+        .. video is null
+            ? new[] { "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo" }
+            : ["-i", video, "-map", "0:a:0", "-af", "aformat=sample_rates=48000:channel_layouts=stereo,apad"], // padded: a film's sound can stop before its picture
+        "-vn", "-t", Seconds(length), "-c:a", "pcm_s16le", "-y", output,
+    ];
+
     /// <summary>The text of the list file <see cref="Join"/> reads: one finished clip per line, in running order.</summary>
     public static string ClipList(IEnumerable<string> clips) =>
         string.Concat(clips.Select(path => $"file '{path.Replace("'", @"'\''")}'\n"));

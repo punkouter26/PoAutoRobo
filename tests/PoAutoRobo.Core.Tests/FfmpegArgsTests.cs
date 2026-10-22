@@ -30,6 +30,19 @@ public sealed class FfmpegArgsTests : IDisposable
     }
 
     [Fact]
+    public Task Footage_that_keeps_its_own_sound_gives_a_track_as_long_as_the_film_with_its_typed_words_spread_across_it()
+    {
+        var words = WordTiming.Spread("It falls over", S(6));
+        Assert.Equal(["It", "falls", "over"], words.Select(w => w.Text));
+        Assert.Equal(0, words[0].Start.TotalSeconds);
+        Assert.Equal(6, (words[^1].Start + words[^1].Duration).TotalSeconds, precision: 6);
+        Assert.Empty(WordTiming.Spread("", S(6))); // nothing typed: no captions
+
+        // A film with no sound track still gives a track of its length, so the timeline and the joins hold.
+        return Verify(Lines(FfmpegArgs.FootageSound("fall.mp4", S(6), "own.wav")) + "\n--- a film with no sound ---\n" + Lines(FfmpegArgs.FootageSound(null, S(6), "own.wav")));
+    }
+
+    [Fact]
     public Task Video_clip_is_fitted_and_its_last_frame_held() =>
         Verify(Lines(FfmpegArgs.ClipVideo(ClipSource.Video, "lab.mp4", S(12), ExportPreset.Uhd60, "clip_01.mp4")));
 

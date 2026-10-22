@@ -43,7 +43,9 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
                     // A recording cut short (a crash, a sync conflict) is recorded again instead of failing every time.
                 }
 
-            var narration = await narrator.SynthesizeAsync(text, audio, clip.NarrationRate, ct);
+            var narration = OwnSound(clip) is { } film
+                ? await TakeSoundAsync(film, text, audio, ct)
+                : await narrator.SynthesizeAsync(text, audio, clip.NarrationRate, ct);
             await File.WriteAllTextAsync(words, JsonSerializer.Serialize(narration.Words), ct);
             return narration;
         }
@@ -55,9 +57,29 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
 
     private readonly SemaphoreSlim _narrationGate = new(1, 1);
 
+    /// <summary>The film whose own sound the clip plays instead of narration; null for a narrated clip.</summary>
+    private static string? OwnSound(Clip clip) =>
+        clip is { OwnSound: true, Visual.UserVideoPath: { } film } && File.Exists(film) ? film : null;
+
+    // The film's sound, cut or padded to the film's length, stands in for the narration: the timeline, the joins and
+    // the captions then treat the clip like any other. Words typed for it are spread across it as captions. Free: no
+    // service is asked for anything.
+    private async Task<Narration> TakeSoundAsync(string film, string text, string audio, CancellationToken ct)
+    {
+        var length = await ffmpeg.ProbeDurationAsync(film, ct);
+        var hasSound = (await ffmpeg.ProbeAsync(["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", film], ct)).Trim().Length > 0;
+        Files.EnsureFolderFor(audio);
+        await ffmpeg.RunAsync(FfmpegArgs.FootageSound(hasSound ? film : null, length, audio), Path.GetDirectoryName(audio)!, null, null, ct);
+        return new Narration(audio, WavInfo.Duration(audio), WordTiming.Spread(text, length));
+    }
+
     private string AudioPath(Clip clip, string text, string folder)
     {
-        var key = Files.TextHash(FormattableString.Invariant($"{narrator.GetType().Name}|{clip.NarrationRate:0.###}|{text}"))[..16];
+        // Own sound is keyed by the film as it is on disk, so a replaced film is taken again.
+        var source = OwnSound(clip) is { } film
+            ? FormattableString.Invariant($"own|{film}|{new FileInfo(film).Length}|{File.GetLastWriteTimeUtc(film).Ticks}")
+            : FormattableString.Invariant($"{narrator.GetType().Name}|{clip.NarrationRate:0.###}");
+        var key = Files.TextHash($"{source}|{text}")[..16];
         return Path.Combine(folder, "audio", $"{clip.Id:N}-{key}.wav");
     }
 

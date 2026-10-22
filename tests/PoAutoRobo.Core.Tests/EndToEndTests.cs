@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using NSubstitute;
 
 namespace PoAutoRobo.Core.Tests;
 
@@ -100,6 +101,38 @@ public sealed class EndToEndTests : IDisposable
         Assert.StartsWith("0:00 ", File.ReadAllText(name + ".chapters.txt"));
         Assert.StartsWith("1\n00:00:00,000 --> ", File.ReadAllText(name + ".srt"));
         Assert.True(File.Exists(name + ".thumbnail.png"));
+    }
+
+    [FfmpegFact]
+    public async Task A_film_that_keeps_its_own_sound_is_heard_in_the_export_and_no_voice_is_recorded_for_it()
+    {
+        // A film whose sound stops a second before its picture, and one with no sound track at all.
+        var (falls, silent) = (Path.Combine(_folder, "falls.mp4"), Path.Combine(_folder, "silent.mp4"));
+        await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=320x240:r=25:d=3", "-f", "lavfi", "-i", "sine=f=440:d=2", "-pix_fmt", "yuv420p", "-c:a", "aac", falls], _folder, null, null, default);
+        await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=320x240:r=25:d=2", "-pix_fmt", "yuv420p", silent], _folder, null, null, default);
+        var narrator = TestExtensions.SilentNarrator();
+        var builder = new EpisodeBuilder(narrator, Ffmpeg);
+        var written = await new MockScriptWriter().WriteEpisodeAsync(Lesson.Of("Climbing stairs"), [], new EpisodeLength(2, 2), default);
+        var episode = written with
+        {
+            Clips =
+            [
+                EpisodeEditor.WithDialogue(BeatPlan.WithFootage(written.Clips[0], new FootageNote(falls, "falls", OwnSound: true, TimeSpan.FromSeconds(3))), "It falls over"),
+                BeatPlan.WithFootage(written.Clips[1], new FootageNote(silent, "", OwnSound: true, TimeSpan.FromSeconds(2))),
+            ],
+        };
+
+        var sound = await builder.NarrateAsync(episode, _folder, default);
+
+        await narrator.DidNotReceiveWithAnyArgs().SynthesizeAsync(default!, default!, default, default); // nothing is spoken, or paid for
+        Assert.Equal([3.0, 2.0], sound.Select(s => Math.Round(s.Duration.TotalSeconds, 1))); // each as long as its film
+        Assert.Equal(["It", "falls", "over"], sound[0].Words.Select(w => w.Text)); // what was typed becomes its captions
+        Assert.Empty(sound[1].Words);
+
+        var output = await builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), null, default);
+        // The film's own tone is heard: silence would measure about -70. (Five seconds of tone and gaps is too short
+        // for the leveller to land exactly on -16, so only "heard" is asked here; the long export test checks the level.)
+        Assert.InRange(await Ffmpeg.MeasureLoudnessAsync(output, default), -25.0, -10.0);
     }
 
     /// <summary>Checkpoint evidence: the whole 16-clip mock episode at 1080p30. Takes minutes, so it is opt-in.</summary>
