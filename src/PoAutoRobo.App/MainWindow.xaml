@@ -251,7 +251,70 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition x:Name="ExportColumn" Width="{StaticResource ExportColumn}" />
                 </Grid.ColumnDefinitions>
-                <views:TimelineView ViewModel="{x:Bind ViewModel}" />
+                <!-- The preview above; the teasers, ten-second upright cuts for other sites, in a row of cards below it -->
+                <Grid RowSpacing="{StaticResource Gap}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <views:TimelineView ViewModel="{x:Bind ViewModel}" />
+                    <StackPanel Grid.Row="1" Spacing="{StaticResource GapSmall}">
+                        <Grid ColumnSpacing="{StaticResource GapSmall}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Teasers" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                            <Button x:Name="SuggestTeasersButton" Grid.Column="1" Content="Suggest teasers" Command="{x:Bind ViewModel.SuggestTeasersCommand}"
+                                    ToolTipService.ToolTip="Three ten-second upright cuts of this episode for other video sites, each a hook over one to three moments. One quick request to the script service." />
+                            <Button x:Name="RenderTeasersButton" Grid.Column="2" Content="{x:Bind ViewModel.RenderTeasersLabel, Mode=OneWay}" Style="{ThemeResource AccentButtonStyle}"
+                                    Command="{x:Bind ViewModel.RenderTeasersCommand}" Visibility="{x:Bind ViewModel.HasTeasers, Mode=OneWay}"
+                                    ToolTipService.ToolTip="Builds each kept teaser as a 1080 by 1920 video in the episode's export folder, from the clips already made. Nothing new is paid for." />
+                        </Grid>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled"
+                                      Visibility="{x:Bind ViewModel.HasTeasers, Mode=OneWay}">
+                            <ItemsControl x:Name="TeaserCardList" ItemsSource="{x:Bind ViewModel.TeaserCards}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource Gap}" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:TeaserViewModel">
+                                        <Border Width="260" CornerRadius="10" Padding="10" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                            <StackPanel Spacing="6">
+                                                <!-- Phone-shaped: the opening clip's picture cropped to the upright frame -->
+                                                <Grid Height="120" CornerRadius="6" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
+                                                    <Image Source="{x:Bind views:ClipCard.ToImage(Poster), Mode=OneWay}" Stretch="UniformToFill" AutomationProperties.AccessibilityView="Raw" />
+                                                </Grid>
+                                                <TextBox Text="{x:Bind Hook, Mode=TwoWay}" MaxLength="80" TextWrapping="Wrap" AutomationProperties.Name="Hook"
+                                                         ToolTipService.ToolTip="Shown across the top of the teaser. Eight words at most; any more are left off." />
+                                                <ItemsControl ItemsSource="{x:Bind Moments}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:MomentViewModel">
+                                                            <Grid ColumnSpacing="4" Margin="0,0,0,4">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="72" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <ComboBox ItemsSource="{x:Bind ClipChoices}" SelectedIndex="{x:Bind ClipIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="Clip" />
+                                                                <NumberBox Grid.Column="1" Value="{x:Bind Start, Mode=TwoWay}" Minimum="0" SmallChange="0.5" AutomationProperties.Name="Starts at, in seconds" ToolTipService.ToolTip="Where in the clip the moment starts, in seconds." />
+                                                                <TextBlock Grid.Column="2" Text="{x:Bind LengthText}" Style="{StaticResource QuietText}" VerticalAlignment="Center" />
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <CheckBox Content="Keep this teaser" IsChecked="{x:Bind Keep, Mode=TwoWay}" ToolTipService.ToolTip="Render this teaser with the others" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Grid>
                 <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="10">
                         <TextBlock Text="Captions" Style="{ThemeResource BodyStrongTextBlockStyle}" />

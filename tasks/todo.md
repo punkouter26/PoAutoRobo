@@ -32,7 +32,7 @@ Unit tests stay at or under 100. The count after each task is shown where it cha
 - [x] **T16 `Teasers.Fit` and `Teasers.ByRule`.** Check: every kept teaser is 10 s ±0.5 inside real clip lengths, hook ≤ 8 words; **99**.
 - [x] **T17 `SuggestTeasersAsync` (fast model; the mock uses the rules).** Check: teaser prompt added to the prompt snapshot; token use logged.
 - [x] **T18 Teaser render replaces per-clip shorts.** Check: argument snapshot (replaces the shorts test); integration: 3 × 1080×1920, 30 fps, h264/aac, 10 s ±0.5, no paid requests.
-- [ ] **T19 Teaser phone cards on the Export step.** *(concept 8)* Check: in the app on stand-ins: suggest, edit, drop, render.
+- [x] **T19 Teaser phone cards on the Export step.** *(concept 8)* Check: in the app on stand-ins: suggest, edit, drop, render.
 
 ## G. Finish
 - [ ] **T20 Warning outside 3–5 minutes; titles start "<channel> #N".** Check: publish prompt snapshot diff read.
