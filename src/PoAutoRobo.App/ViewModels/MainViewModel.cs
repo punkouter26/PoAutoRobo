@@ -106,12 +106,9 @@ public partial class MainViewModel : ObservableObject
     // The lists behind the drop-downs. Each entry carries its own label, so adding a choice is one line here.
     public Choice<EpisodeLength>[] LengthChoices { get; } =
     [
-        new("Full (15–20)", EpisodeLength.Full),
-        new("Short (5)", EpisodeLength.Short),
-        new("Two clips", EpisodeLength.TwoClips),
-        new("Quick test (1)", EpisodeLength.QuickTest),
+        new("Standard (3–5 minutes)", EpisodeLength.Standard),
         // New lengths go on the end: the one last used is remembered by its place in this list.
-        new("Sampler (9)", new EpisodeLength(9, 9)),
+        new("Quick test (1)", EpisodeLength.QuickTest),
     ];
 
     public Choice<ExportPreset>[] ExportChoices { get; } =
@@ -415,7 +412,7 @@ public partial class MainViewModel : ObservableObject
             });
             // The script chooses each clip's picture type; whatever cannot be made on this computer becomes a still.
             Func<VisualKind, bool> canMake = CurrentVisuals is { } visuals ? visuals.CanMake : _ => false;
-            var episode = VisualMix.Settle(await _scriptWriter.WriteEpisodeAsync(topic, grounding, length, ct, written), canMake);
+            var episode = VisualMix.Settle(await _scriptWriter.WriteEpisodeAsync(Lesson.Of(topic), grounding, length, ct, written), canMake);
             var folder = ProjectStore.NewFolder(AppPaths.Episodes, episode.Title); // never on top of an earlier episode
             ProjectStore.Save(episode, folder);
             ProjectStore.SaveSnippets(grounding, folder);

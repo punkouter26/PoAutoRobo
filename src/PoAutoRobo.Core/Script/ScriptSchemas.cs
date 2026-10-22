@@ -4,11 +4,25 @@ namespace PoAutoRobo.Core.Script;
 /// <summary>The prompts and reply shapes sent to the model. Kept apart from the plumbing so they can be read and tuned.</summary>
 internal static class ScriptSchemas
 {
-    // Who and what every script is about: the Unitree R1, voiced by a cartoon version of itself.
-    private const string EpisodeAbout = "about the Unitree R1 EDU humanoid robot";
-    private const string ClipAbout = " about the Unitree R1 EDU humanoid robot";
+    // Who and what every script is about: its owner teaching the Unitree R1 a skill, voiced by a cartoon version of the robot.
+    private const string EpisodeAbout = "about teaching the Unitree R1 EDU humanoid robot a new skill";
+    private const string ClipAbout = " about teaching the Unitree R1 EDU humanoid robot a new skill";
     private const string Narrator = "The narrator is a confident, energetic cartoon version of the R1 itself, speaking in the first person to the viewer.";
-    private const string Structure = "Each clip covers one self-contained subtopic and still makes sense if the clips are reordered.";
+
+    // How every episode of the series is put together: the owner's lesson, told in fixed beats around their own footage.
+    private const string Structure = """
+        The topic is one lesson: what the robot's owner taught it, and what went wrong on the way. Tell it in the beats
+        the request names, in that order: give every clip its "beat", and every beat one to three clips.
+
+        The owner filmed some of it, and the request lists that footage, numbered from 1, with a note on each. Give each
+        film to exactly one clip, in the beat its note fits best, by setting that clip's "footage" to its number; every
+        other clip has footage 0. A clip with footage shows the real robot, so its dialogue is narration over what the
+        note describes, as long as the film runs. Footage that keeps its own sound is not narrated over: leave that
+        clip's dialogue empty. The clips without footage explain the ideas around it with pictures.
+
+        Set "host" to true where the cartoon R1 presenting an idea helps, in no more than a third of the clips, and
+        never in a clip with footage.
+        """;
 
     private const string Depths = """
         - a: mainstream and accessible. Everyday analogies and intuitive physical explanations. No jargon.
@@ -59,8 +73,8 @@ internal static class ScriptSchemas
 
         {Scope}
 
-        Break the topic into the number of clips the request asks for. {Structure}
-        Give every clip a short title of two to five words.
+        Break the topic into the number of clips the request asks for. Give every clip a short title of two to five words.
+        {Structure}
 
         Write every clip at depth b of these three depths:
         {Depths}
@@ -88,9 +102,12 @@ internal static class ScriptSchemas
 
         {Scope}
 
-        Break the topic into the number of clips the request asks for. {Structure}
+        Break the topic into the number of clips the request asks for.
+        {Structure}
+
         Give the video a title, and for every clip:
         - title: two to five words.
+        - beat, footage and host, as above.
         - kind: the picture type that shows its idea best. Vary them. The types:
         {KindList(kinds)}
         - about: one sentence saying what the clip covers.
@@ -100,9 +117,17 @@ internal static class ScriptSchemas
         {Fence}
         """;
 
-    public static string Outline(IReadOnlyList<KindInfo> kinds) => $$"""
-        { "type": "object", "properties": { "title": { "type": "string" }, "clips": { "type": "array", "items": { "type": "object", "properties": { "title": { "type": "string" }, "kind": { "type": "string", "enum": [{{string.Join(", ", kinds.Select(k => $"\"{k.Key}\""))}}] }, "about": { "type": "string" } }, "required": ["title", "kind", "about"], "additionalProperties": false } } }, "required": ["title", "clips"], "additionalProperties": false }
+    public static string Outline(IReadOnlyList<KindInfo> kinds, IReadOnlyList<Beat> beats) => $$"""
+        { "type": "object", "properties": { "title": { "type": "string" }, "clips": { "type": "array", "items": { "type": "object", "properties": { "title": { "type": "string" }, {{PlanFields(beats)}}, "kind": { "type": "string", "enum": [{{Keys(kinds)}}] }, "about": { "type": "string" } }, "required": ["title", "beat", "footage", "host", "kind", "about"], "additionalProperties": false } } }, "required": ["title", "clips"], "additionalProperties": false }
         """;
+
+    // Where a clip sits in the episode: which beat, which of the owner's films it shows, and whether the host presents it.
+    private static string PlanFields(IReadOnlyList<Beat> beats) =>
+        $$"""
+        "beat": { "type": "string", "enum": [{{string.Join(", ", beats.Select(b => $"\"{b.Name}\""))}}] }, "footage": { "type": "integer" }, "host": { "type": "boolean" }
+        """;
+
+    private static string Keys(IEnumerable<KindInfo> kinds) => string.Join(", ", kinds.Select(k => $"\"{k.Key}\""));
 
     /// <summary>Writes one clip of a video that has been planned, at depth b.</summary>
     public const string ClipSystem = $"""
@@ -167,8 +192,9 @@ internal static class ScriptSchemas
         { "type": "object", "properties": { "dialogue": { "type": "string" }, "visualPrompt": { "type": "string" }, "pose": { "type": "string" } }, "required": ["dialogue", "visualPrompt", "pose"], "additionalProperties": false }
         """;
 
-    // The kind comes before the words, so the picture type is settled before the visual prompt is written for it.
-    public static string Episode(IReadOnlyList<KindInfo> kinds) => $$"""
+    // The beat and footage come first, so where a clip sits is settled before its words; and the kind before the
+    // words, so the picture type is settled before the visual prompt is written for it.
+    public static string Episode(IReadOnlyList<KindInfo> kinds, IReadOnlyList<Beat> beats) => $$"""
         {
           "type": "object",
           "properties": {
@@ -179,10 +205,11 @@ internal static class ScriptSchemas
                 "type": "object",
                 "properties": {
                   "title": { "type": "string" },
-                  "kind": { "type": "string", "enum": [{{string.Join(", ", kinds.Select(k => $"\"{k.Key}\""))}}] },
+                  {{PlanFields(beats)}},
+                  "kind": { "type": "string", "enum": [{{Keys(kinds)}}] },
                   "b": { "$ref": "#/$defs/tier" }
                 },
-                "required": ["title", "kind", "b"],
+                "required": ["title", "beat", "footage", "host", "kind", "b"],
                 "additionalProperties": false
               }
             }

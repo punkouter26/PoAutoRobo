@@ -29,13 +29,30 @@ public sealed class MockScriptWriter : IScriptWriter
     public Task<TierScript> WriteTierAsync(string topic, Clip clip, Tier tier, CancellationToken ct) =>
         Task.FromResult(Script(topic, clip.Title, clip.Active.Pose, tier));
 
-    public Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<IReadOnlyList<string>>? clipsWritten = null)
+    /// <summary>
+    /// Eight clips (within the length asked) spread over the beats in order, with the host in the beats that have no
+    /// footage, and the owner's files in the footage beats in the order they were given.
+    /// </summary>
+    public Task<Episode> WriteEpisodeAsync(Lesson lesson, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<IReadOnlyList<string>>? clipsWritten = null)
     {
-        var clips = Outline.Take(Math.Clamp(Outline.Length, length.MinClips, length.MaxClips)).Select(o => new Clip(
-            Guid.NewGuid(), o.Title, Tier.B,
-            Enum.GetValues<Tier>().ToDictionary(t => t, t => Script(topic, o.Title, o.Pose, t)),
-            new VisualSpec(VisualKind.TitleCard), HostVisible: true)).ToList();
-        return Task.FromResult(new Episode(topic, topic, clips, MixSeed: Random.Shared.Next()));
+        var topic = lesson.Topic;
+        var beats = BeatPlan.Beats(lesson.Structure);
+        var count = Math.Clamp(8, length.MinClips, length.MaxClips);
+        var clips = Enumerable.Range(0, count).Select(i =>
+        {
+            var (title, pose) = Outline[i % Outline.Length];
+            var beat = beats[i * beats.Count / count];
+            return new Clip(
+                Guid.NewGuid(), title, Tier.B,
+                Enum.GetValues<Tier>().ToDictionary(t => t, t => Script(topic, title, pose, t)),
+                new VisualSpec(VisualKind.TitleCard), HostVisible: !beat.ForFootage)
+            { Beat = beat.Name };
+        }).ToList();
+        var forFootage = clips.Where(c => beats.Single(b => b.Name == c.Beat).ForFootage).ToList();
+        foreach (var (note, clip) in lesson.Footage.Zip(forFootage))
+            clips[clips.IndexOf(clip)] = BeatPlan.WithFootage(clip, note);
+        var episode = new Episode(lesson.Taught.Trim(), topic, clips, MixSeed: Random.Shared.Next()) { Structure = lesson.Structure };
+        return Task.FromResult(BeatPlan.Repair(episode, lesson.Footage, length.MaxClips));
     }
 
     private static TierScript Script(string topic, string title, string pose, Tier tier)

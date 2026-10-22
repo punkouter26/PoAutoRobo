@@ -76,7 +76,7 @@ public sealed class VisualKindsTests : IDisposable
         })
         { CanMake = kind => kind != VisualKind.AiVideo };
 
-        var episode = await writer.WriteEpisodeAsync("Teaching the R1 to wave", [], EpisodeLength.QuickTest, Ct);
+        var episode = await writer.WriteEpisodeAsync(Lesson.Of("Teaching the R1 to wave"), [], EpisodeLength.QuickTest, Ct);
 
         Assert.Equal(VisualKind.Chart, episode.Clips[0].Visual.Kind);
         Assert.Contains("\"chart\"", calls[0].Schema);
@@ -250,7 +250,7 @@ public sealed class VisualKindsTests : IDisposable
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=800x600", "-frames:v", "1", setting], _folder, null, null, default);
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "color=c=red@0.0:s=600x400,format=rgba", "-frames:v", "1", subject], _folder, null, null, default);
         await Ffmpeg.RunAsync(["-y", "-f", "lavfi", "-i", "testsrc=s=320x240:r=25:d=0.4", "-pix_fmt", "yuv420p", shot], _folder, null, null, default);
-        var mock = await new MockScriptWriter().WriteEpisodeAsync("Layers", [], new EpisodeLength(3, 3), default);
+        var mock = await new MockScriptWriter().WriteEpisodeAsync(Lesson.Of("Layers"), [], new EpisodeLength(3, 3), default);
         Clip Short(int i, VisualSpec visual) => mock.Clips[i] with
         {
             Visual = visual,

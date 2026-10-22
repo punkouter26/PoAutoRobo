@@ -17,12 +17,12 @@ public sealed class ScriptRulesTests
     public async Task Mock_episode_has_the_length_asked_for_with_three_tiers_all_in_range_and_tier_b_active()
     {
         await Mock_episode_has_the_length_asked_for_with_three_tiers_all_in_range_and_tier_b_activeCase(1, 1, 1); // quick test: one clip, about half a minute
-        await Mock_episode_has_the_length_asked_for_with_three_tiers_all_in_range_and_tier_b_activeCase(15, 20, 16); // full
+        await Mock_episode_has_the_length_asked_for_with_three_tiers_all_in_range_and_tier_b_activeCase(6, 10, 8); // standard
     }
 
     private async Task Mock_episode_has_the_length_asked_for_with_three_tiers_all_in_range_and_tier_b_activeCase(int min, int max, int expected)
     {
-        var episode = await new MockScriptWriter().WriteEpisodeAsync("Balancing the R1", [], new EpisodeLength(min, max), Ct);
+        var episode = await new MockScriptWriter().WriteEpisodeAsync(Lesson.Of("Balancing the R1"), [], new EpisodeLength(min, max), Ct);
 
         Assert.Equal(expected, episode.Clips.Count);
         Assert.Equal(expected, episode.Clips.Select(c => c.Id).Distinct().Count());
@@ -33,6 +33,57 @@ public sealed class ScriptRulesTests
             Assert.Equal(3, c.Scripts.Values.Select(s => s.VisualPrompt).Distinct().Count());
             Assert.All(c.Scripts.Values, s => Assert.Null(Durations.Warning(s.Dialogue)));
         });
+    }
+
+    [Fact]
+    public async Task Every_footage_file_lands_in_exactly_one_clip_in_a_beat_for_footage_and_the_beats_keep_their_order()
+    {
+        FootageNote[] footage =
+        [
+            new(@"C:\clips\fall.mp4", "first try, falls over", OwnSound: true, TimeSpan.FromSeconds(12)),
+            new(@"C:\clips\wobble.mp4", "second try, wobbles", OwnSound: false, TimeSpan.FromSeconds(9)),
+            new(@"C:\clips\stairs.mp4", "walks three stairs", OwnSound: true, TimeSpan.FromSeconds(20)),
+        ];
+        var lesson = new Lesson("Walking up stairs", "It kept falling backwards", BeatStructure.Story, footage);
+
+        var written = await new MockScriptWriter().WriteEpisodeAsync(lesson, [], EpisodeLength.Standard, Ct);
+        PlacedOnce(written);
+        Assert.Equal((BeatStructure.Story, "Walking up stairs\n\nWhat went wrong: It kept falling backwards"), (written.Structure, written.Topic));
+        var fall = written.Clips.Single(c => c.Visual.UserVideoPath == footage[0].Path);
+        Assert.Equal((true, VisualKind.UserVideo, true, "", false), (fall.OwnSound, fall.Visual.Kind, fall.Visual.KindLocked, fall.Active.Dialogue, fall.HostVisible));
+        Assert.False(written.Clips.Single(c => c.Visual.UserVideoPath == footage[1].Path).OwnSound); // narrated over
+
+        // A model that strays: an unknown beat, beats out of order, one file used twice and one forgotten, too many clips.
+        var strayed = written with
+        {
+            Clips =
+            [
+                Named(written.Clips[0], "Result") with { Visual = new VisualSpec(VisualKind.UserVideo, KindLocked: true, UserVideoPath: footage[0].Path) },
+                Named(written.Clips[1], "Goal") with { Visual = new VisualSpec(VisualKind.UserVideo, KindLocked: true, UserVideoPath: footage[0].Path) },
+                Named(written.Clips[2], "Montage"),
+                .. Enumerable.Range(0, 9).Select(i => Named(EpisodeEditor.NewClip(), "Recap")),
+            ],
+        };
+        var repaired = BeatPlan.Repair(strayed, footage, maxClips: 10);
+        PlacedOnce(repaired);
+        Assert.Equal(10, repaired.Clips.Count); // trimmed, never by dropping the owner's footage
+        Assert.Equal("Goal", repaired.Clips[0].Beat); // order follows the structure; "Montage" stays with the beat before it
+        Assert.Equal(footage[0].Path, repaired.Clips.Single(c => c.Beat == "Result" && c.Visual.UserVideoPath == footage[0].Path).Visual.UserVideoPath);
+
+        void PlacedOnce(Episode episode)
+        {
+            var names = BeatPlan.Beats(episode.Structure).Select(b => b.Name).ToList();
+            Assert.All(episode.Clips, c => Assert.Contains(c.Beat, names));
+            Assert.Equal(episode.Clips.Select(c => names.IndexOf(c.Beat!)).Order(), episode.Clips.Select(c => names.IndexOf(c.Beat!)));
+            foreach (var note in footage)
+            {
+                var clip = Assert.Single(episode.Clips, c => c.Visual.UserVideoPath == note.Path);
+                Assert.True(BeatPlan.Beats(episode.Structure).Single(b => b.Name == clip.Beat).ForFootage, clip.Beat);
+                Assert.Equal(note.OwnSound, clip.OwnSound);
+            }
+        }
+
+        static Clip Named(Clip clip, string beat) => clip with { Beat = beat };
     }
 
     [Fact]

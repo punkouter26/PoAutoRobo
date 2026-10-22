@@ -22,12 +22,13 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
     };
 
     private sealed record TierDto(string Dialogue, string VisualPrompt, string Pose);
-    private sealed record ClipDto(string Title, TierDto B, string? Kind = null);
+    // Footage is the number of the owner's file the clip shows, from 1; 0 for none.
+    private sealed record ClipDto(string Title, TierDto B, string? Kind = null, string Beat = "", int Footage = 0, bool Host = false);
     private sealed record EpisodeDto(string Title, List<ClipDto> Clips);
     private sealed record DriftDto(bool CoreChanged);
     private sealed record RewriteDto(string Dialogue);
     private sealed record ReviewDto(List<ClipNote> Notes);
-    private sealed record PlannedClipDto(string Title, string Kind, string About);
+    private sealed record PlannedClipDto(string Title, string Kind, string About, string Beat = "", int Footage = 0, bool Host = false);
     private sealed record OutlineDto(string Title, List<PlannedClipDto> Clips);
 
     /// <summary>Told, in words fit to show, of anything out of the ordinary in how a script came to be written.</summary>
@@ -94,9 +95,17 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
         });
     }
 
-    public async Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<IReadOnlyList<string>>? clipsWritten = null)
+    public async Task<Episode> WriteEpisodeAsync(Lesson lesson, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<IReadOnlyList<string>>? clipsWritten = null)
     {
-        var prompt = new StringBuilder().AppendLine($"Number of clips: {length.InWords}.").AppendLine().Append(Fenced("topic", "", Capped(topic)));
+        var beats = BeatPlan.Beats(lesson.Structure);
+        var prompt = new StringBuilder()
+            .AppendLine($"Number of clips: {length.InWords}, besides any more the footage needs.")
+            .AppendLine($"Beats, in order: {string.Join(", ", beats.Select(b => b.Name))}. Real footage belongs in {string.Join(", ", beats.Where(b => b.ForFootage).Select(b => b.Name))}.")
+            .AppendLine(lesson.Footage.Count == 0 ? "Footage: none. Every clip has footage 0." : "Footage:");
+        // The owner's own notes, so not fenced: they say where each of their clips belongs.
+        foreach (var (note, i) in lesson.Footage.Select((n, i) => (n, i)))
+            prompt.AppendLine(FormattableString.Invariant($"{i + 1}. {note.Length.TotalSeconds:0} seconds, {(note.OwnSound ? "keeps its own sound" : "narrated over")}: {note.Note.ReplaceLineEndings(" ")}"));
+        prompt.AppendLine().Append(Fenced("topic", "", Capped(lesson.Topic)));
         foreach (var snippet in grounding)
             prompt.AppendLine().Append(Fenced("reference", $" source=\"{Attribute(snippet.Repo)} · {Attribute(snippet.Path)}\" url=\"{Attribute(snippet.Url)}\"", snippet.Text));
 
@@ -115,7 +124,7 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
         };
 
         IReadOnlyList<KindInfo> kinds = [.. Visuals.Kinds.Where(k => CanMake(k.Kind))];
-        var (system, schema) = (ScriptSchemas.System(kinds), ScriptSchemas.Episode(kinds));
+        var (system, schema) = (ScriptSchemas.System(kinds), ScriptSchemas.Episode(kinds, beats));
         EpisodeDto draft;
         try
         {
@@ -138,16 +147,24 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
         catch (ScriptDeclinedException declined) when (declined.By != DeclinedBy.RequestFilter)
         {
             Note?.Invoke($"{declined.What} Writing it one clip at a time, so that only the clip in question is lost.");
-            draft = await WriteInPiecesAsync(prompt.ToString(), kinds, length, clipsWritten, ct);
+            draft = await WriteInPiecesAsync(prompt.ToString(), kinds, beats, length, clipsWritten, ct);
         }
         if (draft.Clips.Count < length.MinClips)
             throw new InvalidDataException($"The script came back with only {draft.Clips.Count} clips. Please try again.");
 
-        var clips = draft.Clips.Take(length.MaxClips).Select(c => new Clip(
-            Guid.NewGuid(), c.Title, Tier.B,
-            new Dictionary<Tier, TierScript> { [Tier.B] = new(c.B.Dialogue, c.B.VisualPrompt, c.B.Pose) },
-            new VisualSpec(Visuals.KindFor(c.Kind)), HostVisible: true)).ToList();
-        return new Episode(draft.Title, topic, clips, MixSeed: Random.Shared.Next());
+        var footage = lesson.Footage;
+        var clips = draft.Clips.Select(c =>
+        {
+            var clip = new Clip(
+                Guid.NewGuid(), c.Title, Tier.B,
+                new Dictionary<Tier, TierScript> { [Tier.B] = new(c.B.Dialogue, c.B.VisualPrompt, c.B.Pose) },
+                new VisualSpec(Visuals.KindFor(c.Kind)), HostVisible: c.Host)
+            { Beat = c.Beat };
+            return c.Footage >= 1 && c.Footage <= footage.Count ? BeatPlan.WithFootage(clip, footage[c.Footage - 1]) : clip;
+        }).ToList();
+        // The model's beats and footage numbers are not trusted further than this: the plan is held to its structure.
+        var episode = new Episode(draft.Title, lesson.Topic, clips, MixSeed: Random.Shared.Next()) { Structure = lesson.Structure };
+        return BeatPlan.Repair(episode, footage, length.MaxClips);
     }
 
     /// <summary>What a clip the model would not write says until the user writes it.</summary>
@@ -158,11 +175,16 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
     /// write, under the title and picture the plan gave it, and the rest are written as usual.
     /// </summary>
     /// <param name="request">The request as it was made for the whole script: the number of clips, the topic and the references.</param>
-    private async Task<EpisodeDto> WriteInPiecesAsync(string request, IReadOnlyList<KindInfo> kinds, EpisodeLength length, IProgress<IReadOnlyList<string>>? clipsWritten, CancellationToken ct)
+    private async Task<EpisodeDto> WriteInPiecesAsync(string request, IReadOnlyList<KindInfo> kinds, IReadOnlyList<Beat> beats, EpisodeLength length, IProgress<IReadOnlyList<string>>? clipsWritten, CancellationToken ct)
     {
-        var outline = await Ask<OutlineDto>(settings.ChatDeployment, ScriptSchemas.OutlineSystem(kinds), request, "outline", ScriptSchemas.Outline(kinds), null, ct);
-        var planned = outline.Clips.Take(length.MaxClips).ToList();
-        var plan = string.Join('\n', planned.Select((c, i) => $"{i + 1}. {c.Title}: {c.About}"));
+        var outline = await Ask<OutlineDto>(settings.ChatDeployment, ScriptSchemas.OutlineSystem(kinds), request, "outline", ScriptSchemas.Outline(kinds, beats), null, ct);
+        // Each clip is a request of its own, so only as many are written as the length allows. Clips that show the
+        // owner's footage are always written; the others fill the room left.
+        var room = length.MaxClips - outline.Clips.Count(c => c.Footage > 0);
+        var planned = new List<PlannedClipDto>();
+        foreach (var clip in outline.Clips)
+            if (clip.Footage > 0 || room-- > 0) planned.Add(clip);
+        var plan = string.Join('\n', planned.Select((c, i) => $"{i + 1}. {c.Beat}: {c.Title}: {c.About}"));
         var clips = new List<ClipDto>(planned.Count);
         var left = new List<string>();
         for (var i = 0; i < planned.Count; i++)
@@ -170,16 +192,16 @@ public sealed partial class AzureScriptWriter(AppSettings settings, JsonChat cha
             var clip = planned[i];
             var mine = new StringBuilder(request).AppendLine()
                 .Append(Fenced("existing", " what=\"the plan of the whole video\"", $"{outline.Title}\n{plan}"))
-                .AppendLine($"Write clip {i + 1} of {planned.Count}.")
+                .AppendLine($"Write clip {i + 1} of {planned.Count}.{(clip.Footage > 0 ? $" It shows footage {clip.Footage}." : "")}")
                 .AppendLine(kinds.FirstOrDefault(k => k.Key == clip.Kind) is { } kind ? $"Picture type: {kind.Key}. {kind.Brief}" : "Picture type: title. visualPrompt: the title.");
             try
             {
-                clips.Add(new ClipDto(clip.Title, await Ask<TierDto>(settings.ChatDeployment, ScriptSchemas.ClipSystem, mine.ToString(), "tier", ScriptSchemas.Tier, null, ct), clip.Kind));
+                clips.Add(new ClipDto(clip.Title, await Ask<TierDto>(settings.ChatDeployment, ScriptSchemas.ClipSystem, mine.ToString(), "tier", ScriptSchemas.Tier, null, ct), clip.Kind, clip.Beat, clip.Footage, clip.Host));
             }
             catch (ScriptDeclinedException)
             {
                 // Kept as a title card: there is nothing yet to draw a picture of.
-                clips.Add(new ClipDto(clip.Title, new TierDto(LeftToWrite, clip.About, "none"), "title"));
+                clips.Add(new ClipDto(clip.Title, new TierDto(LeftToWrite, clip.About, "none"), "title", clip.Beat, clip.Footage, clip.Host));
                 left.Add(clip.Title);
             }
             clipsWritten?.Report([.. clips.Select(c => c.Title)]);

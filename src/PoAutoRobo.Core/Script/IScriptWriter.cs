@@ -15,9 +15,12 @@ public interface IScriptWriter
     /// <summary>The longest topic sent to the model. A larger paste is cut here so it cannot run up a large bill.</summary>
     const int MaxTopicLength = 8000;
 
-    /// <summary>Writes every clip at depth B only; the other depths are written when first asked for.</summary>
+    /// <summary>
+    /// Writes the lesson as an episode told in its beats, with each of the owner's footage files in one clip (the
+    /// files are not copied here). Every clip is at depth B only; the other depths are written when first asked for.
+    /// </summary>
     /// <param name="clipsWritten">Given the titles of the clips finished so far, as the script arrives.</param>
-    Task<Episode> WriteEpisodeAsync(string topic, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<IReadOnlyList<string>>? clipsWritten = null);
+    Task<Episode> WriteEpisodeAsync(Lesson lesson, IReadOnlyList<GroundingSnippet> grounding, EpisodeLength length, CancellationToken ct, IProgress<IReadOnlyList<string>>? clipsWritten = null);
 
     /// <summary>Writes one clip at a depth it does not have yet, from the depth it is on now.</summary>
     Task<TierScript> WriteTierAsync(string topic, Clip clip, Tier tier, CancellationToken ct);

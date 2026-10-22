@@ -1,11 +1,12 @@
 namespace PoAutoRobo.Core.Library;
 
-/// <summary>How many clips an episode should have. One clip makes a half-minute video for trying the whole workflow quickly.</summary>
+/// <summary>
+/// How many clips an episode should have, besides any the owner's footage needs. Standard aims at the series' three
+/// to five minutes; one clip makes a half-minute video for trying the whole workflow quickly.
+/// </summary>
 public sealed record EpisodeLength
 {
-    public static readonly EpisodeLength Full = new(15, 20);
-    public static readonly EpisodeLength Short = new(5, 5);
-    public static readonly EpisodeLength TwoClips = new(2, 2);
+    public static readonly EpisodeLength Standard = new(6, 10);
     public static readonly EpisodeLength QuickTest = new(1, 1);
 
     public EpisodeLength(int minClips, int maxClips)

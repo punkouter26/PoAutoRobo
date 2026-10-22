@@ -15,7 +15,7 @@ Unit tests stay at or under 100. The count after each task is shown where it cha
 - [x] **T7 `SeriesKit` and `UseSeriesLook`.** Check: save and load, damaged-file fallback, pure look change; **95**.
 
 ## C. Script around the lesson
-- [ ] **T8 Lesson, beats and footage placement in the script writer; Standard length 6–10.** Check: prompt snapshot diff read and accepted; every footage file placed exactly once (mock and `Repair`); **96**.
+- [x] **T8 Lesson, beats and footage placement in the script writer; Standard length 6–10.** Check: prompt snapshot diff read and accepted; every footage file placed exactly once (mock and `Repair`); **96**.
 - [ ] **T9 Lesson page.** *(concept 1: form + library)* Check: on stand-ins, a Story episode with 2 footage files is created as `NN-slug`, with the series look and music copied.
 
 ## D. My sound
