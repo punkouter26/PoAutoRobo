@@ -6,7 +6,7 @@ namespace PoAutoRobo.App.ViewModels;
 /// <param name="MonthlyBudget">The most to spend in a calendar month, in dollars; 0 for no limit.</param>
 public sealed record Prefs(
     int LengthIndex = 0, int ExportPresetIndex = 0, bool SoundsOn = true, double SoundVolume = 0.6, bool DraftPictures = false,
-    string? LastEpisodeFolder = null, int Step = 0, int InspectorTab = 0, double MonthlyBudget = 0)
+    string? LastEpisodeFolder = null, int Step = 0, int InspectorTab = 0, double MonthlyBudget = 0, int StructureIndex = 0)
 {
     public static Prefs Load() => JsonFile.Load(AppPaths.Prefs, new Prefs());
 

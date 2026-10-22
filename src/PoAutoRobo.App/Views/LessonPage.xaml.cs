@@ -4,14 +4,16 @@ using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using PoAutoRobo.App.ViewModels;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
+using Windows.Storage.Pickers;
 using Windows.UI;
 using Windows.UI.ViewManagement;
 
 namespace PoAutoRobo.App.Views;
 
-/// <summary>Step 1: the topic form and the saved episodes.</summary>
-public sealed partial class TopicPage : UserControl
+/// <summary>Step 1: the lesson form, with the owner's films, and the saved episodes.</summary>
+public sealed partial class LessonPage : UserControl
 {
     private MainViewModel? _viewModel;
     private bool _inFront = true;
@@ -20,7 +22,7 @@ public sealed partial class TopicPage : UserControl
     // Read by the drawing thread, set by the page.
     private Color _accent;
 
-    public TopicPage() => InitializeComponent();
+    public LessonPage() => InitializeComponent();
 
     public MainViewModel? ViewModel
     {
@@ -112,5 +114,36 @@ public sealed partial class TopicPage : UserControl
     {
         if (ViewModel is not null && Episode(sender) is { } summary)
             await ViewModel.DeleteEpisodeAsync(summary);
+    }
+
+    // ---- The owner's films ----
+
+    private async void OnAddFootage(object sender, RoutedEventArgs e)
+    {
+        var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.VideosLibrary };
+        foreach (var extension in EpisodeBuilder.VideoExtensions)
+            picker.FileTypeFilter.Add(extension);
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, App.WindowHandle); // a desktop app must say which window owns the dialog
+        if (ViewModel is not null && await picker.PickMultipleFilesAsync() is { Count: > 0 } files)
+            await ViewModel.AddFootageAsync([.. files.Select(f => f.Path)]);
+    }
+
+    private void OnFootageDragOver(object sender, DragEventArgs e)
+    {
+        if (e.DataView.Contains(StandardDataFormats.StorageItems)) e.AcceptedOperation = DataPackageOperation.Copy;
+    }
+
+    private async void OnFootageDrop(object sender, DragEventArgs e)
+    {
+        if (ViewModel is null || !e.DataView.Contains(StandardDataFormats.StorageItems)) return;
+        var items = await e.DataView.GetStorageItemsAsync();
+        var videos = items.Select(i => i.Path).Where(p => EpisodeBuilder.VideoExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)).ToList();
+        if (videos.Count > 0) await ViewModel.AddFootageAsync(videos);
+    }
+
+    private void OnRemoveFootage(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: FootageRow row })
+            ViewModel?.RemoveFootageCommand.Execute(row);
     }
 }

@@ -16,7 +16,7 @@ Unit tests stay at or under 100. The count after each task is shown where it cha
 
 ## C. Script around the lesson
 - [x] **T8 Lesson, beats and footage placement in the script writer; Standard length 6–10.** Check: prompt snapshot diff read and accepted; every footage file placed exactly once (mock and `Repair`); **96**.
-- [ ] **T9 Lesson page.** *(concept 1: form + library)* Check: on stand-ins, a Story episode with 2 footage files is created as `NN-slug`, with the series look and music copied.
+- [x] **T9 Lesson page.** *(concept 1: form + library)* Check: on stand-ins, a Story episode with 2 footage files is created as `NN-slug`, with the series look and music copied.
 
 ## D. My sound
 - [ ] **T10 Footage sound replaces narration for own-sound clips.** Check: argument snapshot plus spreading; integration: master audio comes from the footage, no narrator call; **97**.

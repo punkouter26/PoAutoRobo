@@ -38,7 +38,7 @@ public sealed partial class MainWindow : WindowEx
         Activated += (_, e) =>
         {
             _inFront = e.WindowActivationState != WindowActivationState.Deactivated;
-            Topic.SetInFront(_inFront);
+            Lesson.SetInFront(_inFront);
         };
         Closed += (_, _) =>
         {

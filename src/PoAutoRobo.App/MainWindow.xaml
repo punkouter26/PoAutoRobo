@@ -147,7 +147,7 @@
 
             <controls:Segmented x:Name="StepSelector" Grid.Column="3" SelectedIndex="{x:Bind ViewModel.Step, Mode=TwoWay}" VerticalAlignment="Center"
                                 AutomationProperties.Name="Step" ToolTipService.ToolTip="{x:Bind ViewModel.StepHint, Mode=OneWay}">
-                <controls:SegmentedItem Content="1 · Topic" />
+                <controls:SegmentedItem Content="1 · Lesson" />
                 <controls:SegmentedItem Content="2 · Clips" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}" />
                 <controls:SegmentedItem Content="3 · Export" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}" />
             </controls:Segmented>
@@ -201,7 +201,7 @@
             </Grid.ChildrenTransitions>
 
             <!-- Step 1 · Topic -->
-            <views:TopicPage x:Name="Topic" ViewModel="{x:Bind ViewModel}" Visibility="{x:Bind ViewModel.ShowTopic, Mode=OneWay}" />
+            <views:LessonPage x:Name="Lesson" ViewModel="{x:Bind ViewModel}" Visibility="{x:Bind ViewModel.ShowTopic, Mode=OneWay}" />
 
             <!-- Step 2 · Clips: the deck, with the selected clip's words and picture beside it -->
             <Grid x:Name="DeckPage" Visibility="{x:Bind ViewModel.ShowDeck, Mode=OneWay}">

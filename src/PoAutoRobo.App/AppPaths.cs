@@ -18,6 +18,9 @@ public static class AppPaths
 
     public static string HostSheet { get; } = Path.Combine(Host, "sheet.png");
 
+    /// <summary>The series brand kit: its settings and its own copies of the logo, sounds and mascot.</summary>
+    public static string Series { get; } = Path.Combine(Local, "series");
+
     public static string Grounding { get; } = Path.Combine(Local, "grounding");
 
     /// <summary>The names of AI videos still being made, so one that was stopped is picked up again and not paid for twice.</summary>

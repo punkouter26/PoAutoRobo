@@ -355,28 +355,68 @@ public partial class MainViewModel
         }
         return RunActivityAsync("Fitting the narration to your video", async ct =>
         {
-            var (clip, folder) = (card.Clip, EpisodeFolder!);
+            var clip = card.Clip;
             var length = await _builder.ProbeDurationAsync(path, ct);
             if (length < Conformance.MinFootage || length > Conformance.MaxFootage)
                 throw new InvalidOperationException("Footage must be between 5 seconds and 2 minutes long.");
-            ReportActivity("Rewriting and re-recording the dialogue to match", 0.2);
-            var fit = await Conformance.FitAsync(clip.Active.Dialogue, length, _scriptWriter,
-                async (text, rate, c) => (await _builder.NarrateClipAsync(EpisodeEditor.WithDialogue(clip, text) with { NarrationRate = rate }, folder, c)).Duration,
-                ct);
-
-            // Named for the clip as well as the file, so two different videos called "take.mp4" cannot overwrite each other.
-            ReportActivity("Copying your video into the episode", 0.9);
-            var copy = Path.Combine(folder, "imports", $"{clip.Id:N}-{Path.GetFileName(path)}");
-            Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
-            if (!string.Equals(Path.GetFullPath(path), copy, StringComparison.OrdinalIgnoreCase))
-                await Task.Run(() => File.Copy(path, copy, overwrite: true), ct); // can be hundreds of megabytes
-
-            await _builder.PosterAsync(copy, ct); // a frame of the footage, so its card is not left blank
+            var (copy, fit) = await ImportFootageAsync(clip, path, length, EpisodeFolder!, ct);
             Edit(e => EpisodeEditor.AttachVideo(e, clip.Id, copy, fit));
             StatusMessage = fit.WithinTolerance
                 ? $"Video {length:m\\:ss} · narration fitted to {fit.Duration.TotalSeconds:0.0} s."
                 : $"Closest fit is {Math.Abs(fit.Gap.TotalSeconds):0.0} s too {(fit.Gap > TimeSpan.Zero ? "short" : "long")}. Edit the dialogue to close the gap.";
         });
+    }
+
+    /// <summary>
+    /// Copies one of the owner's films into the episode and, unless it keeps its own sound, fits the clip's
+    /// narration to it. Gives the copy and the dialogue and pace to attach with it.
+    /// </summary>
+    private async Task<(string Copy, FitResult Fit)> ImportFootageAsync(Clip clip, string path, TimeSpan length, string folder, CancellationToken ct)
+    {
+        var fit = new FitResult(clip.Active.Dialogue, 1.0, length, TimeSpan.Zero, WithinTolerance: true); // its own sound: nothing to fit
+        if (!clip.OwnSound)
+        {
+            ReportActivity($"Fitting the narration to “{clip.Title}”", 0.2);
+            fit = await Conformance.FitAsync(clip.Active.Dialogue, length, _scriptWriter,
+                async (text, rate, c) => (await _builder.NarrateClipAsync(EpisodeEditor.WithDialogue(clip, text) with { NarrationRate = rate }, folder, c)).Duration,
+                ct);
+        }
+        // Named for the clip as well as the file, so two different videos called "take.mp4" cannot overwrite each other.
+        ReportActivity("Copying your video into the episode", 0.9);
+        var copy = await ImportAsync(path, folder, $"{clip.Id:N}-{Path.GetFileName(path)}", ct);
+        await _builder.PosterAsync(copy, ct); // a frame of the footage, so its card is not left blank
+        return (copy, fit);
+    }
+
+    /// <summary>Copies a file into the episode's imports folder under <paramref name="name"/>, and gives the copy's path.</summary>
+    private static async Task<string> ImportAsync(string path, string folder, string name, CancellationToken ct)
+    {
+        var copy = Path.Combine(folder, "imports", name);
+        Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
+        if (!string.Equals(Path.GetFullPath(path), copy, StringComparison.OrdinalIgnoreCase))
+            await Task.Run(() => File.Copy(path, copy, overwrite: true), ct); // can be hundreds of megabytes
+        return copy;
+    }
+
+    /// <summary>
+    /// Brings the owner's films into a newly written episode: each is copied in beside the clip the script gave it,
+    /// and narrated ones have their words fitted to the film. A film too short to narrate over keeps its own sound.
+    /// </summary>
+    private async Task<Episode> BringInFootageAsync(Episode episode, IReadOnlyList<FootageNote> footage, string folder, CancellationToken ct)
+    {
+        foreach (var note in footage)
+        {
+            if (episode.Clips.FirstOrDefault(c => string.Equals(c.Visual.UserVideoPath, note.Path, StringComparison.OrdinalIgnoreCase)) is not { } clip)
+                continue; // the script always places every film; nothing to bring in if it somehow did not
+            if (!clip.OwnSound && note.Length < Conformance.MinFootage)
+            {
+                clip = BeatPlan.WithFootage(clip, note with { OwnSound = true });
+                Note($"“{clip.Title}” keeps its own sound: under 5 seconds is too short to narrate over.");
+            }
+            var (copy, fit) = await ImportFootageAsync(clip, note.Path, note.Length, folder, ct);
+            episode = EpisodeEditor.AttachVideo(EpisodeEditor.ReplaceClip(episode, clip), clip.Id, copy, fit);
+        }
+        return episode;
     }
 
     [RelayCommand]

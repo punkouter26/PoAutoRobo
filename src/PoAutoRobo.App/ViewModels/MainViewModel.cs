@@ -32,6 +32,7 @@ public partial class MainViewModel : ObservableObject
         SoundVolume = Math.Clamp(prefs.SoundVolume, 0, 1);
         DraftPictures = prefs.DraftPictures;
         MonthlyBudget = Math.Max(0, prefs.MonthlyBudget);
+        StructureIndex = Math.Clamp(prefs.StructureIndex, 0, StructureChoices.Length - 1);
         _reopen = prefs;
         Clips.CollectionChanged += OnClipsChanged;
         // A batch must not start while a single picture is being drawn: it could ask for, and pay for, the same one.
@@ -181,7 +182,7 @@ public partial class MainViewModel : ObservableObject
     private static readonly HashSet<string> Remembered =
     [
         nameof(LengthIndex), nameof(ExportPresetIndex), nameof(SoundsOn), nameof(SoundVolume), nameof(DraftPictures),
-        nameof(Step), nameof(InspectorTab), nameof(MonthlyBudget),
+        nameof(Step), nameof(InspectorTab), nameof(MonthlyBudget), nameof(StructureIndex),
     ];
 
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
@@ -192,14 +193,14 @@ public partial class MainViewModel : ObservableObject
 
     private void SavePrefs()
     {
-        if (_ready) new Prefs(LengthIndex, ExportPresetIndex, SoundsOn, SoundVolume, DraftPictures, EpisodeFolder, Step, InspectorTab, MonthlyBudget).Save();
+        if (_ready) new Prefs(LengthIndex, ExportPresetIndex, SoundsOn, SoundVolume, DraftPictures, EpisodeFolder, Step, InspectorTab, MonthlyBudget, StructureIndex).Save();
     }
 
     // ---- Steps ----
 
     private static readonly string[] StepHints =
     [
-        "Pick the one topic for this episode: type your own, or open an episode you saved earlier.",
+        "Say what you taught the R1 this time, add your films of it, and write the script; or open an episode you saved earlier.",
         "Shape the clips: drag them into order, edit and audition each one's words, then give each its picture.",
         "Finish: choose the caption style, watch a preview, then render the master video.",
     ];
@@ -251,6 +252,63 @@ public partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(CreateEpisodeCommand))]
     [NotifyPropertyChangedFor(nameof(TopicCount))]
     public partial string TopicInput { get; set; } = "";
+
+    /// <summary>What went wrong on the way, in the owner's words; optional.</summary>
+    [ObservableProperty]
+    public partial string WentWrongInput { get; set; } = "";
+
+    /// <summary>The next episode's place in the series. A number box gives a double; it is rounded when the episode is made.</summary>
+    [ObservableProperty]
+    public partial double EpisodeNumber { get; set; } = 1;
+
+    public Choice<BeatStructure>[] StructureChoices { get; } =
+    [
+        new("Story", BeatStructure.Story), new("Tutorial", BeatStructure.Tutorial), new("Hook first", BeatStructure.HookFirst),
+    ];
+
+    /// <summary>The shape of the next episode, as an index into <see cref="StructureChoices"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StructureBeats))]
+    public partial int StructureIndex { get; set; }
+
+    private BeatStructure NextStructure => StructureChoices[Math.Clamp(StructureIndex, 0, StructureChoices.Length - 1)].Value;
+
+    /// <summary>The beats of the chosen structure in order, marking those where footage belongs.</summary>
+    public string StructureBeats => string.Join(" → ", BeatPlan.Beats(NextStructure).Select(b => b.ForFootage ? $"{b.Name} 🎥" : b.Name));
+
+    /// <summary>The owner's films for the next episode. The script places each in one clip.</summary>
+    public ObservableCollection<FootageRow> Footage { get; } = [];
+
+    /// <summary>Measures each film and lists it. Films that cannot be read, or run under 2 seconds or over 2 minutes, are left out with a word why.</summary>
+    public Task AddFootageAsync(IReadOnlyList<string> paths) => RunActivityAsync("Reading your footage", async ct =>
+    {
+        if (!FfmpegAvailable)
+            throw new InvalidOperationException("FFmpeg is needed to read your footage. Install it, then restart the app.");
+        var refused = new List<string>();
+        foreach (var path in paths.Where(p => !Footage.Any(f => string.Equals(f.Path, p, StringComparison.OrdinalIgnoreCase))))
+        {
+            TimeSpan length;
+            try
+            {
+                length = await _builder.ProbeDurationAsync(path, ct);
+            }
+            catch (Exception e) when (e is FfmpegException or IOException)
+            {
+                refused.Add($"{Path.GetFileName(path)} could not be read");
+                continue;
+            }
+            if (length < MinFootage || length > Conformance.MaxFootage)
+                refused.Add($"{Path.GetFileName(path)} runs {length:m\\:ss}; films must be 2 seconds to 2 minutes");
+            else
+                Footage.Add(new FootageRow(path, length));
+        }
+        if (refused.Count > 0) ErrorMessage = string.Join(". ", refused) + ".";
+    });
+
+    private static readonly TimeSpan MinFootage = TimeSpan.FromSeconds(2);
+
+    [RelayCommand]
+    private void RemoveFootage(FootageRow row) => Footage.Remove(row);
 
     /// <summary>How much of the room for a topic is used, said beside the box so a long paste is not cut short unnoticed.</summary>
     public string TopicCount => TopicInput.Length >= IScriptWriter.MaxTopicLength
@@ -387,7 +445,9 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanCreateEpisode))]
     private Task CreateEpisodeAsync() => RunActivityAsync("Writing the script", async ct =>
     {
-        var topic = TopicInput.Trim();
+        var lesson = new Lesson(TopicInput, WentWrongInput, NextStructure, [.. Footage.Select(f => f.ToNote())]);
+        var topic = lesson.Topic;
+        var number = Math.Max(1, (int)Math.Round(double.IsNaN(EpisodeNumber) ? 1 : EpisodeNumber));
         var length = LengthChoices[LengthIndex].Value;
         Skeletons = [.. Enumerable.Repeat("", length.MaxClips)];
         _lastNote = null;
@@ -412,9 +472,15 @@ public partial class MainViewModel : ObservableObject
             });
             // The script chooses each clip's picture type; whatever cannot be made on this computer becomes a still.
             Func<VisualKind, bool> canMake = CurrentVisuals is { } visuals ? visuals.CanMake : _ => false;
-            var episode = VisualMix.Settle(await _scriptWriter.WriteEpisodeAsync(Lesson.Of(topic), grounding, length, ct, written), canMake);
-            var folder = ProjectStore.NewFolder(AppPaths.Episodes, episode.Title); // never on top of an earlier episode
+            var episode = VisualMix.Settle(await _scriptWriter.WriteEpisodeAsync(lesson, grounding, length, ct, written), canMake) with { Number = number };
+            var folder = ProjectStore.NewFolder(AppPaths.Episodes, episode.Title, number); // never on top of an earlier episode
+            episode = await BringInFootageAsync(episode, lesson.Footage, folder, ct);
+            // Every episode starts in the series look, with its own copy of the series music.
+            var kit = SeriesKit.Load(AppPaths.Series);
+            var music = SeriesKit.PathOf(AppPaths.Series, kit.Music) is { } track ? await ImportAsync(track, folder, "music-" + Path.GetFileName(track), ct) : null;
+            episode = EpisodeEditor.UseSeriesLook(episode, kit, music);
             ProjectStore.Save(episode, folder);
+            Footage.Clear(); // in the episode now; the next lesson starts with none
             ProjectStore.SaveSnippets(grounding, folder);
             lock (_usedBeforeFolder)
             {

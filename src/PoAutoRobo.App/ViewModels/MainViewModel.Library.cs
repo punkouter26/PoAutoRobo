@@ -20,6 +20,7 @@ public partial class MainViewModel
         Library.Clear();
         foreach (var summary in summaries)
             Library.Add(summary);
+        EpisodeNumber = summaries.Select(s => s.Number).DefaultIfEmpty(0).Max() + 1; // the next in the series
         OnPropertyChanged(nameof(HasLibrary));
     }
 
