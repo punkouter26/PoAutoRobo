@@ -32,7 +32,6 @@ public partial class MainViewModel : ObservableObject
         SoundVolume = Math.Clamp(prefs.SoundVolume, 0, 1);
         DraftPictures = prefs.DraftPictures;
         MonthlyBudget = Math.Max(0, prefs.MonthlyBudget);
-        SubjectIndex = Math.Clamp(prefs.SubjectIndex, 0, SubjectChoices.Length - 1);
         _reopen = prefs;
         Clips.CollectionChanged += OnClipsChanged;
         // A batch must not start while a single picture is being drawn: it could ask for, and pay for, the same one.
@@ -115,13 +114,6 @@ public partial class MainViewModel : ObservableObject
         new("Sampler (9)", new EpisodeLength(9, 9)),
     ];
 
-    public Choice<Subject>[] SubjectChoices { get; } =
-    [
-        new("Unitree R1", Subject.UnitreeR1),
-        new("Any topic", Subject.General),
-        new("Video essay", Subject.Essay),
-    ];
-
     public Choice<ExportPreset>[] ExportChoices { get; } =
     [
         new("1080p · 30 fps", ExportPreset.Hd30), new("1080p · 60 fps", ExportPreset.Hd60),
@@ -188,16 +180,10 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HostCandidatesCost))]
     public partial bool DraftPictures { get; set; }
 
-    /// <summary>What the next episode is about, as an index into <see cref="SubjectChoices"/>.</summary>
-    [ObservableProperty]
-    public partial int SubjectIndex { get; set; }
-
-    private Subject NextSubject => SubjectChoices[Math.Clamp(SubjectIndex, 0, SubjectChoices.Length - 1)].Value;
-
     // Everything remembered is saved as it changes. Adding a choice to remember is one name here and one in SavePrefs.
     private static readonly HashSet<string> Remembered =
     [
-        nameof(LengthIndex), nameof(ExportPresetIndex), nameof(SoundsOn), nameof(SubjectIndex), nameof(SoundVolume), nameof(DraftPictures),
+        nameof(LengthIndex), nameof(ExportPresetIndex), nameof(SoundsOn), nameof(SoundVolume), nameof(DraftPictures),
         nameof(Step), nameof(InspectorTab), nameof(MonthlyBudget),
     ];
 
@@ -209,7 +195,7 @@ public partial class MainViewModel : ObservableObject
 
     private void SavePrefs()
     {
-        if (_ready) new Prefs(LengthIndex, ExportPresetIndex, SoundsOn, SubjectIndex, SoundVolume, DraftPictures, EpisodeFolder, Step, InspectorTab, MonthlyBudget).Save();
+        if (_ready) new Prefs(LengthIndex, ExportPresetIndex, SoundsOn, SoundVolume, DraftPictures, EpisodeFolder, Step, InspectorTab, MonthlyBudget).Save();
     }
 
     // ---- Steps ----
@@ -411,10 +397,9 @@ public partial class MainViewModel : ObservableObject
         IsCreating = true;
         try
         {
-            // Only R1 episodes are grounded: the repositories have nothing to say about other subjects.
-            var subject = NextSubject;
+            // Every episode is about the R1, so every script is grounded in its official repositories.
             IReadOnlyList<GroundingSnippet> grounding = [];
-            if (subject == Subject.UnitreeR1 && _grounding is not null)
+            if (_grounding is not null)
             {
                 ReportActivity("Reading the official repositories", 0.02);
                 grounding = await _grounding.FindAsync(topic, ct);
@@ -430,7 +415,7 @@ public partial class MainViewModel : ObservableObject
             });
             // The script chooses each clip's picture type; whatever cannot be made on this computer becomes a still.
             Func<VisualKind, bool> canMake = CurrentVisuals is { } visuals ? visuals.CanMake : _ => false;
-            var episode = VisualMix.Settle(await _scriptWriter.WriteEpisodeAsync(topic, subject, grounding, length, ct, written), canMake);
+            var episode = VisualMix.Settle(await _scriptWriter.WriteEpisodeAsync(topic, Subject.UnitreeR1, grounding, length, ct, written), canMake);
             var folder = ProjectStore.NewFolder(AppPaths.Episodes, episode.Title); // never on top of an earlier episode
             ProjectStore.Save(episode, folder);
             ProjectStore.SaveSnippets(grounding, folder);

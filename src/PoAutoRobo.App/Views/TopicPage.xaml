@@ -43,10 +43,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <ComboBox x:Name="SubjectBox" Header="About" HorizontalAlignment="Stretch"
-                      ItemsSource="{x:Bind ViewModel.SubjectChoices}" SelectedIndex="{x:Bind ViewModel.SubjectIndex, Mode=TwoWay}"
-                      ToolTipService.ToolTip="Unitree R1: facts come from the official Unitree, Isaac Lab and MuJoCo repositories. Any topic: written from what you type alone, so paste in the facts you want used. Video essay: any topic, no host, one argument told in visual metaphors." />
-            <ComboBox x:Name="LengthBox" Grid.Column="1" Header="Length" HorizontalAlignment="Stretch"
+            <ComboBox x:Name="LengthBox" Grid.ColumnSpan="2" Header="Length" HorizontalAlignment="Stretch"
                       ItemsSource="{x:Bind ViewModel.LengthChoices}" SelectedIndex="{x:Bind ViewModel.LengthIndex, Mode=TwoWay}"
                       ToolTipService.ToolTip="How many clips to write. Full is 15 to 20 clips, about 10 minutes; Short is 5, about 3 minutes; Quick test is one clip of about 30 seconds, to try every step and render in a minute or two; Sampler is 9, enough for one of each picture type." />
             <TextBox x:Name="TopicBox" Grid.Row="1" Grid.ColumnSpan="2" ToolTipService.ToolTip="The one subject of this episode. A sentence is enough; an outline, paper abstract or code snippet also works. Ctrl+Enter writes the script." Header="Your own topic" PlaceholderText="Paste a topic, outline, abstract or code"

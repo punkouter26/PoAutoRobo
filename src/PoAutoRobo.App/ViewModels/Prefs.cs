@@ -5,7 +5,7 @@ namespace PoAutoRobo.App.ViewModels;
 /// <param name="LastEpisodeFolder">The episode that was open, reopened on the next launch; null when none was.</param>
 /// <param name="MonthlyBudget">The most to spend in a calendar month, in dollars; 0 for no limit.</param>
 public sealed record Prefs(
-    int LengthIndex = 0, int ExportPresetIndex = 0, bool SoundsOn = true, int SubjectIndex = 0, double SoundVolume = 0.6, bool DraftPictures = false,
+    int LengthIndex = 0, int ExportPresetIndex = 0, bool SoundsOn = true, double SoundVolume = 0.6, bool DraftPictures = false,
     string? LastEpisodeFolder = null, int Step = 0, int InspectorTab = 0, double MonthlyBudget = 0)
 {
     public static Prefs Load() => JsonFile.Load(AppPaths.Prefs, new Prefs());
