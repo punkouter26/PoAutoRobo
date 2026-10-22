@@ -15,6 +15,9 @@ public sealed record ExportPreset(int Width, int Height, int Fps)
     public bool Portrait => Height > Width;
 }
 
+/// <summary>How the series intro and outro look: the accent colour (#RRGGBB) and the kit's logo and mascot pictures, each null when there is none.</summary>
+public sealed record BookendLook(string Accent, string? Logo, string? Mascot);
+
 /// <summary>Video holds its last frame when the narration runs longer; Loop, for short generated footage, plays again from the start.</summary>
 public enum ClipSource { TitleCard, Image, Video, Loop }
 
@@ -138,6 +141,72 @@ public static class FfmpegArgs
         return $"scale={2 * p.Width}:{2 * p.Height}:force_original_aspect_ratio=increase,crop={2 * p.Width}:{2 * p.Height}," +
             $"zoompan=z='{zoom}':x='{x}':y='ih/2-(ih/zoom/2)':d={frames}:s={p.Width}x{p.Height}:fps={p.Fps}";
     }
+
+    /// <summary>
+    /// The series intro: the channel's name, its tagline and "#N · title" rising in one after another over a slow
+    /// gradient in the accent colour, the logo in the corner and the mascot beside them. Built here, so it costs nothing.
+    /// </summary>
+    /// <param name="channelFile">Text files in the working folder, as for a title card: the words are drawn, never run.</param>
+    public static IReadOnlyList<string> IntroVideo(BookendLook look, string channelFile, string? taglineFile, string titleFile, TimeSpan length, ExportPreset preset, string output)
+    {
+        // With a mascot on the right, the words keep to the left; without one, they are centred.
+        var x = look.Mascot is null ? "(w-text_w)/2" : "w*0.08";
+        return Card(look, length, preset, output,
+        [
+            Words(channelFile, "h/10", x, "h*0.34", 0.8),
+            .. taglineFile is null ? [] : new[] { Words(taglineFile, "h/24", x, "h*0.48", 1.2) },
+            Words(titleFile, "h/14", x, "h*0.60", 1.6),
+        ]);
+    }
+
+    /// <summary>
+    /// The series outro: the channel's name and a call to subscribe across the top, the mascot on the left, and two
+    /// faint frames on the right where YouTube's end-screen cards (subscribe, next video) are placed when uploading.
+    /// </summary>
+    public static IReadOnlyList<string> OutroVideo(BookendLook look, string channelFile, string? nextFile, TimeSpan length, ExportPreset preset, string output) =>
+        Card(look, length, preset, output,
+        [
+            Words(channelFile, "h/12", "(w-text_w)/2", "h*0.08", 0.3),
+            "drawtext=text='Subscribe for the next lesson':expansion=none:" + TextStyle("h/22", "(w-text_w)/2", "h*0.20", 0.6),
+            .. nextFile is null ? [] : new[] { Words(nextFile, "h/20", "(w-text_w)/2", "h*0.86", 0.9) },
+            "drawbox=x=iw*0.50:y=ih*0.36:w=iw*0.21:h=iw*0.21*9/16:color=white@0.35:t=4",
+            "drawbox=x=iw*0.74:y=ih*0.36:w=iw*0.21:h=iw*0.21*9/16:color=white@0.35:t=4",
+        ], mascotLeft: true);
+
+    // The background, logo and mascot every bookend shares, with its own words drawn over them and the same fades
+    // and encoding as a clip, so it joins the clips by copying.
+    private static IReadOnlyList<string> Card(BookendLook look, TimeSpan length, ExportPreset preset, string output, IReadOnlyList<string> words, bool mascotLeft = false)
+    {
+        var (w, h, fps) = preset;
+        var accent = "0x" + look.Accent.TrimStart('#');
+        var inputs = new List<string> { "-f", "lavfi", "-i", $"gradients=s={w}x{h}:r={fps}:c0=0x101828:c1={accent}:x0=0:y0={h}:x1={w}:y1=0:speed=0.002:d={Seconds(length)}" };
+        var graph = new List<string>();
+        var picture = "[0:v]";
+        if (look.Mascot is { } mascot)
+        {
+            inputs.AddRange(["-loop", "1", "-i", mascot]);
+            graph.Add($"[{inputs.Count(a => a == "-i") - 1}:v]scale=-2:{h * 7 / 10},format=rgba,fade=t=in:st=0.4:d=0.6:alpha=1[mascot]");
+            graph.Add($"{picture}[mascot]overlay=x={(mascotLeft ? "W*0.05" : "W-w-W*0.05")}:y=(H-h)/2[m]");
+            picture = "[m]";
+        }
+        if (look.Logo is { } logo)
+        {
+            inputs.AddRange(["-loop", "1", "-i", logo]);
+            graph.Add($"[{inputs.Count(a => a == "-i") - 1}:v]scale=-2:{h / 8},format=rgba,fade=t=in:st=0.2:d=0.6:alpha=1[logo]");
+            graph.Add($"{picture}[logo]overlay=x={(mascotLeft ? "W-w-W*0.04" : "W*0.04")}:y=H*0.06[l]"); // in the corner away from the mascot
+            picture = "[l]";
+        }
+        graph.Add($"{picture}{string.Join(',', words)}{Finish(length, null)}[v]");
+        return [.. inputs, "-filter_complex", string.Join(';', graph), "-map", "[v]", "-t", Seconds(length), "-an", .. Encode(preset), "-y", output];
+    }
+
+    // One line of a bookend's words, read from a file in the working folder, fading in at its moment.
+    private static string Words(string file, string size, string x, string y, double appears) =>
+        $"drawtext=textfile={file}:expansion=none:" + TextStyle(size, x, y, appears);
+
+    private static string TextStyle(string size, string x, string y, double appears) =>
+        $"fontfile={TitleFontFile}:fontcolor=white:fontsize={size}:x={x}:y={y}:borderw=3:bordercolor=black@0.35:" +
+        FormattableString.Invariant($"alpha='min(1,max(0,(t-{appears:0.0})/0.5))'");
 
     /// <summary>The last filters on every clip: captions over the picture, then the fades over both.</summary>
     private static string Finish(TimeSpan length, string? captionsFile) =>

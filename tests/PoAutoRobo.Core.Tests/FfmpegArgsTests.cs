@@ -43,6 +43,26 @@ public sealed class FfmpegArgsTests : IDisposable
     }
 
     [Fact]
+    public Task The_series_intro_and_outro_are_drawn_from_the_brand_kit_and_encoded_like_every_clip()
+    {
+        var full = new BookendLook("#22CC88", "logo.png", "mascot.png");
+        var bare = new BookendLook("#FFD400", null, null); // nothing set up but the channel's name
+        var intro = Lines(FfmpegArgs.IntroVideo(full, "intro_channel.txt", "intro_tagline.txt", "intro_title.txt", S(5), ExportPreset.Hd30, "intro.mp4"));
+        var outro = Lines(FfmpegArgs.OutroVideo(full, "outro_channel.txt", "outro_next.txt", S(15), ExportPreset.Hd30, "outro.mp4"));
+
+        // Joined by copying, so they must be encoded exactly as the clips are, and every word is drawn, never run.
+        var clip = Lines(FfmpegArgs.ClipVideo(ClipSource.Image, "panel.png", S(5), ExportPreset.Hd30, "clip.mp4"));
+        Assert.EndsWith(clip[clip.IndexOf("-c:v", StringComparison.Ordinal)..clip.IndexOf("-y", StringComparison.Ordinal)], intro[..intro.IndexOf("-y", StringComparison.Ordinal)], StringComparison.Ordinal);
+        Assert.All(new[] { intro, outro }, card => Assert.Equal(card.Split("drawtext").Length - 1, card.Split("expansion=none").Length - 1));
+
+        return Verify(
+            $"--- intro ---\n{intro}\n" +
+            $"--- intro, channel name only ---\n{Lines(FfmpegArgs.IntroVideo(bare, "intro_channel.txt", null, "intro_title.txt", S(5), ExportPreset.Hd30, "intro.mp4"))}\n" +
+            $"--- outro ---\n{outro}\n" +
+            $"--- outro, channel name only ---\n{Lines(FfmpegArgs.OutroVideo(bare, "outro_channel.txt", null, S(8), ExportPreset.Hd30, "outro.mp4"))}");
+    }
+
+    [Fact]
     public Task Video_clip_is_fitted_and_its_last_frame_held() =>
         Verify(Lines(FfmpegArgs.ClipVideo(ClipSource.Video, "lab.mp4", S(12), ExportPreset.Uhd60, "clip_01.mp4")));
 

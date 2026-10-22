@@ -23,7 +23,7 @@ Unit tests stay at or under 100. The count after each task is shown where it cha
 - [x] **T11 Sound switch per clip in the inspector and on the card.** Check: in the app; switching runs or skips the fit; undo restores it.
 
 ## E. Brand
-- [ ] **T13 Intro and outro FFmpeg arguments.** Check: snapshot with and without logo, mascot and sting; **98**.
+- [x] **T13 Intro and outro FFmpeg arguments.** Check: snapshot with and without logo, mascot and sting; **98**.
 - [ ] **T12 Series dialog and "Use series look".** *(concept 5: dialog + intro preview; built after T13)* Check: in the app, the kit survives a restart and the files are copied into `series\`.
 - [ ] **T14 Intro and outro in the master; chapters start "0:00 Intro".** Check: integration length = 5 s + clips + outro ±0.2; export with no kit still works.
 - [ ] **T15 Section straps.** Check: caption snapshot gains the strap event (diff read).
