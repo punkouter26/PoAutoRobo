@@ -128,7 +128,7 @@ public static class ProjectStore
         try
         {
             var snippets = JsonSerializer.Deserialize<List<GroundingSnippet>>(File.ReadAllText(Path.Combine(folder, SnippetsFile)), JsonOptions) ?? [];
-            return [.. snippets.Where(s => s is { Repo: not null, Path: not null, Text: not null } && TrendFeed.IsWebLink(s.Url ?? ""))];
+            return [.. snippets.Where(s => s is { Repo: not null, Path: not null, Text: not null } && Files.IsWebLink(s.Url ?? ""))];
         }
         catch (Exception e) when (e is IOException or JsonException)
         {

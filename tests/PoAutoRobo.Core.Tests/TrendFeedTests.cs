@@ -99,11 +99,11 @@ public sealed class TrendFeedTests
     // Links from feeds and saved files end up on a button the user clicks, so only web addresses may get through.
     private void Only_web_links_are_accepted()
     {
-        Assert.True(TrendFeed.IsWebLink("https://example.com/r1"));
-        Assert.True(TrendFeed.IsWebLink("http://example.com/r1"));
+        Assert.True(Files.IsWebLink("https://example.com/r1"));
+        Assert.True(Files.IsWebLink("http://example.com/r1"));
         // Protocol handlers, script, local files, file shares and things that are not addresses at all.
         foreach (var url in new[] { "search-ms:query=x", "ms-msdt:/id x", "javascript:alert(1)", "file:///C:/Windows/win.ini", @"\\attacker\share\x", "not a url", "" })
-            Assert.False(TrendFeed.IsWebLink(url), url);
+            Assert.False(Files.IsWebLink(url), url);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class TrendFeedTests
 
         Assert.Equal(["Unitree ships R1 update", "Whole-Body Balance for Humanoid Robots", "Unitree R1 teardown"], cards.Select(c => c.Title));
         Assert.Equal(["IEEE Spectrum", "arXiv cs.RO", "Hacker News"], cards.Select(c => c.Source)); // the same story from two outlets is listed once
-        Assert.All(cards, c => Assert.True(TrendFeed.IsWebLink(c.Url), c.Url)); // the search-ms story never gets through
+        Assert.All(cards, c => Assert.True(Files.IsWebLink(c.Url), c.Url)); // the search-ms story never gets through
     }
 
     private async Task One_dead_or_garbled_source_does_not_empty_the_list_and_with_every_source_down_sample_topics_are_offered()

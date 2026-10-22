@@ -13,6 +13,13 @@ public static class Files
     /// </summary>
     public static string ScratchRoot { get; } = Path.Combine(Path.GetTempPath(), "PoAutoRobo");
 
+    /// <summary>
+    /// Links the app shows end up on a button the user clicks. Anything other than a web address (file shares,
+    /// search-ms:, other protocol handlers) could make that click do something on the machine, so it is refused.
+    /// </summary>
+    public static bool IsWebLink(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
+
     /// <summary>Makes sure the folder a file is about to be written into exists.</summary>
     public static void EnsureFolderFor(string filePath) => Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(filePath))!);
 

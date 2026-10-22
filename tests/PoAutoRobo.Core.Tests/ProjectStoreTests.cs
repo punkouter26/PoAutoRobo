@@ -117,6 +117,10 @@ public sealed class ProjectStoreTests : IDisposable
         ], _folder);
 
         Assert.Equal("https://github.com/unitreerobotics/unitree_rl_mjlab", Assert.Single(ProjectStore.LoadSnippets(_folder)).Url);
+        // Source links end up on a button the user clicks, so only web addresses may get through.
+        Assert.True(Files.IsWebLink("http://example.com/r1"));
+        foreach (var url in new[] { "ms-msdt:/id x", "javascript:alert(1)", "file:///C:/Windows/win.ini", "not a url", "" })
+            Assert.False(Files.IsWebLink(url), url);
 
         File.WriteAllText(Path.Combine(_folder, "grounding.json"), "{ not json");
 

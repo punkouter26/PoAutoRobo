@@ -48,7 +48,7 @@ public sealed partial class TrendFeed(FetchText fetch)
     {
         try
         {
-            return [.. ParseHackerNews(await fetch(FrontPage, ct)).Where(c => IsWebLink(c.Url)).Take(MaxCards)];
+            return [.. ParseHackerNews(await fetch(FrontPage, ct)).Where(c => Files.IsWebLink(c.Url)).Take(MaxCards)];
         }
         catch (Exception e) when (IsFeedFailure(e))
         {
@@ -78,7 +78,7 @@ public sealed partial class TrendFeed(FetchText fetch)
         var found = await Task.WhenAll(
             From($"https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=10&srsearch={Uri.EscapeDataString(words)}", ParseWikipedia),
             From($"https://hn.algolia.com/api/v1/search?query={Uri.EscapeDataString(keywords)}&tags=story&hitsPerPage=10", ParseHackerNews));
-        return [.. found.SelectMany(cards => cards).Where(c => IsWebLink(c.Url)).Take(MaxCards)];
+        return [.. found.SelectMany(cards => cards).Where(c => Files.IsWebLink(c.Url)).Take(MaxCards)];
 
         async Task<IReadOnlyList<TopicCard>> From(string url, Func<string, IReadOnlyList<TopicCard>> parse)
         {
@@ -128,20 +128,13 @@ public sealed partial class TrendFeed(FetchText fetch)
 
         var cards = batches.SelectMany(b => b)
             .Where(IsAboutR1)
-            .Where(c => IsWebLink(c.Url)) // the user clicks these: nothing but web links may get through
+            .Where(c => Files.IsWebLink(c.Url)) // the user clicks these: nothing but web links may get through
             .DistinctBy(c => c.Url)
             .OrderByDescending(c => c.Published)
             .Take(MaxCards)
             .ToList();
         return cards.Count > 0 ? cards : Samples;
     }
-
-    /// <summary>
-    /// Feed links end up on a button the user clicks. Anything other than a web address (file shares, search-ms:,
-    /// other protocol handlers) could make that click do something on the machine, so it is refused.
-    /// </summary>
-    public static bool IsWebLink(string url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 
     /// <summary>
     /// True only for the Unitree R1 itself: the card must name both the maker and the model. General humanoid news,
