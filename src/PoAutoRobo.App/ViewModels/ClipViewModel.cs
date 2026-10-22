@@ -13,7 +13,7 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Title), nameof(Heading), nameof(Summary), nameof(Warnings), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(VisualPrompt),
-        nameof(IsStale), nameof(StaleWarning), nameof(LengthWarning), nameof(HasUserVideo), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath), nameof(EarlierTakes), nameof(HasEarlierTakes))]
+        nameof(IsStale), nameof(StaleWarning), nameof(LengthWarning), nameof(HasUserVideo), nameof(OwnSound), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath), nameof(EarlierTakes), nameof(HasEarlierTakes))]
     public partial Clip Clip { get; set; } = clip;
 
     [ObservableProperty]
@@ -67,7 +67,8 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
         {
             var kind = KindChoices.FirstOrDefault(k => k.Value == Clip.Visual.Kind)?.Label ?? "My video";
             var length = Measured is { } real ? $"{real.TotalSeconds:0} s" : $"about {Duration.TotalSeconds:0} s";
-            return $"{Clip.ActiveTier} · {kind} · {length}{(Clip.HostVisible ? "" : " · voice only")}";
+            var sound = Clip.OwnSound ? " · my sound" : Clip.HostVisible ? "" : " · voice only";
+            return $"{Clip.ActiveTier} · {kind} · {length}{sound}";
         }
     }
 
@@ -76,7 +77,8 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
 
     public string StaleWarning => IsStale ? "The picture is out of date." : "";
 
-    public string LengthWarning => Durations.Warning(Clip) ?? "";
+    // A film with its own sound runs as long as the film, whatever its words say.
+    public string LengthWarning => Clip.OwnSound ? "" : Durations.Warning(Clip) ?? "";
 
     public string CheckWarning => string.Join('\n', new[] { Unverified, Review.Length > 0 ? "Editor: " + Review : "" }.Where(line => line.Length > 0));
 
@@ -95,6 +97,9 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
     public string ThumbnailPath => Clip.Picture() ?? "";
 
     public bool HasUserVideo => Clip.Visual.Kind == VisualKind.UserVideo;
+
+    /// <summary>The film plays with its own sound instead of being narrated over.</summary>
+    public bool OwnSound => Clip.OwnSound;
 
     /// <summary>A picture for each earlier take still on disk, with its place among them, for going back to one.</summary>
     public IReadOnlyList<EarlierTake> EarlierTakes =>

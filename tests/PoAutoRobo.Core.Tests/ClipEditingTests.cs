@@ -187,10 +187,17 @@ public sealed class ClipEditingTests
         Assert.Equal(1.05, clip.NarrationRate);
         Assert.Same(_episode.Clips[0], attached.Clips[0]);
 
-        var removed = EpisodeEditor.RemoveVideo(attached, Target.Id).Clips[1];
+        // Its own sound instead: nothing is narrated, so the pace goes back to normal; the words stay as its captions.
+        var own = EpisodeEditor.SetOwnSound(attached, Target.Id, true);
+        Assert.Equal((true, 1.0, "Fitted words."), (own.Clips[1].OwnSound, own.Clips[1].NarrationRate, own.Clips[1].Active.Dialogue));
+        Assert.Same(own, EpisodeEditor.SetOwnSound(own, Target.Id, true)); // already so: nothing to undo
+        Assert.Same(_episode, EpisodeEditor.SetOwnSound(_episode, Target.Id, true)); // a clip with no film has no sound of its own
+
+        var removed = EpisodeEditor.RemoveVideo(own, Target.Id).Clips[1];
 
         Assert.Equal(new VisualSpec(VisualKind.TitleCard), removed.Visual);
         Assert.Equal(1.0, removed.NarrationRate);
+        Assert.False(removed.OwnSound); // no film, so narrated again
         Assert.Equal("Fitted words.", removed.Active.Dialogue); // the words stay; only the picture and pace reset
     }
 }

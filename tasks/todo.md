@@ -20,7 +20,7 @@ Unit tests stay at or under 100. The count after each task is shown where it cha
 
 ## D. My sound
 - [x] **T10 Footage sound replaces narration for own-sound clips.** Check: argument snapshot plus spreading; integration: master audio comes from the footage, no narrator call; **97**.
-- [ ] **T11 Sound switch per clip in the inspector and on the card.** Check: in the app; switching runs or skips the fit; undo restores it.
+- [x] **T11 Sound switch per clip in the inspector and on the card.** Check: in the app; switching runs or skips the fit; undo restores it.
 
 ## E. Brand
 - [ ] **T13 Intro and outro FFmpeg arguments.** Check: snapshot with and without logo, mascot and sting; **98**.

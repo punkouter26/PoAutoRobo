@@ -114,7 +114,17 @@ public static class EpisodeEditor
         });
 
     public static Episode RemoveVideo(Episode episode, Guid clipId) =>
-        Update(episode, clipId, c => c with { NarrationRate = 1.0, Visual = new VisualSpec(VisualKind.TitleCard) });
+        Update(episode, clipId, c => c with { NarrationRate = 1.0, OwnSound = false, Visual = new VisualSpec(VisualKind.TitleCard) });
+
+    /// <summary>
+    /// Plays the clip's film with its own sound, or narrates over it again. Only a clip with a film has a sound of its
+    /// own. Its words stay either way: over its own sound they are its captions. Narrating again needs the words
+    /// fitted to the film, which is the caller's to do (<see cref="AttachVideo"/> with the fitted words).
+    /// </summary>
+    public static Episode SetOwnSound(Episode episode, Guid clipId, bool ownSound) =>
+        episode.Clips.FirstOrDefault(c => c.Id == clipId) is { Visual.UserVideoPath: not null } clip && clip.OwnSound != ownSound
+            ? Update(episode, clipId, c => c with { OwnSound = ownSound, NarrationRate = 1.0 })
+            : episode;
 
     // Attaches finished pictures to the clip they were drawn for, as that clip is now. Drawing takes a while, so the
     // clip may have moved on: footage or a different picture type wins and the pictures are dropped; changed words

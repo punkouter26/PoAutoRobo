@@ -272,7 +272,10 @@ public partial class MainViewModel
 
     /// <summary>What is wrong with the words as typed, shown under the box while typing; empty when they are fine.</summary>
     public string DraftProblem =>
-        !HasSelection ? "" : DraftDialogue.Trim().Length == 0 ? "Dialogue cannot be empty. The clip keeps its last words." : Durations.Warning(DraftDialogue) ?? "";
+        !HasSelection ? ""
+        // Over its own sound the words are only captions: none is fine, and the film decides the length.
+        : SelectedClip!.OwnSound ? (DraftDialogue.Trim().Length == 0 ? "No words: the film plays with its own sound and no captions." : "")
+        : DraftDialogue.Trim().Length == 0 ? "Dialogue cannot be empty. The clip keeps its last words." : Durations.Warning(DraftDialogue) ?? "";
 
     partial void OnSelectedClipChanged(ClipViewModel? value) => DraftDialogue = value?.Dialogue ?? "";
 
@@ -290,8 +293,8 @@ public partial class MainViewModel
 
     private Task ApplyDialogueToAsync(ClipViewModel clip, string draft, CancellationToken ct) => Guard(async () =>
     {
-        // Empty words are not applied; the box says so underneath.
-        if (Episode is null || EpisodeFolder is not { } folder || draft.Trim().Length == 0 || draft.Trim() == clip.Dialogue) return;
+        // Empty words are not applied, except as the captions of a film with its own sound; the box says so underneath.
+        if (Episode is null || EpisodeFolder is not { } folder || (draft.Trim().Length == 0 && !clip.OwnSound) || draft.Trim() == clip.Dialogue) return;
         var updated = await EpisodeEditor.EditDialogueAsync(Episode, clip.Id, draft, _scriptWriter, ct);
         // The drift check above can take a moment; apply only this clip so edits made meanwhile are kept.
         var changed = updated.Clips.First(c => c.Id == clip.Id);
@@ -415,8 +418,42 @@ public partial class MainViewModel
             }
             var (copy, fit) = await ImportFootageAsync(clip, note.Path, note.Length, folder, ct);
             episode = EpisodeEditor.AttachVideo(EpisodeEditor.ReplaceClip(episode, clip), clip.Id, copy, fit);
+            if (clip.OwnSound) // its sound is taken now, which is free, so the cards and running time show the real length
+                await _builder.NarrateClipAsync(episode.Clips.First(c => c.Id == clip.Id), folder, ct);
         }
         return episode;
+    }
+
+    /// <summary>
+    /// Plays the selected clip's film with its own sound, or narrates over it again. Its own sound is taken at once
+    /// and costs nothing; narrating again rewrites the words to the film's length and records them.
+    /// </summary>
+    [RelayCommand]
+    private Task SetOwnSoundAsync(bool ownSound)
+    {
+        if (Episode is null || EpisodeFolder is not { } folder || SelectedClip is not { HasUserVideo: true } card || card.OwnSound == ownSound)
+            return Task.CompletedTask;
+        if (ownSound)
+            return Guard(async () =>
+            {
+                Edit(e => EpisodeEditor.SetOwnSound(e, card.Id, true));
+                await _builder.NarrateClipAsync(card.Clip, folder, CancellationToken.None); // measured, so the running time is right
+                SyncCards();
+            });
+        return RunActivityAsync("Fitting the narration to your video", async ct =>
+        {
+            var film = card.Clip.Visual.UserVideoPath!;
+            var length = await _builder.ProbeDurationAsync(film, ct);
+            if (length < Conformance.MinFootage)
+                throw new InvalidOperationException("This film is under 5 seconds, too short to narrate over, so it keeps its own sound.");
+            // Words to fit from: the captions typed for it, else what the film shows, else its title. Fitting
+            // scales the words it starts with, so it must start with some.
+            var clip = card.Clip with { OwnSound = false };
+            var seed = new[] { clip.Active.Dialogue, clip.Active.VisualPrompt, clip.Title }.FirstOrDefault(t => t.Trim().Length > 0) ?? "Your footage";
+            clip = EpisodeEditor.WithDialogue(clip, seed);
+            var (copy, fit) = await ImportFootageAsync(clip, film, length, folder, ct);
+            Edit(e => EpisodeEditor.AttachVideo(EpisodeEditor.SetOwnSound(e, card.Id, false), card.Id, copy, fit));
+        });
     }
 
     [RelayCommand]

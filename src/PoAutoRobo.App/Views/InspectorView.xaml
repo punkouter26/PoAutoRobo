@@ -146,6 +146,9 @@
                 <Button x:Name="VideoDrop" HorizontalAlignment="Stretch" MinHeight="64" AllowDrop="True" DragOver="OnVideoDragOver" Drop="OnVideoDrop" Click="OnPickVideo"
                         Content="{x:Bind local:InspectorView.FootageLabel(ViewModel.SelectedClip.HasUserVideo), Mode=OneWay}"
                         ToolTipService.ToolTip="Use your own footage for this clip (5 seconds to 2 minutes): drop a video here, or click to choose one. The dialogue is rewritten and re-voiced to match its length." />
+                <ToggleSwitch x:Name="OwnSoundSwitch" Header="Sound" OnContent="My sound: the film plays with its own sound" OffContent="Narrate: the narrator speaks over the film"
+                              IsOn="{x:Bind ViewModel.SelectedClip.OwnSound, Mode=OneWay}" Toggled="OnOwnSoundToggled" Visibility="{x:Bind ViewModel.SelectedClip.HasUserVideo, Mode=OneWay}"
+                              ToolTipService.ToolTip="My sound keeps what the camera heard; any words in the box above become its captions. Narrate rewrites the words to fit the film and records them, which takes a moment." />
                 <Button x:Name="RemoveVideoButton" Content="Use a generated picture instead" HorizontalAlignment="Stretch" MinHeight="44" Command="{x:Bind ViewModel.RemoveVideoCommand}"
                         Visibility="{x:Bind ViewModel.SelectedClip.HasUserVideo, Mode=OneWay}" />
             </StackPanel>
