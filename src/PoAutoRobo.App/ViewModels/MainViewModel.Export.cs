@@ -114,7 +114,7 @@ public partial class MainViewModel
         try
         {
             ReportActivity("Writing the title, description and tags to upload with it", 1);
-            var notes = await _scriptWriter.WritePublishNotesAsync(episode, ct);
+            var notes = (await _scriptWriter.WritePublishNotesAsync(episode, ct)).InSeries(_kit.ChannelName, episode.Number);
             await File.WriteAllTextAsync(Path.ChangeExtension(video, ".description.txt"), PublishPack.Description(notes), ct);
             withNotes = ", subtitles, thumbnail and upload description";
         }

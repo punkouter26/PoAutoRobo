@@ -111,8 +111,11 @@ public sealed class ScriptRulesTests
     private void An_episode_runs_for_the_sum_of_its_active_tiers_and_is_flagged_under_three_minutes()
     {
         Assert.Equal(TimeSpan.FromSeconds(60 + 20), Durations.Total(EpisodeOf(165, 55)));
-        Assert.True(Durations.IsShort(Durations.Total(EpisodeOf(165, 165, 164))));   // 2:59.6
-        Assert.False(Durations.IsShort(Durations.Total(EpisodeOf(165, 165, 165))));  // 3:00.0: flagged only, never blocked
+        Assert.Equal("shorter than the 3 minute target", Durations.RuntimeWarning(Durations.Total(EpisodeOf(165, 165, 164))));   // 2:59.6
+        Assert.Null(Durations.RuntimeWarning(Durations.Total(EpisodeOf(165, 165, 165))));  // 3:00.0: flagged only, never blocked
+        // The series runs three to five minutes; longer is flagged too.
+        Assert.Null(Durations.RuntimeWarning(TimeSpan.FromMinutes(5)));
+        Assert.Equal("longer than the 5 minute target", Durations.RuntimeWarning(TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(0.4)));
     }
 
     [Fact]

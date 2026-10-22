@@ -22,6 +22,12 @@ public sealed class PublishPackTests
         // The upload details are laid out to copy from, a part at a time.
         var notes = PublishPack.Description(new PublishNotes(["One", "Two"], "About it.", ["robots", "balance"], ["#r1"]));
         Assert.Equal("TITLES\nOne\nTwo\n\nDESCRIPTION\nAbout it.\n\n#r1\n\nTAGS\nrobots, balance\n", notes);
+
+        // Every title carries the series' name and the episode's number, so the uploads read as one series.
+        var suggested = new PublishNotes(["Walking up stairs", "Teaching the R1 #7: Stairs at last"], "", [], []);
+        Assert.Equal(["Teaching the R1 #7: Walking up stairs", "Teaching the R1 #7: Stairs at last"], suggested.InSeries("Teaching the R1", 7).Titles);
+        Assert.Equal(["Teaching the R1: Walking up stairs", "Teaching the R1 #7: Stairs at last"], suggested.InSeries("Teaching the R1", 0).Titles); // unnumbered
+        Assert.Same(suggested, suggested.InSeries(" ", 7)); // no channel name: the titles stand as written
     }
 
     private void Subtitles_are_numbered_plain_lines_timed_on_the_episode_clock_with_formatting_codes_removed()

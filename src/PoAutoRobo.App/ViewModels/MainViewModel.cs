@@ -395,7 +395,7 @@ public partial class MainViewModel : ObservableObject
         return string.Join(" · ", new[]
         {
             Episode.Clips.Count == 1 ? "1 clip" : $"{Episode.Clips.Count} clips",
-            Durations.IsShort(total) ? $"runtime {total:m\\:ss}, shorter than the 3 minute target" : $"runtime {total:m\\:ss}",
+            Durations.RuntimeWarning(total) is { } off ? $"runtime {total:m\\:ss}, {off}" : $"runtime {total:m\\:ss}",
             spent >= 0.005 ? $"spent about {SpendLog.Money((decimal)spent)}" : "",
             _usage,
         }.Where(part => part.Length > 0));
