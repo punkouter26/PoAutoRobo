@@ -26,7 +26,7 @@ Unit tests stay at or under 100. The count after each task is shown where it cha
 - [x] **T13 Intro and outro FFmpeg arguments.** Check: snapshot with and without logo, mascot and sting; **98**.
 - [x] **T12 Series dialog and "Use series look".** *(concept 5: dialog + intro preview; built after T13)* Check: in the app, the kit survives a restart and the files are copied into `series\`.
 - [x] **T14 Intro and outro in the master; the first chapter starts at 0:00 and takes in the intro.** Check: integration length = 5 s + clips + outro ±0.2; export with no kit still works.
-- [ ] **T15 Section straps.** Check: caption snapshot gains the strap event (diff read).
+- [x] **T15 Section straps.** Check: caption snapshot gains the strap event (diff read).
 
 ## F. Teasers
 - [ ] **T16 `Teasers.Fit` and `Teasers.ByRule`.** Check: every kept teaser is 10 s ±0.5 inside real clip lengths, hook ≤ 8 words; **99**.

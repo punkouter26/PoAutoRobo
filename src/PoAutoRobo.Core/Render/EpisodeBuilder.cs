@@ -254,7 +254,10 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
                 if (captions is not null)
                 {
                     captionFile = $"captions_{i:00}.ass"; // timed from the start of this clip
-                    var text = AssCaptions.Build([new CaptionSegment(TimeSpan.Zero, narrations[i].Words)], captions, preset.Portrait);
+                    // The first clip of each beat names it with a strap, so the viewer sees where the episode has got to.
+                    // ponytail: burned in with the captions, so the preview (captions drawn live) shows none; draw it there too if it is missed.
+                    var strap = clip.Beat is { } beat && (i == 0 || episode.Clips[i - 1].Beat != beat) ? beat : null;
+                    var text = AssCaptions.Build([new CaptionSegment(TimeSpan.Zero, narrations[i].Words)], captions, preset.Portrait, strap);
                     await File.WriteAllTextAsync(Path.Combine(work, captionFile), text, token);
                     made.Add(text);
                 }

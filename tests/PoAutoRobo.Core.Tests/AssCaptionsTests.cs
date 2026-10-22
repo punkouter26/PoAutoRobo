@@ -34,8 +34,9 @@ public sealed class AssCaptionsTests
         await Preset_snapshotCase(CaptionPreset.ComicBanner);
     }
 
+    // The banner preset also carries a section strap, as the first clip of a beat does: the beat's name, for a moment.
     private Task Preset_snapshotCase(CaptionPreset preset) =>
-        Verify(AssCaptions.Build(TwoClips, new CaptionStyle(preset))).UseTextForParameters($"preset={preset}");
+        Verify(AssCaptions.Build(TwoClips, new CaptionStyle(preset), strap: preset == CaptionPreset.ComicBanner ? "Next time" : null)).UseTextForParameters($"preset={preset}");
 
     [Fact]
     public void Every_preset_shows_each_caption_exactly_when_its_first_word_is_spoken_and_never_across_two_clips()

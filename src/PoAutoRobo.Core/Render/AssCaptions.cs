@@ -65,8 +65,12 @@ public static partial class AssCaptions
     public const int PopMilliseconds = 80;
     public const int PopPercent = 112;
 
+    /// <summary>How long a section strap stays on screen at the start of its beat.</summary>
+    public static readonly TimeSpan StrapLength = TimeSpan.FromSeconds(2.5);
+
     /// <param name="portrait">An upright frame: captions wrap to fit its narrow width.</param>
-    public static string Build(IEnumerable<CaptionSegment> segments, CaptionStyle style, bool portrait = false)
+    /// <param name="strap">A beat's name, shown top left in the accent colour as the clip starts; null for none.</param>
+    public static string Build(IEnumerable<CaptionSegment> segments, CaptionStyle style, bool portrait = false, string? strap = null)
     {
         var accent = AssColour(style.AccentColor);
         var look = LookFor(style);
@@ -81,10 +85,15 @@ public static partial class AssCaptions
             .AppendLine()
             .AppendLine("[V4+ Styles]")
             .AppendLine("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding")
-            .AppendLine($"Style: Default,{look.Font},{look.FontSize},{text},{text},{box},{box},-1,0,0,0,100,100,0,0,{(look.Boxed ? 3 : 1)},{look.Outline},0,2,80,80,90,1")
-            .AppendLine()
+            .AppendLine($"Style: Default,{look.Font},{look.FontSize},{text},{text},{box},{box},-1,0,0,0,100,100,0,0,{(look.Boxed ? 3 : 1)},{look.Outline},0,2,80,80,90,1");
+        var name = strap is null ? "" : Clean(strap).Trim();
+        if (name.Length > 0) // the strap: dark capitals on a box of the accent colour, top left, clear of the captions at the bottom
+            ass.AppendLine($"Style: Strap,{look.Font},{(portrait ? 52 : 44)},{Black},{Black},{accent},{accent},-1,0,0,0,100,100,2,0,3,14,0,7,80,80,80,1");
+        ass.AppendLine()
             .AppendLine("[Events]")
             .AppendLine("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text");
+        if (name.Length > 0)
+            ass.AppendLine($"Dialogue: 1,{Time(TimeSpan.Zero)},{Time(StrapLength)},Strap,,0,0,0,,{{\\fad(200,300)}}{name.ToUpperInvariant()}");
 
         foreach (var cue in Cues(segments, style))
         {
