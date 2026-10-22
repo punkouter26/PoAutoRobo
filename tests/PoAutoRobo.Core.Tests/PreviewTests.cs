@@ -42,7 +42,7 @@ public sealed class PreviewTests : IDisposable
         var builder = new EpisodeBuilder(new MockNarrator(), new FfmpegRunner(FfmpegRunner.Locate()!));
         Assert.DoesNotContain(music, builder.UnusedMedia(episode, _folder)); // tidying up leaves the music alone
 
-        var preview = await builder.PreviewAsync(episode, _folder, null, default);
+        var preview = await builder.PreviewAsync(episode, _folder, null, null, default);
 
         Assert.True(File.Exists(preview.VideoPath));
         Assert.EndsWith("preview.mp4", preview.VideoPath);

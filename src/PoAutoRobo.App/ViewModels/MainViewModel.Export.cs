@@ -90,7 +90,7 @@ public partial class MainViewModel
         ReleasePreview();
         Preview = null;
         var (episode, folder, progress) = (Episode!, EpisodeFolder!, RenderProgress());
-        Preview = await Task.Run(() => _builder.PreviewAsync(episode, folder, progress, ct), ct);
+        Preview = await Task.Run(() => _builder.PreviewAsync(episode, folder, SeriesBrand, progress, ct), ct);
         SyncCards(); // every clip has now been recorded
     }, "Preview ready.");
 
@@ -105,7 +105,7 @@ public partial class MainViewModel
     private async Task RenderMasterAsync(ExportPreset preset, CancellationToken ct)
     {
         var (episode, folder, captions, progress) = (Episode!, EpisodeFolder!, Captions, RenderProgress());
-        var video = await Task.Run(() => _builder.ExportAsync(episode, folder, preset, captions, progress, ct), ct);
+        var video = await Task.Run(() => _builder.ExportAsync(episode, folder, preset, captions, SeriesBrand, progress, ct), ct);
         LastExport = video;
         SyncCards();
 
@@ -122,7 +122,8 @@ public partial class MainViewModel
         {
             ErrorMessage = "The video is finished, but its upload description could not be written. " + Plain(e);
         }
-        StatusMessage = $"Saved {Path.GetFileName(video)}, with its chapter list{withNotes} beside it.";
+        var bookends = _kit.ChannelName.Trim().Length > 0 ? "" : " It has no intro or outro: give the channel a name under Series to add them.";
+        StatusMessage = $"Saved {Path.GetFileName(video)}, with its chapter list{withNotes} beside it.{bookends}";
     }
 
     /// <summary>One upright video per clip, for phone-first video sites. Each clip already stands on its own.</summary>

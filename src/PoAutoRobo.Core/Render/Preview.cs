@@ -5,7 +5,8 @@ namespace PoAutoRobo.Core.Render;
 public sealed record Preview(string VideoPath, IReadOnlyList<CaptionSegment> Segments, IReadOnlyList<ClipMark> Marks);
 
 /// <summary>One clip's place on the finished timeline.</summary>
-public sealed record ClipMark(string Title, TimeSpan Start, string AudioPath);
+/// <param name="Bookend">The series intro or outro, not one of the episode's clips.</param>
+public sealed record ClipMark(string Title, TimeSpan Start, string AudioPath, bool Bookend = false);
 
 /// <summary>Where a render has got to: what it is doing in plain words, and how far through the whole job it is (0 to 1).</summary>
 /// <param name="Clips">How far each clip's picture has got (0 to 1), in running order; null outside the drawing stage.</param>

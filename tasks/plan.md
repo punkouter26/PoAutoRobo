@@ -17,7 +17,8 @@ makes one short per clip. Approved 2026-10-22. The ordered list of tasks with th
 2. **The intro and outro are slots at the ends of the timeline.** They are encoded with exactly the same settings
    (`FfmpegArgs.Encode`: libx264 veryfast crf 18, `-video_track_timescale 90000`), so the copy-join still works. Each
    gets its own WAV (the music sting padded or cut to the slot, or silence), which goes into `Join`'s audios. The
-   chapter list then begins with "0:00 Intro", which YouTube requires. Clip encodes are cached through `MediaCache` as
+   intro is not a chapter of its own: YouTube hides chapters when any is under ten seconds, so the first clip's chapter
+   starts at 0:00 and takes it in. Clip encodes are cached through `MediaCache` as
    today.
 3. **Section straps are a second ASS style** (`Strap`, accent box, top-left, Layer 1), added only to the per-clip
    captions file of the first clip in each beat (`AssCaptions.Build`).
@@ -72,7 +73,7 @@ Each task touches at most 5 source files, not counting tests. Where a task goes 
 **E. Brand**
 - **T12 Series dialog.** Channel name and tagline; logo, sting and music pickers (copied in); mascot from the host design (`AppPaths.HostSheet`) or a PNG; look, caption preset and accent; outro length. "Use series look" in the menu. *Files:* SeriesDialog.xaml(.cs) (new), MainViewModel.Series.cs (new), AppPaths.cs, MainWindow.xaml(.cs). *Check:* in the app; changes survive a restart.
 - **T13 Intro and outro arguments.** `FfmpegArgs.Intro(...)` (accent gradient from `color`/`gradients`, logo and mascot overlays fading in, `drawtext` from text files with `title-font.ttf`) and `Outro(...)`, plus `FfmpegArgs.SlotSound(sting?, length)`. *Files:* FfmpegArgs.cs. *Test (1):* snapshot of both, with and without the optional parts.
-- **T14 Intro and outro in the master and preview.** `RenderAsync` takes optional bookends; chapters start with "0:00 Intro"; `ClipMark` for each end; the master is named `NN-slug-1080p30.mp4`. *Files:* EpisodeBuilder.cs, PublishPack.cs, MainViewModel.Export.cs. *Integration:* `EndToEndTests` checks the length = intro 5 s + clips + outro (±0.2) and the chapter "0:00 Intro". Exporting with no brand kit still works.
+- **T14 Intro and outro in the master and preview.** `RenderAsync` takes optional bookends; the first chapter starts at 0:00 and takes in the intro; `ClipMark` for each end; the master is named `NN-slug-1080p30.mp4`. *Files:* EpisodeBuilder.cs, PublishPack.cs, MainViewModel.Export.cs. *Integration:* `EndToEndTests` checks the length = intro 5 s + clips + outro (±0.2) and the first chapter at 0:00. Exporting with no brand kit still works.
 - **T15 Section straps.** `AssCaptions.Build(..., strap)` plus the builder adds the beat name to the first clip of each beat. *Files:* AssCaptions.cs, EpisodeBuilder.cs. *Test:* the existing caption snapshot gains a strap event (diff read).
 
 **F. Teasers**
@@ -104,7 +105,7 @@ testing), `dotnet-counters` (render memory). **Recommended: nothing new for this
 3. Intro text with `drawtext=textfile=...:expansion=none` (as title cards do today), with `alpha` fading in by time.
 4. Logo fading in → `[logo]format=rgba,fade=in:st=0.3:d=0.6:alpha=1[l];[bg][l]overlay=...`.
 5. Strap as an ASS `Style: Strap` + `Dialogue: 1,...` inside the clip's existing captions file.
-6. YouTube chapters starting with "0:00 Intro" (required for chapters to show).
+6. YouTube chapters: the first at 0:00, none under ten seconds, so the intro joins the first clip's chapter.
 7. A sting padded to the slot → `apad,atrim=0:5`.
 8. A pure `BeatPlan.Repair` keeping the model's footage placement honest, like `VisualMix.Settle` does for kinds.
 9. The brand kit applied by one `Edit(e => EpisodeEditor.UseSeriesLook(e, kit, music))` for a one-step undo.

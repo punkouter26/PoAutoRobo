@@ -84,7 +84,7 @@ public sealed class HardTopicTests(ITestOutputHelper output)
         // ---- 3. The voice and the video ----
         ProjectStore.Save(episode, folder);
         var builder = new EpisodeBuilder(new AzureNarrator(settings), new FfmpegRunner(FfmpegRunner.Locate()!)) { ClipCacheFolder = Path.Combine(folder, "clips") };
-        var video = await builder.ExportAsync(episode, folder, ExportPreset.Hd30, episode.Captions, null, Ct);
+        var video = await builder.ExportAsync(episode, folder, ExportPreset.Hd30, episode.Captions, null, null, Ct);
         Say($"VIDEO     {video}");
 
         Assert.True(new FileInfo(video).Length > 0);

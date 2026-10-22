@@ -207,13 +207,15 @@ public sealed partial class TimelineView : UserControl
         }
 
         using var format = new CanvasTextFormat { FontSize = 11, WordWrapping = CanvasWordWrapping.NoWrap, TrimmingGranularity = CanvasTextTrimmingGranularity.Character };
+        var number = 0; // clips are numbered as on their cards; the intro and outro are named only
         for (var i = 0; i < _marks.Count; i++)
         {
             var x = (float)(_marks[i].Start / _length) * width;
             var next = i + 1 < _marks.Count ? (float)(_marks[i + 1].Start / _length) * width : width;
+            var label = _marks[i].Bookend ? _marks[i].Title : $"{++number} · {_marks[i].Title}";
             session.DrawLine(x, 0, x, height, ink, 1);
             if (next - x > 24)
-                session.DrawText($"{i + 1} · {_marks[i].Title}", new Rect(x + 4, 0, next - x - 8, TitleRoom), ink, format);
+                session.DrawText(label, new Rect(x + 4, 0, next - x - 8, TitleRoom), ink, format);
         }
         session.DrawLine(played, 0, played, height, accent, 2);
     }

@@ -267,7 +267,7 @@ public sealed class VisualKindsTests : IDisposable
         };
         var builder = new EpisodeBuilder(new MockNarrator(), Ffmpeg) { ClipCacheFolder = Path.Combine(_folder, "clips") };
 
-        var output = await builder.ExportAsync(episode, _folder, new ExportPreset(640, 360, 30), new CaptionStyle(), null, default);
+        var output = await builder.ExportAsync(episode, _folder, new ExportPreset(640, 360, 30), new CaptionStyle(), null, null, default);
 
         var narration = await builder.NarrateAsync(episode, _folder, default);
         var expected = FfmpegArgs.Timeline([.. narration.Select(n => n.Duration)])[^1] is var last ? last.Start + last.VideoLength : default;

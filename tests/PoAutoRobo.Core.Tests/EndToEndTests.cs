@@ -65,7 +65,7 @@ public sealed class EndToEndTests : IDisposable
         Assert.True(new FileInfo(poster).Length > 0);
         Assert.DoesNotContain(poster, Builder.UnusedMedia(episode, _folder)); // tidying up never takes it away
 
-        var output = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), new Relay<RenderProgress>(progress.Add), default);
+        var output = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), null, new Relay<RenderProgress>(progress.Add), default);
 
         var probe = await Ffmpeg.ProbeAsync(["-v", "error", "-show_entries", "stream=codec_name,width,height,r_frame_rate:format=duration", "-of", "default=nw=1", output], default);
         Assert.Contains("codec_name=h264", probe);
@@ -104,6 +104,33 @@ public sealed class EndToEndTests : IDisposable
     }
 
     [FfmpegFact]
+    public async Task The_series_intro_and_outro_open_and_close_the_export_and_the_chapters_still_start_at_nought()
+    {
+        var episode = await ThreeClipEpisodeAsync() with { Number = 7 };
+        var kitFolder = Directory.CreateDirectory(Path.Combine(_folder, "series")).FullName;
+        var brand = new Brand(new SeriesKit { ChannelName = "Teaching the R1", OutroSeconds = 6 }, kitFolder);
+
+        var output = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), brand, null, default);
+
+        Assert.StartsWith("07-", Path.GetFileName(output)); // sorts with the series
+        var narration = await Builder.NarrateAsync(episode, _folder, default);
+        var slots = FfmpegArgs.Timeline([EpisodeBuilder.IntroLength, .. narration.Select(n => n.Duration), TimeSpan.FromSeconds(6)]);
+        var expected = slots[^1].Start + slots[^1].VideoLength;
+        Assert.InRange(await Ffmpeg.ProbeDurationAsync(output, default), expected - TimeSpan.FromSeconds(0.2), expected + TimeSpan.FromSeconds(0.2));
+        // YouTube shows chapters only when the first is at 0:00 and none is under ten seconds, so the intro joins the first clip's.
+        var chapters = File.ReadAllLines(Path.ChangeExtension(output, null) + ".chapters.txt");
+        Assert.Equal($"0:00 {episode.Clips[0].Title}", chapters[0]);
+        Assert.Equal(episode.Clips.Count, chapters.Length);
+        // The captions are where the clips are: after the intro.
+        Assert.StartsWith($"1\n00:00:0{(int)slots[1].Start.TotalSeconds},", File.ReadAllText(Path.ChangeExtension(output, null) + ".srt"));
+
+        // Without a channel name there is nothing to put in an intro, so the episode is exported without one.
+        var plain = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), brand with { Kit = new SeriesKit() }, null, default);
+        var bare = FfmpegArgs.Timeline([.. narration.Select(n => n.Duration)])[^1];
+        Assert.InRange(await Ffmpeg.ProbeDurationAsync(plain, default), bare.Start + bare.VideoLength - TimeSpan.FromSeconds(0.2), bare.Start + bare.VideoLength + TimeSpan.FromSeconds(0.2));
+    }
+
+    [FfmpegFact]
     public async Task A_film_that_keeps_its_own_sound_is_heard_in_the_export_and_no_voice_is_recorded_for_it()
     {
         // A film whose sound stops a second before its picture, and one with no sound track at all.
@@ -129,7 +156,7 @@ public sealed class EndToEndTests : IDisposable
         Assert.Equal(["It", "falls", "over"], sound[0].Words.Select(w => w.Text)); // what was typed becomes its captions
         Assert.Empty(sound[1].Words);
 
-        var output = await builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), null, default);
+        var output = await builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), null, null, default);
         // The film's own tone is heard: silence would measure about -70. (Five seconds of tone and gaps is too short
         // for the leveller to land exactly on -16, so only "heard" is asked here; the long export test checks the level.)
         Assert.InRange(await Ffmpeg.MeasureLoudnessAsync(output, default), -25.0, -10.0);
@@ -143,7 +170,7 @@ public sealed class EndToEndTests : IDisposable
             return;
         var episode = await new MockScriptWriter().WriteEpisodeAsync(Lesson.Of("Balancing the R1"), [], EpisodeLength.Standard, default);
 
-        var output = await Builder.ExportAsync(episode, _folder, ExportPreset.Hd30, new CaptionStyle(), null, default);
+        var output = await Builder.ExportAsync(episode, _folder, ExportPreset.Hd30, new CaptionStyle(), null, null, default);
 
         File.Copy(output, keep, overwrite: true);
     }
@@ -173,7 +200,7 @@ public sealed class EndToEndTests : IDisposable
         cts.CancelAfter(TimeSpan.FromMilliseconds(150));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            Builder.ExportAsync(episode, _folder, ExportPreset.Uhd60, new CaptionStyle(), null, cts.Token));
+            Builder.ExportAsync(episode, _folder, ExportPreset.Uhd60, new CaptionStyle(), null, null, cts.Token));
 
         Assert.Empty(Directory.Exists(Path.Combine(_folder, "export")) ? Directory.GetFiles(Path.Combine(_folder, "export"), "*", SearchOption.AllDirectories) : []);
     }
