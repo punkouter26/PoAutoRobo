@@ -36,7 +36,7 @@ Unit tests stay at or under 100. The count after each task is shown where it cha
 
 ## G. Finish
 - [x] **T20 Warning outside 3–5 minutes; titles start "<channel> #N".** Check: done in code, not in the prompt, so every title is sure to carry it (`PublishNotes.InSeries`); runtime and title rules asserted in the existing tests.
-- [ ] **T21 Bring `CLAUDE.md`, `SPEC.md` and this file up to date.** Check: `dotnet format --verify-no-changes`, unit and integration suites green.
+- [x] **T21 Bring `CLAUDE.md`, `SPEC.md` and this file up to date.** Check: `dotnet format --verify-no-changes`, unit and integration suites green.
 
 ## Deferred (from SPEC open questions)
 - Automatic captions for own-sound clips (speech-to-text).

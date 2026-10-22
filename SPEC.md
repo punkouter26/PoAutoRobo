@@ -1,6 +1,6 @@
 # PoAutoRobo: Teaching the R1, the series studio
 
-Status: **Draft for approval** · Last updated: 2026-10-22
+Status: **Built** (tasks T1–T21 in `tasks/todo.md`) · Last updated: 2026-10-22
 
 ## 1. Objective
 
@@ -111,13 +111,13 @@ On disk:
 
 ```
 %LOCALAPPDATA%\PoAutoRobo\
-  series\series.json        channel name, tagline, look, caption style, outro length, next episode number
+  series\series.json        channel name, tagline, look, caption style, outro length (episode numbers come from the library)
   series\logo.png, sting.*, music.*, mascot.png    copies of the owner's files (never the original paths)
   host\                     the mascot's design sheet (as today)
 Documents\PoAutoRobo\<NN-episode-slug>\
   episode.json, grounding.json, spend.jsonl, audio\, images\, video\, imports\
-  export\<slug>.mp4 + .chapters.txt + .srt + .thumbnail.png + .description.txt
-  export\teasers\<slug>-teaser-<n>.mp4
+  export\NN-<slug>-1080p30.mp4 + .chapters.txt + .srt + .thumbnail.png + .description.txt
+  export\teasers\NN-<slug>-teaser-<n>.mp4
 ```
 
 ### Capability map
@@ -165,7 +165,7 @@ subject field is simply no longer read, and the script is not rewritten. (No not
 2026-10-22: noticing would mean keeping the removed subjects in the code.)
 
 **Beat structures.** Picked when the episode is created and saved with it. Each beat has a name (shown as the section
-strap and the chapter title prefix), a clip range, and a hint whether real footage belongs there:
+strap), a clip range, and a hint whether real footage belongs there:
 
 | Structure | Beats (footage-first beats marked ●) |
 |---|---|
@@ -200,8 +200,12 @@ into it.
 script's last beat when there is one), with two empty areas left where YouTube end-screen cards go. The music bed
 continues under it.
 
-**Section straps.** At the first clip of each beat, the beat name shows as a lower-third strap for 2.5 s, in the series
-accent colour, above the captions.
+**Section straps.** At the first clip of each beat, the beat name shows as a strap for 2.5 s, top left, in the
+accent colour, clear of the captions. It is burned in with the captions, so the draft preview (captions drawn live)
+does not show it.
+
+**Chapters.** One per clip. YouTube shows chapters only when the first starts at 0:00 and none is under ten seconds,
+so the intro and outro are not chapters of their own: the first clip's chapter starts at 0:00 and takes in the intro.
 
 **Episode number.** Next = highest number in the library + 1 (1 for the first), editable at creation, saved in
 `episode.json`, used in the intro, the folder name (`07-walking-on-stairs`) and the suggested titles.
@@ -270,7 +274,7 @@ call a paid endpoint without an action by the owner; loosen `SceneRenderer`'s lo
 
 | Situation | Behaviour |
 |---|---|
-| No brand kit yet | The first export asks for at least a channel name. Without one, export goes ahead with no intro or outro and says so. |
+| No brand kit yet | Without a channel name, export goes ahead with no intro or outro, and the message says how to add them. |
 | Logo, sting or music file missing from the series folder | That part is left out, and a one-line notice names it |
 | Footage unreadable, or shorter than 2 s or longer than 120 s | Rejected at intake with a plain message |
 | "Narrate over it" footage outside 5–120 s | As today: rejected for fitting; switch to "My sound" offered |
@@ -315,5 +319,7 @@ call a paid endpoint without an action by the owner; loosen `SceneRenderer`'s lo
    (paid, confirmed)? Default: plain accent colour with a soft gradient, built by FFmpeg.
 3. **Teaser framing.** A blurred, enlarged copy behind the 16:9 picture is the default. A centre crop to 9:16 would fill
    the screen but can cut the robot out. Worth a per-teaser switch later.
-4. **Episode titles.** Should the title format be fixed ("Teaching the R1 #7: …") or left to the suggested titles?
-   Default: the suggestions start with the series name and number.
+4. ~~**Episode titles.**~~ Resolved 2026-10-22: every suggested title starts "<channel> #N: ", added in code
+   (`PublishNotes.InSeries`) so it is always there.
+5. **Teaser card playback.** The cards show a picture, not a playing draft; the rendered teasers are checked in the
+   export folder. A ▶ on each card would need a draft render per card.

@@ -1,8 +1,10 @@
 # PoAutoRobo
 
-A Windows desktop app that turns a topic into a narrated, captioned explainer video: it writes a script, records the
-voice, makes a picture for each clip and renders the result with FFmpeg. **WinUI 3, unpackaged, .NET 10. Not Blazor and
-not a web app:** there are no routes, components or browser APIs here.
+A Windows desktop app for one YouTube series: its owner teaching a Unitree R1 one skill per episode. From the lesson
+and the owner's own films it writes a script in fixed beats, records the voice (or keeps a film's own sound), makes a
+picture for each other clip, wraps the episode in the series' intro and outro, and renders it with FFmpeg, plus
+ten-second upright teasers. `SPEC.md` says what it does and why. **WinUI 3, unpackaged, .NET 10. Not Blazor and not a
+web app:** there are no routes, components or browser APIs here.
 
 ## Commands
 
@@ -20,13 +22,14 @@ Warnings are errors, analyzer and style rules included, and so is a package with
 
 - `src/PoAutoRobo.Core`: everything that is not a window. Five folders, each a namespace every project imports
   already (see `Directory.Build.props`), so no file lists them:
-  - `Library`: the episode and its edits, saving, settings, the spend log, file helpers.
-  - `Script`: the script writer and its prompts, topic feeds, grounding in the official repositories.
+  - `Library`: the episode and its edits, the lesson and its beats (`BeatPlan`), the series brand kit (`SeriesKit`),
+    saving, settings, the spend log, file helpers.
+  - `Script`: the script writer and its prompts, grounding in the official repositories.
   - `Voice`: narration and word timings.
   - `Pictures`: whatever a clip shows: generated pictures, AI video, stock photos, code-drawn scenes.
-  - `Render`: FFmpeg command lines, captions, the builder that turns an episode into a video.
+  - `Render`: FFmpeg command lines, captions, the intro and outro, teasers, the builder that turns an episode into a video.
 - `src/PoAutoRobo.App`: the window. One view model, `MainViewModel`, in partial files by concern (`.Library`,
-  `.Edits`, `.Pictures`, `.Export`, `.Activity`); views in `Views/`.
+  `.Edits`, `.Pictures`, `.Export`, `.Series`, `.Teasers`, `.Activity`); views in `Views/`.
 - `tests/PoAutoRobo.Core.Tests`: tests of the core. The app project has none.
 
 ## Rules that are easy to break
@@ -37,18 +40,22 @@ Warnings are errors, analyzer and style rules included, and so is a package with
   or `init` properties with a default. New `VisualKind`s and `Look`s go on the end of the enum.
 - **Media paths must be inside the episode folder.** `ProjectStore.KeepOwnMedia` drops any that are not, on load.
   Anything new that holds a path (see `Clip.AllMedia`) must also be handled there, in `ProjectStore.Duplicate`, and in
-  `EpisodeBuilder.UnusedMedia`.
+  `EpisodeBuilder.UnusedMedia`. The brand kit is not an episode's: it keeps bare file names of its own copies in
+  `%LOCALAPPDATA%\PoAutoRobo\series`, and its music is copied into an episode's `imports` when used there.
 - **Nothing that costs money happens without being asked for**, and a batch only after its cost is confirmed and
   the monthly budget checked (`OverBudget`). Generated media is cached by everything that went into the request
   (`MediaCache`), so asking again is free; a deliberate retry is a new *take* (`VisualSpec.Take`).
-- **Text that did not come from the user is fenced** before it reaches a model: feed stories, repository passages,
-  and anything a model wrote earlier. Use `AzureScriptWriter.Fenced`; the prompts in `ScriptSchemas` say not to obey it.
+- **Text that did not come from the user is fenced** before it reaches a model: repository passages and anything a
+  model wrote earlier, such as the finished script teasers are cut from. Use `AzureScriptWriter.Fenced`; the prompts in `ScriptSchemas` say not to obey it.
 - **Model-written JavaScript runs only in `SceneRenderer`'s locked-down browser**: no network, a time limit on every
   frame. Do not loosen its flags or its page policy.
 - **Working files go under `Files.ScratchRoot`**, never the episode folder (it is usually cloud-synced) and never
   loose in the temp folder. The app sweeps that folder at launch.
 - **Programs the app starts die with the job**: register `FfmpegRunner.Kill` on the cancellation token, as
   `FfmpegRunner` and `SceneRenderer` do, so closing the window leaves nothing running.
+- **Clips are joined by copying**, so the intro, the outro and every clip are encoded exactly alike (`FfmpegArgs.Encode`)
+  and each picture runs exactly its slot on the timeline. Every slot has a sound file: narration, a film's own sound
+  (`FfmpegArgs.FootageSound`), the sting, or silence.
 
 ## Conventions
 
