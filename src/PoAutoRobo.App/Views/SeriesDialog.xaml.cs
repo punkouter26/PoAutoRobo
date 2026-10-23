@@ -7,7 +7,7 @@ using Windows.Storage.Pickers;
 namespace PoAutoRobo.App.Views;
 
 /// <summary>
-/// How the series and this episode look, beyond the intro, as three tabs: the music and look new episodes start with,
+/// How the series and this episode look, beyond the intro, as three tabs: the look new episodes start with,
 /// the host who presents every episode, and this episode's pictures.
 /// </summary>
 public sealed partial class SeriesDialog : ContentDialog
@@ -27,24 +27,6 @@ public sealed partial class SeriesDialog : ContentDialog
     }
 
     public MainViewModel ViewModel { get; }
-
-    // The buttons carry the file's role in Tag: here, only the music.
-    private async void OnPick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not FrameworkElement { Tag: string role }) return;
-        var picker = new FileOpenPicker { SuggestedStartLocation = role is "sting" or "music" ? PickerLocationId.MusicLibrary : PickerLocationId.PicturesLibrary };
-        foreach (var extension in role is "sting" or "music" ? MainViewModel.MusicExtensions : [".png"])
-            picker.FileTypeFilter.Add(extension);
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, App.WindowHandle); // a desktop app must say which window owns the dialog
-        if (await picker.PickSingleFileAsync() is { } file)
-            ViewModel.SetSeriesFile(role, file.Path);
-    }
-
-    private void OnClear(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { Tag: string role })
-            ViewModel.ClearSeriesFile(role);
-    }
 
     private void OnTab(object sender, SelectionChangedEventArgs e)
     {

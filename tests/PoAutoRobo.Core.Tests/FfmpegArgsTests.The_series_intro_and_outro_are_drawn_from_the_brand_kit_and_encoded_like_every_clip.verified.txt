@@ -120,6 +120,19 @@ logo.png
 1
 -y
 intro.png
+--- the made-up logo, saved as a picture ---
+-f
+rawvideo
+-pix_fmt
+rgba
+-s
+512x512
+-i
+logo.rgba
+-frames:v
+1
+-y
+logo.png
 --- intro, channel name only ---
 -f
 lavfi

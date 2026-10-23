@@ -96,7 +96,7 @@
                               ToolTipService.ToolTip="Settings: sounds, picture quality, the monthly budget and what has been spent, effects, advanced controls, and which services are on. Changes are kept for next time." />
                 <CommandBar.SecondaryCommands>
                     <AppBarButton x:Name="SeriesButton" Label="Series and look…" Click="OnSeries"
-                                  ToolTipService.ToolTip="The music and look new episodes start with; the host who presents every episode; and this episode's look and mix of pictures. The intro and outro have their own step." />
+                                  ToolTipService.ToolTip="The look new episodes start with; the host who presents every episode; and this episode's look and mix of pictures. The intro, the outro and its music have their own step." />
                     <AppBarButton x:Name="ReviewItem" Label="Have an editor read the script" Command="{x:Bind ViewModel.ReviewScriptCommand}" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}"
                                   ToolTipService.ToolTip="Reads the whole script for weak openings and clips that repeat one another, and marks the cards worth changing. Done once by itself when a script is written." />
                     <AppBarSeparator />
@@ -122,7 +122,7 @@
                     <controls:SegmentedItem Content="3 · Clips" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}"
                                             ToolTipService.ToolTip="Shape the script: order the clips, edit and listen to their words, and give each its voice and picture. Opens once there is an episode. (Ctrl+3)" />
                     <controls:SegmentedItem Content="4 · Preview" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}"
-                                            ToolTipService.ToolTip="Watch the whole episode quickly, set the captions and music, and go back to Clips to fix anything. (Ctrl+4)" />
+                                            ToolTipService.ToolTip="Watch the whole episode quickly, set the captions and the outro's music, and go back to Clips to fix anything. (Ctrl+4)" />
                     <controls:SegmentedItem Content="5 · Publish" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}"
                                             ToolTipService.ToolTip="Render the finished video and its upload files, and the short upright teasers for other sites. (Ctrl+5)" />
                 </controls:Segmented>
@@ -250,7 +250,7 @@
                 </Grid>
             </Grid>
 
-            <!-- Step 4 · Preview: the preview takes the room there is, with its captions set on it; the music sits beside it -->
+            <!-- Step 4 · Preview: the preview takes the room there is, with its captions set on it; the outro's music sits beside it -->
             <Grid x:Name="PreviewPage" Padding="{StaticResource PagePadding}" ColumnSpacing="{StaticResource GapLarge}" Visibility="{x:Bind local:Ui.ShowIf(ViewModel.Step, 3), Mode=OneWay}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -262,22 +262,22 @@
                         <TextBlock Text="Captions" Style="{ThemeResource BodyStrongTextBlockStyle}" />
                         <TextBlock Style="{StaticResource QuietText}" Text="Set on the preview itself: Aa, in its top corner. The words show the new style as you change it." />
 
-                        <TextBlock Text="Music" Style="{StaticResource SectionHeading}" />
+                        <TextBlock Text="Outro music" Style="{StaticResource SectionHeading}" />
                         <Grid ColumnSpacing="{StaticResource GapSmall}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <Button x:Name="MusicButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="44" Click="OnPickMusic"
-                                    ToolTipService.ToolTip="Choose a music file to play quietly under the narration. It repeats to the video's length and dips whenever the voice speaks. Use music you have the right to publish.">
+                                    ToolTipService.ToolTip="Choose music for this episode's outro. It plays only there, at the end, never under the clips, repeating to fill it and fading out. Until you choose, the series music plays, or the app's own tune. Use music you have the right to publish.">
                                 <TextBlock Text="{x:Bind ViewModel.MusicLabel, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
                             </Button>
                             <Button x:Name="RemoveMusicButton" Grid.Column="1" Style="{StaticResource IconButton}" Command="{x:Bind ViewModel.RemoveMusicCommand}" Visibility="{x:Bind ViewModel.HasMusic, Mode=OneWay}"
-                                    AutomationProperties.Name="Remove the music" ToolTipService.ToolTip="Remove the music">
+                                    AutomationProperties.Name="Use the standard outro music" ToolTipService.ToolTip="Go back to the app's own tune for this episode's outro.">
                                 <SymbolIcon Symbol="Cancel" />
                             </Button>
                         </Grid>
-                        <TextBlock Style="{StaticResource QuietText}" Text="A change to the music, or to a clip, shows in the next preview." />
+                        <TextBlock Style="{StaticResource QuietText}" Text="Music plays only over the intro and outro, never under the clips. A change to it, or to a clip, shows in the next preview." />
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

@@ -164,6 +164,27 @@ public sealed class Visuals(ImageMaker images, MediaCache cache, string characte
         return candidates;
     }
 
+    /// <summary>
+    /// Makes several different logos for the channel to choose between, as the host's candidates are made: a square
+    /// mark on nothing, in the series colour, drawn from the locked host when there is one, so the logo and the mascot
+    /// are plainly the same robot. Nothing is kept yet.
+    /// </summary>
+    /// <param name="accent">The series colour as #RRGGBB.</param>
+    public async Task<IReadOnlyList<string>> CandidateLogosAsync(string channel, string accent, int count, CancellationToken ct)
+    {
+        var robot = HasSheet ? "the robot in the reference image, simplified to a bold emblem of its head" : $"a friendly robot head. {HostInWords}";
+        var candidates = new List<string>(count);
+        for (var i = 1; i <= count; i++)
+        {
+            // Logos carry no lettering: picture models misspell it, and the channel's name is drawn beside the logo anyway.
+            var request = new ImageRequest(
+                $"A simple, bold logo mark for a YouTube channel called \"{channel}\", take {i}: {robot}, centred, in {accent} with white and dark grey, on a transparent background. Flat vector shapes with thick outlines, clear at small sizes. No letters, words or text.",
+                HasSheet ? characterSheetPath : null, Size: "1024x1024", Quality: Quality, Transparent: true);
+            candidates.Add(await CachedAsync(request, HasSheet ? Files.ContentHash(characterSheetPath) : "", 0, ct)); // a new host draws new logos
+        }
+        return candidates;
+    }
+
     /// <summary>Makes this picture the host for every episode from now on.</summary>
     public void LockSheet(string path)
     {

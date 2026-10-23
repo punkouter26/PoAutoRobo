@@ -74,12 +74,18 @@ public sealed partial class IntroPage : UserControl
         if (sender is FrameworkElement { Tag: IntroStart start }) ViewModel?.UseIntroStart(start);
     }
 
-    // The buttons carry the file's role in Tag: logo, sting or mascot.
+    // Each drawn logo's button carries its picture in Tag.
+    private void OnUseLogo(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string logo }) ViewModel?.UseLogo(logo);
+    }
+
+    // The buttons carry the file's role in Tag: logo, mascot, sting or music.
     private async void OnPick(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string role } || ViewModel is null) return;
-        var picker = new FileOpenPicker { SuggestedStartLocation = role is "sting" ? PickerLocationId.MusicLibrary : PickerLocationId.PicturesLibrary };
-        foreach (var extension in role is "sting" ? MainViewModel.MusicExtensions : [".png"])
+        var picker = new FileOpenPicker { SuggestedStartLocation = role is "sting" or "music" ? PickerLocationId.MusicLibrary : PickerLocationId.PicturesLibrary };
+        foreach (var extension in role is "sting" or "music" ? MainViewModel.MusicExtensions : [".png"])
             picker.FileTypeFilter.Add(extension);
         WinRT.Interop.InitializeWithWindow.Initialize(picker, App.WindowHandle); // a desktop app must say which window owns the dialog
         if (await picker.PickSingleFileAsync() is { } file)

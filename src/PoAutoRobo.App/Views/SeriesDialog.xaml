@@ -12,11 +12,11 @@
     <ContentDialog.Resources>
         <x:Double x:Key="ContentDialogMaxWidth">960</x:Double>
     </ContentDialog.Resources>
-    <!-- How the series and this episode look, beyond the intro: the music and look new episodes start with, the host
+    <!-- How the series and this episode look, beyond the intro: the look new episodes start with, the host
          who presents them, and this episode's pictures. Each tab is saved or applied as it says, and Done closes. -->
     <StackPanel Spacing="{StaticResource GapLarge}">
         <controls:Segmented x:Name="Tabs" HorizontalAlignment="Left" SelectionChanged="OnTab" AutomationProperties.Name="Part">
-            <controls:SegmentedItem Content="New episodes" ToolTipService.ToolTip="The music, picture style and captions every new episode starts with. Saved as you change them." />
+            <controls:SegmentedItem Content="New episodes" ToolTipService.ToolTip="The picture style and captions every new episode starts with. Saved as you change them." />
             <controls:SegmentedItem Content="Host" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}" ToolTipService.ToolTip="The cartoon robot that presents every episode: make candidates and pick one, or use your own image." />
             <controls:SegmentedItem Content="This episode" ToolTipService.ToolTip="The open episode's look; with advanced controls on, also whether the host is on screen and its mix of picture types." />
         </controls:Segmented>
@@ -24,20 +24,7 @@
         <!-- What every new episode starts with, saved as it is changed. The intro and outro have their own step. -->
         <StackPanel x:Name="SeriesPanel" Width="420" Spacing="{StaticResource Gap}" HorizontalAlignment="Left">
             <TextBlock Style="{StaticResource QuietText}"
-                       Text="New episodes start with the music and look set here; Use the series look, on the This episode tab, gives them to an episode made before. The intro and outro are set on the Intro step." />
-            <Grid ColumnSpacing="{StaticResource GapSmall}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="64" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Music" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.SeriesMusicLabel, Mode=OneWay}" Style="{StaticResource QuietText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                <Button Grid.Column="2" Content="Pick…" Tag="music" Click="OnPick" ToolTipService.ToolTip="Choose a music file to play quietly under every new episode, dipping whenever someone speaks. The app keeps its own copy, so the original can be moved. Use music you have the right to publish." />
-                <Button Grid.Column="3" Style="{StaticResource IconButton}" Tag="music" Click="OnClear" AutomationProperties.Name="No music"
-                        ToolTipService.ToolTip="No music under new episodes. Episodes already made keep theirs."><SymbolIcon Symbol="Cancel" /></Button>
-            </Grid>
+                       Text="New episodes start with the look set here; Use the series look, on the This episode tab, gives it to an episode made before. The intro, the outro and its music are set on the Intro step." />
             <ComboBox x:Name="LookBox" Header="Pictures" HorizontalAlignment="Stretch" ItemsSource="{x:Bind vm:MainViewModel.LookChoices}" SelectedIndex="{x:Bind ViewModel.SeriesLookIndex, Mode=TwoWay}"
                       ToolTipService.ToolTip="The art style new episodes' pictures are drawn in: comic book, photograph, flat vector or cinematic. Episodes already made keep theirs." />
             <ComboBox x:Name="CaptionBox" Header="Captions" HorizontalAlignment="Stretch" ItemsSource="{x:Bind ViewModel.CaptionChoices}" SelectedIndex="{x:Bind ViewModel.SeriesCaptionIndex, Mode=TwoWay}"

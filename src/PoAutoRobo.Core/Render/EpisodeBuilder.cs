@@ -441,7 +441,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
             var ends = Bookends(brand);
             var first = ends is null ? 0 : 1;
             List<Narration> sounds = ends is null ? [.. narrations]
-                : [await BookendSoundAsync(true, ends, work, cache, ct), .. narrations, await BookendSoundAsync(false, ends, work, cache, ct)];
+                : [await BookendSoundAsync(true, ends, null, work, cache, ct), .. narrations, await BookendSoundAsync(false, ends, episode.MusicPath, work, cache, ct)];
             var slots = FfmpegArgs.Timeline([.. sounds.Select(n => n.Duration)]);
             var segments = narrations.Select((n, i) => new CaptionSegment(slots[i + first].Start, n.Words)).ToList();
 
@@ -457,14 +457,13 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
             var total = slots[^1].Start + slots[^1].VideoLength;
             const string Joining = "Joining the clips and levelling the sound";
             var joinProgress = progress is null ? null : new Relay<double>(p => progress.Report(new RenderProgress(Joining, VoiceShare + DrawShare + (1 - VoiceShare - DrawShare) * p)));
-            var music = episode.MusicPath is { } track && File.Exists(track) ? Path.GetFullPath(track) : null;
             // A rush of air carries the viewer into each new beat, loudest on the cut. The first beat has the intro's sting instead.
             List<TimeSpan> cuts = [.. Enumerable.Range(1, Math.Max(0, count - 1))
                 .Where(i => episode.Clips[i].Beat is { } beat && beat != episode.Clips[i - 1].Beat)
                 .Select(i => slots[i + first].Start)];
             if (cuts.Count > 0)
                 await File.WriteAllBytesAsync(Path.Combine(work, "whoosh.wav"), Synth.Whoosh(), ct);
-            await ffmpeg.RunAsync(FfmpegArgs.Join("clips.txt", [.. sounds.Select(n => n.AudioPath)], partial, music, cuts.Count > 0 ? "whoosh.wav" : null, cuts), work, total, joinProgress, ct);
+            await ffmpeg.RunAsync(FfmpegArgs.Join("clips.txt", [.. sounds.Select(n => n.AudioPath)], partial, cuts.Count > 0 ? "whoosh.wav" : null, cuts), work, total, joinProgress, ct);
 
             File.Move(partial, output, overwrite: true);
             progress?.Report(new RenderProgress("Done", 1));
@@ -567,7 +566,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
     /// <returns>The video's path.</returns>
     public Task<string> PreviewIntroAsync(Brand brand, int number, CancellationToken ct) => PreviewBookendAsync(true, brand, number, ct);
 
-    /// <summary>A draft of the series outro, as <see cref="PreviewIntroAsync"/>: its full length, silent, as the music plays on under it.</summary>
+    /// <summary>A draft of the series outro, as <see cref="PreviewIntroAsync"/>: its full length, with the series' music or the app's own.</summary>
     public Task<string> PreviewOutroAsync(Brand brand, CancellationToken ct) => PreviewBookendAsync(false, brand, 0, ct);
 
     private async Task<string> PreviewBookendAsync(bool intro, Brand brand, int number, CancellationToken ct)
@@ -577,7 +576,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         CopyTitleFont(work);
         var sample = new Episode("Your next lesson", "", [], 0) { Number = number };
         var cache = new MediaCache(ClipCacheFolder);
-        var sound = await BookendSoundAsync(intro, brand, work, cache, ct);
+        var sound = await BookendSoundAsync(intro, brand, SeriesKit.PathOf(brand.Folder, brand.Kit.Music), work, cache, ct);
         var picture = await BookendPictureAsync(intro, brand, sample, Draft, intro ? IntroLength : brand.Kit.Outro, work, cache, ct);
         var output = Path.Combine(work, $"{name}-preview.mp4");
         await ffmpeg.RunAsync(FfmpegArgs.Mux(picture, sound.AudioPath, output), work, null, null, ct);
@@ -586,23 +585,25 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
 
     /// <summary>
     /// The sound of the series intro (its sting; one made up here, timed to the swarm, when the series has none) or
-    /// outro (silence: the music plays on under it). Kept in the clip cache, not the working folder, because the
-    /// preview's waveform reads it after the render has finished.
+    /// outro (the music: <paramref name="music"/>, or a tune made up here when there is none; no music plays under the
+    /// clips). Kept in the clip cache, not the working folder, because the preview's waveform reads it after the render
+    /// has finished.
     /// </summary>
-    private async Task<Narration> BookendSoundAsync(bool intro, Brand brand, string work, MediaCache cache, CancellationToken ct)
+    private async Task<Narration> BookendSoundAsync(bool intro, Brand brand, string? music, string work, MediaCache cache, CancellationToken ct)
     {
         var length = intro ? IntroLength : brand.Kit.Outro;
-        var sting = intro ? SeriesKit.PathOf(brand.Folder, brand.Kit.Sting) : null;
-        var sound = intro && sting is null
-            ? await cache.GetOrCreateAsync([MadeUpSting, length.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture)], ".wav",
-                scratch => File.WriteAllBytesAsync(scratch, Synth.Sting(length), ct))
-            : await cache.GetOrCreateAsync([string.Join('\n', FfmpegArgs.FootageSound(sting is null ? null : "sting", length, "out.wav")), .. sting is null ? [] : new[] { Stamp(sting) }], ".wav",
-                scratch => ffmpeg.RunAsync(FfmpegArgs.FootageSound(sting, length, scratch), work, null, null, ct));
+        var own = intro ? SeriesKit.PathOf(brand.Folder, brand.Kit.Sting) : music is not null && File.Exists(music) ? Path.GetFullPath(music) : null;
+        IReadOnlyList<string> Args(string from, string to) => intro ? FfmpegArgs.FootageSound(from, length, to) : FfmpegArgs.OutroMusic(from, length, to);
+        var sound = own is null
+            ? await cache.GetOrCreateAsync([intro ? MadeUpSting : MadeUpOutro, length.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture)], ".wav",
+                scratch => File.WriteAllBytesAsync(scratch, intro ? Synth.Sting(length) : Synth.OutroTune(length), ct))
+            : await cache.GetOrCreateAsync([string.Join('\n', Args("own", "out.wav")), Stamp(own)], ".wav",
+                scratch => ffmpeg.RunAsync(Args(own, scratch), work, null, null, ct));
         return new Narration(sound, length, []);
     }
 
     // Names the made-up sting in the clip cache. Change it when the sting changes, so the new one is made.
-    private const string MadeUpSting = "made-up sting 1";
+    private const string MadeUpSting = "made-up sting 2", MadeUpOutro = "made-up outro 1";
 
     // Names the swarm in the clip cache. Change it when the swarm changes, so intros are drawn again.
     private const string SwarmVersion = "swarm 1";
@@ -652,7 +653,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
     /// The intro's or outro's words, written to the working folder for FFmpeg to read, with its look and how to draw its
     /// card into a file. A line with nothing to say is left out.
     /// </summary>
-    private static async Task<(BookendLook Look, string[] Words, Func<string, IReadOnlyList<string>> Args, Func<string, string?> File)> BookendCardAsync(
+    private async Task<(BookendLook Look, string[] Words, Func<string, IReadOnlyList<string>> Args, Func<string, string?> File)> BookendCardAsync(
         bool intro, Brand brand, Episode episode, ExportPreset preset, TimeSpan length, string work, CancellationToken ct)
     {
         var (kit, name) = (brand.Kit, intro ? "intro" : "outro");
@@ -663,12 +664,33 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         foreach (var (key, text) in lines.Where(l => l.Text.Trim().Length > 0))
             await System.IO.File.WriteAllTextAsync(Path.Combine(work, $"{name}_{key}.txt"), text.Trim(), ct);
 
-        var look = new BookendLook(kit.Captions.AccentColor, SeriesKit.PathOf(brand.Folder, kit.Logo), SeriesKit.PathOf(brand.Folder, kit.Mascot), kit.Layout);
+        // A series without its own logo or mascot gets the app's own, in its colour.
+        var accent = kit.Captions.AccentColor;
+        var look = new BookendLook(accent,
+            SeriesKit.PathOf(brand.Folder, kit.Logo) ?? await MadeUpPictureAsync(logo: true, accent, work, ct),
+            SeriesKit.PathOf(brand.Folder, kit.Mascot) ?? await MadeUpPictureAsync(logo: false, accent, work, ct),
+            kit.Layout);
         IReadOnlyList<string> Args(string to) => intro
             ? FfmpegArgs.IntroVideo(look, File("channel")!, File("tagline"), File("title")!, length, preset, to)
             : FfmpegArgs.OutroVideo(look, File("channel")!, File("next"), length, preset, to);
         return (look, [.. lines.Select(l => l.Text)], Args, File);
     }
+
+    /// <summary>The app's own logo or mascot in the series colour (see <see cref="Emblem"/>), made once for each colour and kept in the clip cache.</summary>
+    private async Task<string> MadeUpPictureAsync(bool logo, string accent, string work, CancellationToken ct)
+    {
+        var (width, height) = logo ? (Emblem.LogoSize, Emblem.LogoSize) : (Emblem.MascotWidth, Emblem.MascotHeight);
+        return await new MediaCache(ClipCacheFolder).GetOrCreateAsync([MadeUpPictures, logo ? "logo" : "mascot", accent], ".png", async scratch =>
+        {
+            var colour = Convert.FromHexString(accent.TrimStart('#'));
+            var pixels = Path.Combine(work, logo ? "made-up-logo.rgba" : "made-up-mascot.rgba");
+            await File.WriteAllBytesAsync(pixels, logo ? Emblem.Logo((colour[0], colour[1], colour[2])) : Emblem.Mascot((colour[0], colour[1], colour[2])), ct);
+            await ffmpeg.RunAsync(FfmpegArgs.Picture(pixels, width, height, scratch), work, null, null, ct);
+        });
+    }
+
+    // Names the made-up logo and mascot in the clip cache. Change it when either changes, so they are drawn again.
+    private const string MadeUpPictures = "made-up pictures 1";
 
     /// <summary>
     /// One still of the intro or outro once all its words are in, drawn in a moment and costing nothing, so the Intro

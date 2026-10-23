@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A Windows desktop app for one YouTube series: its owner teaching a Unitree R1 one skill per episode. From the lesson
 and the owner's own films it writes a script in fixed beats, records the voice (or keeps a film's own sound), makes a
 picture for each other clip, wraps the episode in the series' intro and outro, and renders it with FFmpeg, plus
-ten-second upright teasers. `SPEC.md` says what it does and why. **WinUI 3, unpackaged, .NET 10. Not Blazor and not a
+ten-second upright teasers. Music plays only over the intro and outro, never under the clips, and every brand-kit
+choice left unset has a default the app makes. **WinUI 3, unpackaged, .NET 10. Not Blazor and not a
 web app:** there are no routes, components or browser APIs here. `AGENTS.md` is the working agreement for agents
 (branching, commit wording, checking the app starts, how replies are summarised); read it too.
 
@@ -36,7 +37,8 @@ Warnings are errors, analyzer and style rules included, and so is a package with
   - `Voice`: narration and word timings.
   - `Pictures`: whatever a clip shows: generated pictures, AI video, stock photos, code-drawn scenes.
   - `Render`: FFmpeg command lines, captions, the intro and outro, teasers, the builder that turns an episode into a video,
-    the intro's swarm of light (`Swarm`) and the video's made-up sounds (`Synth`).
+    the intro's swarm of light (`Swarm`), the video's made-up sounds (`Synth`) and the series' made-up logo and
+    mascot (`Emblem`), so every brand-kit choice left unset still has a default.
 - `src/PoAutoRobo.App`: the window (`MainWindow`, with `.Moments`, `.Dialogs` and `.Taskbar` beside it). One view
   model, `MainViewModel`, in partial files by concern (`.Steps`, `.Library`, `.Footage`, `.Edits`, `.Pictures`,
   `.Export`, `.Series`, `.Teasers`, `.Activity`); views in `Views/`. Five steps, Intro, Lesson, Clips, Preview and

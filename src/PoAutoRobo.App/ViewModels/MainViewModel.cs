@@ -56,7 +56,7 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>True once the app knows whether it is running on the live services or on stand-ins.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Notice), nameof(NoticeDetail), nameof(PicturesAvailable), nameof(HostCandidatesCost))]
+    [NotifyPropertyChangedFor(nameof(Notice), nameof(NoticeDetail), nameof(PicturesAvailable), nameof(HostCandidatesCost), nameof(LogoCandidatesCost))]
     [NotifyCanExecuteChangedFor(nameof(CreateEpisodeCommand), nameof(GenerateAllCommand), nameof(GeneratePictureCommand), nameof(AnotherTakeCommand), nameof(MakeAllCommand), nameof(MakeDraftCommand))]
     public partial bool IsConnected { get; set; }
 
@@ -180,7 +180,7 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Pictures are drawn at low quality: quicker and cheaper while an episode is still taking shape.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HostCandidatesCost))]
+    [NotifyPropertyChangedFor(nameof(HostCandidatesCost), nameof(LogoCandidatesCost))]
     public partial bool DraftPictures { get; set; }
 
     /// <summary>The decorative light and motion: sparks, the backdrops, the darkroom strip, the voice as light. Off unless turned on.</summary>

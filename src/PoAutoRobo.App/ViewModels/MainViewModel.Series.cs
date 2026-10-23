@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -73,13 +74,14 @@ public partial class MainViewModel
         }
     }
 
-    public string SeriesLogoLabel => _kit.Logo ?? "None";
+    // With nothing chosen, the app makes its own of each, so none of them is ever simply missing.
+    public string SeriesLogoLabel => _kit.Logo ?? "Made for you";
 
-    public string SeriesStingLabel => _kit.Sting ?? "None";
+    public string SeriesStingLabel => _kit.Sting ?? "Made for you";
 
-    public string SeriesMusicLabel => _kit.Music ?? "None";
+    public string SeriesMusicLabel => _kit.Music ?? "Made for you";
 
-    public string SeriesMascotLabel => _kit.Mascot ?? "None";
+    public string SeriesMascotLabel => _kit.Mascot ?? "Made for you";
 
     /// <summary>The intro last drawn for the Intro step; null until one is asked for.</summary>
     [ObservableProperty]
@@ -202,6 +204,53 @@ public partial class MainViewModel
 
     /// <summary>True when a host design has been chosen, which can then stand as the series mascot.</summary>
     public static bool HasHostDesign => File.Exists(AppPaths.HostSheet);
+
+    // ---- A logo, made the way the host is: three candidates, one chosen ----
+
+    /// <summary>Logos drawn for the channel to choose from; empty until asked for, and again once one is chosen.</summary>
+    public ObservableCollection<string> LogoCandidates { get; } = [];
+
+    /// <summary>What making the logo candidates costs, said beside the button before anything is made.</summary>
+    public string LogoCandidatesCost => CostEstimate.PriceOf(_imageModel, Quality) is { } each
+        ? $"Three designs, drawn from your host when you have one (about {SpendLog.Money(3 * each)})."
+        : "Three designs, drawn from your host when you have one. The cost depends on your Azure pricing.";
+
+    /// <summary>Draws three logo designs for the channel, after saying what they cost and checking the month's budget.</summary>
+    [RelayCommand(IncludeCancelCommand = true)]
+    private async Task MakeLogoCandidatesAsync(CancellationToken ct)
+    {
+        ErrorMessage = null;
+        if (CurrentVisuals is not { } visuals) return;
+        if (_kit.ChannelName.Length == 0)
+        {
+            ErrorMessage = "Name the channel first: the logos are drawn for it.";
+            return;
+        }
+        var dollars = 3 * (CostEstimate.PriceOf(_imageModel, Quality) ?? 0);
+        if (OverBudget(dollars) is { } refusal)
+        {
+            ErrorMessage = refusal;
+            return;
+        }
+        var from = HasHostDesign ? "your host, simplified to an emblem" : "a friendly robot head";
+        if (!await ConfirmSpend("Make 3 logos?", $"Draws three logo designs for {_kit.ChannelName} from {from}, in the series colour, on nothing so they sit on any background. You pick one, or none. Asking again with nothing changed shows the same three, free.", "Make them", dollars))
+            return;
+        await Guard(async () =>
+        {
+            var logos = await visuals.CandidateLogosAsync(_kit.ChannelName, _kit.Captions.AccentColor, 3, ct);
+            LogoCandidates.Clear();
+            foreach (var logo in logos)
+                LogoCandidates.Add(logo);
+            StatusMessage = "Three logos drawn. Click the one to use.";
+        });
+    }
+
+    /// <summary>Makes a drawn candidate the series logo. The kit keeps its own copy, as it does of a logo picked from a file.</summary>
+    public void UseLogo(string path)
+    {
+        SetSeriesFile("logo", path);
+        LogoCandidates.Clear();
+    }
 
     [RelayCommand]
     private void UseHostAsMascot()

@@ -48,10 +48,10 @@ public partial class MainViewModel
 
     public bool HasMusic => Episode?.MusicPath is not null;
 
-    /// <summary>What the music button says: the track in use, or that there is none.</summary>
-    public string MusicLabel => Episode?.MusicPath is { } track ? $"Music · {Path.GetFileName(track)}" : "Add music…";
+    /// <summary>What the outro music button says: the track in use, or that the app makes its own.</summary>
+    public string MusicLabel => Episode?.MusicPath is { } track ? $"Music · {Path.GetFileName(track)}" : "The app's own tune · change…";
 
-    /// <summary>Copies a track into the episode and plays it under the narration from the next preview or render on.</summary>
+    /// <summary>Copies a track into the episode and plays it over the outro from the next preview or render on.</summary>
     public Task SetMusicAsync(string path) => Guard(async () =>
     {
         if (Episode is null || EpisodeFolder is not { } folder) return;
@@ -62,7 +62,7 @@ public partial class MainViewModel
         if (!string.Equals(Path.GetFullPath(path), copy, StringComparison.OrdinalIgnoreCase))
             await Task.Run(() => File.Copy(path, copy, overwrite: true));
         Edit(e => EpisodeEditor.SetMusic(e, copy));
-        StatusMessage = "Music added. It plays quietly under the voice, and dips while the voice speaks, from the next preview or render.";
+        StatusMessage = "Music added. It plays over the outro at the end, from the next preview or render.";
     });
 
     [RelayCommand(CanExecute = nameof(HasMusic))]

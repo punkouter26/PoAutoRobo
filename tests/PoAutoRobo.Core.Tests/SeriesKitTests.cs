@@ -9,7 +9,7 @@ public sealed class SeriesKitTests : IDisposable
     [Fact]
     public void The_brand_kit_keeps_its_own_copies_survives_a_restart_shrugs_off_damage_and_gives_new_episodes_its_look()
     {
-        Assert.Equal(new SeriesKit(), SeriesKit.Load(_folder)); // nothing set up yet
+        Assert.Equal(SeriesKit.Starter, SeriesKit.Load(_folder)); // nothing set up yet: the series this app is made for
 
         var picked = Path.Combine(Directory.CreateTempSubdirectory("poautorobo-picked").FullName, "My Logo.PNG");
         File.WriteAllText(picked, "png");
@@ -42,7 +42,7 @@ public sealed class SeriesKitTests : IDisposable
         Assert.Equal(TimeSpan.FromSeconds(SeriesKit.MaxOutroSeconds), edited.Outro);
         Assert.Equal(new CaptionStyle(), edited.Captions);
         File.WriteAllText(Path.Combine(_folder, SeriesKit.FileName), "{ not json");
-        Assert.Equal(new SeriesKit(), SeriesKit.Load(_folder));
+        Assert.Equal(SeriesKit.Starter, SeriesKit.Load(_folder));
 
         // A new episode takes the series look; its clips and words are left alone, and no music means the episode keeps its own.
         var episode = ProjectStoreTests.NewEpisode(2) with { MusicPath = "imports\\old.mp3" };

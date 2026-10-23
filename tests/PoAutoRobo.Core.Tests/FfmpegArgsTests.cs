@@ -69,6 +69,7 @@ public sealed class FfmpegArgsTests : IDisposable
             $"--- the swarm gathering into it ---\n{swarm}\n" +
             $"--- where the swarm lands ---\n{Lines(FfmpegArgs.IntroMask(full, "intro_channel.txt", "intro_tagline.txt", "intro_title.txt", new ExportPreset(1280, 720, 30), "mask.rgb"))}\n" +
             $"--- a still of the intro, for the Intro step to follow each change ---\n{Lines(FfmpegArgs.Still(FfmpegArgs.IntroVideo(full, "intro_channel.txt", "intro_tagline.txt", "intro_title.txt", S(5), new ExportPreset(1280, 720, 10), "card.mp4"), S(3), "intro.png"))}\n" +
+            $"--- the made-up logo, saved as a picture ---\n{Lines(FfmpegArgs.Picture("logo.rgba", 512, 512, "logo.png"))}\n" +
             $"--- intro, channel name only ---\n{Lines(FfmpegArgs.IntroVideo(bare, "intro_channel.txt", null, "intro_title.txt", S(5), ExportPreset.Hd30, "intro.mp4"))}\n" +
             $"--- intro laid out about its centre: the mascot above the words ---\n{Lines(FfmpegArgs.IntroVideo(full with { Layout = IntroLayout.Centre }, "intro_channel.txt", "intro_tagline.txt", "intro_title.txt", S(5), ExportPreset.Hd30, "intro.mp4"))}\n" +
             $"--- intro with its words on a band across the lower third ---\n{Lines(FfmpegArgs.IntroVideo(full with { Layout = IntroLayout.Lower }, "intro_channel.txt", "intro_tagline.txt", "intro_title.txt", S(5), ExportPreset.Hd30, "intro.mp4"))}\n" +
@@ -111,13 +112,13 @@ public sealed class FfmpegArgsTests : IDisposable
         Assert.Contains("[s0]loudnorm", alone);
 
         // A whoosh into each new beat, loudest on the cut; one too near the start to be heard whole is left out.
-        var swept = FfmpegArgs.Join("clips.txt", ["a0.wav", "a1.wav", "a2.wav"], "out.mp4", "bed.mp3", "whoosh.wav", [S(0.3), S(19.85), S(49.7)]).ToList();
+        var swept = FfmpegArgs.Join("clips.txt", ["a0.wav", "a1.wav", "a2.wav"], "out.mp4", "whoosh.wav", [S(0.3), S(19.85), S(49.7)]).ToList();
         var graph = swept[swept.IndexOf("-filter_complex") + 1];
-        Assert.Equal("whoosh.wav", swept[swept.IndexOf("bed.mp3") + 2]);
-        Assert.Contains("[5:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=2[w0][w1]", graph);
+        Assert.Equal("-i", swept[swept.IndexOf("whoosh.wav") - 1]);
+        Assert.Contains("[4:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=2[w0][w1]", graph);
         Assert.Contains("[w0]adelay=delays=19250:all=1[d0]", graph);
         Assert.Contains("[a2][d0][d1]amix=inputs=3:duration=first:normalize=0[swept]", graph);
-        Assert.Contains("[swept]asplit[voice][key]", graph); // the music dips under the whooshes as under the voice
+        Assert.Contains("[swept]loudnorm", graph); // no music under the clips: it is the outro's own sound
 
         return Verify(Lines(FfmpegArgs.Join("clips.txt", ["a0.wav", "a1.wav", "a2.wav"], "out.mp4")));
     }
@@ -227,6 +228,17 @@ public sealed class FfmpegArgsTests : IDisposable
         Assert.All(bands, frame => Assert.All(frame, strength => Assert.InRange(strength, 0f, 1f)));
         var onHit = bands[(int)(Synth.Hit.TotalSeconds * 30) + 2];
         Assert.True(onHit[0] > 0.5f && onHit[0] > bands[1][0], $"{onHit[0]} on the hit, {bands[1][0]} at the start");
+
+        // The made-up logo and mascot: see-through round the robot, solid in the middle, the series colour in its eyes, and
+        // the same picture for the same colour, so they cache.
+        var logo = Emblem.Logo((0x22, 0xCC, 0x88));
+        Assert.Equal(Emblem.LogoSize * Emblem.LogoSize * 4, logo.Length);
+        Assert.Equal(0, logo[3]);
+        Assert.Equal(255, logo[(256 * Emblem.LogoSize + 256) * 4 + 3]);
+        Assert.Equal((0x22, 0xCC, 0x88), (logo[(275 * Emblem.LogoSize + 206) * 4], logo[(275 * Emblem.LogoSize + 206) * 4 + 1], logo[(275 * Emblem.LogoSize + 206) * 4 + 2]));
+        Assert.Equal(logo, Emblem.Logo((0x22, 0xCC, 0x88)));
+        var mascot = Emblem.Mascot((0x22, 0xCC, 0x88));
+        Assert.Equal((0, 255), (mascot[3], mascot[(345 * Emblem.MascotWidth + 256) * 4 + 3]));
     }
 
     private string Write(string name, byte[] bytes)
@@ -252,18 +264,19 @@ public sealed class FfmpegArgsTests : IDisposable
     }
 
     [Fact]
-    public void Music_repeats_under_the_whole_video_dips_while_the_voice_speaks_and_ends_with_it()
+    public void Music_plays_over_the_outro_alone_filling_it_exactly_and_the_app_makes_its_own_when_there_is_none()
     {
-        var args = FfmpegArgs.Join("clips.txt", ["a0.wav", "a1.wav"], "out.mp4", "bed.mp3").ToList();
-        var graph = args[args.IndexOf("-filter_complex") + 1];
+        // The series' track plays round and round to fill the outro, in softly and fading out over its last two seconds.
+        var args = FfmpegArgs.OutroMusic("bed.mp3", S(15), "outro.wav").ToList();
+        Assert.Equal(["-stream_loop", "-1", "-i", "bed.mp3"], args.Take(4));
+        Assert.Contains("afade=t=in:d=0.5,afade=t=out:st=13.000:d=2", args[args.IndexOf("-af") + 1]);
+        Assert.Equal("15.000", args[args.IndexOf("-t") + 1]);
 
-        // The track is the input after the narration, and plays round and round.
-        Assert.Equal(["-stream_loop", "-1", "-i", "bed.mp3"], args.Skip(args.IndexOf("bed.mp3") - 3).Take(4));
-        Assert.Contains("[3:a]aformat=sample_rates=48000:channel_layouts=stereo,volume=0.25[bed]", graph);
-        Assert.Contains("[a1]asplit[voice][key]", graph);
-        Assert.Contains("[bed][key]sidechaincompress", graph);
-        Assert.Contains("[voice][ducked]amix=inputs=2:duration=first", graph);
-        Assert.Contains("[mixed]loudnorm", graph); // the mix is what is levelled, not the voice alone
-        Assert.DoesNotContain("sidechaincompress", string.Join(' ', FfmpegArgs.Join("clips.txt", ["a0.wav"], "out.mp4")));
+        // With none, the app's own tune: exactly as long, the same every time so it caches, and silent at its very end.
+        var tune = Synth.OutroTune(S(15));
+        Assert.Equal(S(15), WavInfo.Duration(Write("tune.wav", tune)));
+        Assert.Equal(tune, Synth.OutroTune(S(15)));
+        var peaks = WavInfo.Peaks(Write("tune.wav", tune), 150);
+        Assert.True(peaks[^1] < peaks.Max() / 10, $"{peaks[^1]} at the end, {peaks.Max()} at its loudest");
     }
 }

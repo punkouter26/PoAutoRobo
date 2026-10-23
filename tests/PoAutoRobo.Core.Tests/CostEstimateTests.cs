@@ -16,10 +16,10 @@ public sealed class CostEstimateTests : IDisposable
     }
 
     [Fact]
-    public async Task Pictures_are_costed_before_they_are_made_and_the_host_is_chosen_from_candidates()
+    public async Task Pictures_are_costed_before_they_are_made_and_the_host_and_logo_are_chosen_from_candidates()
     {
         Only_clips_that_still_need_a_picture_are_counted_and_priced_only_when_the_model_price_is_known();
-        await Candidate_sheets_are_separate_pictures_made_from_the_written_description_and_locking_one_makes_host_pictures_use_it();
+        await Candidate_sheets_are_separate_pictures_made_from_the_written_description_and_locking_one_makes_host_pictures_and_logos_use_it();
     }
 
     private void Only_clips_that_still_need_a_picture_are_counted_and_priced_only_when_the_model_price_is_known()
@@ -60,7 +60,7 @@ public sealed class CostEstimateTests : IDisposable
 
     // ---- The host's character sheet ----
 
-    private async Task Candidate_sheets_are_separate_pictures_made_from_the_written_description_and_locking_one_makes_host_pictures_use_it()
+    private async Task Candidate_sheets_are_separate_pictures_made_from_the_written_description_and_locking_one_makes_host_pictures_and_logos_use_it()
     {
         var images = Substitute.For<ImageMaker>();
         images.Invoke(default!, default!, default).ReturnsForAnyArgs(call =>
@@ -87,5 +87,12 @@ public sealed class CostEstimateTests : IDisposable
         Assert.True(visuals.HasSheet);
         Assert.Equal(File.ReadAllBytes(candidates[1]), File.ReadAllBytes(sheet));
         Assert.Equal(sheet, visuals.RequestFor(clip).ReferencePath);
+
+        // Logos are made the same way: separate takes, drawn from the locked host, square, on nothing, with no lettering.
+        var logos = await visuals.CandidateLogosAsync("Teaching the R1", "#22CC88", 3, Ct);
+
+        Assert.Equal(3, logos.Distinct().Count());
+        await images.Received(3).Invoke(Arg.Is<ImageRequest>(r => r.ReferencePath == sheet && r.Transparent && r.Size == "1024x1024"
+            && r.Prompt.Contains("Teaching the R1") && r.Prompt.Contains("#22CC88") && r.Prompt.Contains("No letters")), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

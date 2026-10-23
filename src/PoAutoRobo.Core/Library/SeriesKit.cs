@@ -45,10 +45,17 @@ public sealed record SeriesKit
 
     public TimeSpan Outro => TimeSpan.FromSeconds(OutroSeconds);
 
-    /// <summary>The kit in <paramref name="folder"/>, made safe to use; an empty kit when there is none or it is unreadable.</summary>
+    /// <summary>
+    /// What a new series starts with, before anything is set up: the channel this app is made for. Every picture and sound
+    /// left unset has a default of the app's own too (a robot's head for the logo, a robot for the mascot, a waking robot
+    /// for the sting), made when it is drawn.
+    /// </summary>
+    public static SeriesKit Starter { get; } = new() { ChannelName = "Teaching the R1", Tagline = "One skill at a time" };
+
+    /// <summary>The kit in <paramref name="folder"/>, made safe to use; the <see cref="Starter"/> kit when there is none or it is unreadable.</summary>
     public static SeriesKit Load(string folder)
     {
-        var kit = JsonFile.Load(Path.Combine(folder, FileName), new SeriesKit(), ProjectStore.JsonOptions);
+        var kit = JsonFile.Load(Path.Combine(folder, FileName), Starter, ProjectStore.JsonOptions);
         return kit with
         {
             ChannelName = kit.ChannelName ?? "",

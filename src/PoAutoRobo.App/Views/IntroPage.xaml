@@ -101,29 +101,67 @@
                     <TextBlock Text="Logo" VerticalAlignment="Center" />
                     <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.SeriesLogoLabel, Mode=OneWay}" Style="{StaticResource QuietText}" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                     <Button Grid.Column="2" Content="Pick…" Tag="logo" Click="OnPick" ToolTipService.ToolTip="Choose your logo: a PNG, best with a see-through background. It sits in a top corner of the intro and outro. The app keeps its own copy." />
-                    <Button Grid.Column="3" Style="{StaticResource IconButton}" Tag="logo" Click="OnClear" AutomationProperties.Name="No logo" ToolTipService.ToolTip="Take the logo out of the intro and outro."><SymbolIcon Symbol="Cancel" /></Button>
+                    <Button Grid.Column="3" Style="{StaticResource IconButton}" Tag="logo" Click="OnClear" AutomationProperties.Name="Use the app's logo" ToolTipService.ToolTip="Go back to the logo the app makes for you: a robot's head in the series colour."><SymbolIcon Symbol="Cancel" /></Button>
 
                     <TextBlock Grid.Row="1" Text="Mascot" VerticalAlignment="Center" />
                     <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.SeriesMascotLabel, Mode=OneWay}" Style="{StaticResource QuietText}" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                     <Button Grid.Row="1" Grid.Column="2" Content="Pick…" Tag="mascot" Click="OnPick" ToolTipService.ToolTip="Choose a PNG of your mascot, shown beside the words in the intro and outro. Or use the button below for the host you designed." />
-                    <Button Grid.Row="1" Grid.Column="3" Style="{StaticResource IconButton}" Tag="mascot" Click="OnClear" AutomationProperties.Name="No mascot" ToolTipService.ToolTip="Take the mascot out of the intro and outro; the words then sit in the middle."><SymbolIcon Symbol="Cancel" /></Button>
+                    <Button Grid.Row="1" Grid.Column="3" Style="{StaticResource IconButton}" Tag="mascot" Click="OnClear" AutomationProperties.Name="Use the app's mascot" ToolTipService.ToolTip="Go back to the mascot the app makes for you: a robot standing ready, in the series colour."><SymbolIcon Symbol="Cancel" /></Button>
                 </Grid>
+                <!-- A logo drawn for the channel, the way the host is: three candidates, one clicked to use -->
+                <Grid ColumnSpacing="{StaticResource GapSmall}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="MakeLogosButton" Content="Make 3 logos" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.MakeLogoCandidatesCommand}" IsEnabled="{x:Bind ViewModel.PicturesAvailable, Mode=OneWay}"
+                            ToolTipService.ToolTip="Draws three logo designs for your channel, from your host when you have one, in the series colour and on nothing so they sit on any background. You are asked first, with the cost; then click the one to use." />
+                    <Button Grid.Column="1" Content="Cancel" Command="{x:Bind ViewModel.MakeLogoCandidatesCancelCommand}" Visibility="{x:Bind ViewModel.MakeLogoCandidatesCommand.IsRunning, Mode=OneWay}"
+                            ToolTipService.ToolTip="Stop drawing the logos. Any already drawn are kept, so asking again does not pay for them twice." />
+                </Grid>
+                <TextBlock Text="{x:Bind ViewModel.LogoCandidatesCost, Mode=OneWay}" Style="{StaticResource QuietText}" Margin="0,-6,0,0" />
+                <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.MakeLogoCandidatesCommand.IsRunning, Mode=OneWay}" />
+                <ItemsControl x:Name="LogoList" ItemsSource="{x:Bind ViewModel.LogoCandidates}" IsTabStop="False" AutomationProperties.Name="Logo designs">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource GapSmall}" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Button Tag="{x:Bind}" Click="OnUseLogo" Padding="4" AutomationProperties.Name="A logo design"
+                                    ToolTipService.ToolTip="Use this logo. The intro picture shows it a moment later, and the kit keeps its own copy.">
+                                <Image Width="68" Height="68" Stretch="Uniform" Source="{x:Bind local:ClipCard.ToImage((x:String))}" />
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <Button x:Name="HostMascotButton" Content="Use the host design as the mascot" Command="{x:Bind ViewModel.UseHostAsMascotCommand}" HorizontalAlignment="Stretch"
                         IsEnabled="{x:Bind vm:MainViewModel.HasHostDesign}"
                         ToolTipService.ToolTip="Uses the cartoon robot chosen under Series and look, on its Host tab, as the mascot. It is already made, so this costs nothing. Greyed out until a host has been chosen." />
 
                 <TextBlock Text="Sound" Style="{StaticResource SectionHeading}" />
-                <Grid ColumnSpacing="{StaticResource GapSmall}">
+                <Grid ColumnSpacing="{StaticResource GapSmall}" RowSpacing="{StaticResource GapSmall}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="64" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <TextBlock Text="Sting" VerticalAlignment="Center" />
                     <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.SeriesStingLabel, Mode=OneWay}" Style="{StaticResource QuietText}" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                     <Button Grid.Column="2" Content="Pick…" Tag="sting" Click="OnPick" ToolTipService.ToolTip="Choose a few seconds of music for the intro (MP3, WAV, M4A, FLAC or OGG). Anything past five seconds is cut. With none, the app makes one that fits the swarm of light." />
-                    <Button Grid.Column="3" Style="{StaticResource IconButton}" Tag="sting" Click="OnClear" AutomationProperties.Name="No sting" ToolTipService.ToolTip="Go back to the sting the app makes for you."><SymbolIcon Symbol="Cancel" /></Button>
+                    <Button Grid.Column="3" Style="{StaticResource IconButton}" Tag="sting" Click="OnClear" AutomationProperties.Name="Use the app's sting" ToolTipService.ToolTip="Go back to the sting the app makes for you: a robot waking for its lesson, servos turning and data blips quickening into the hit."><SymbolIcon Symbol="Cancel" /></Button>
+                    <TextBlock Grid.Row="1" Text="Outro" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.SeriesMusicLabel, Mode=OneWay}" Style="{StaticResource QuietText}" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                    <Button Grid.Row="1" Grid.Column="2" Content="Pick…" Tag="music" Click="OnPick"
+                            ToolTipService.ToolTip="Use your own music for the outro of every new episode (MP3, WAV, M4A, FLAC or OGG). Music plays only over the intro and outro, never under the clips. Until you choose, the app makes a robot-lab tune. Use music you have the right to publish." />
+                    <Button Grid.Row="1" Grid.Column="3" Style="{StaticResource IconButton}" Tag="music" Click="OnClear" AutomationProperties.Name="Use the app's outro music"
+                            ToolTipService.ToolTip="Go back to the app's own outro tune: a robot lab winding down, soft chords, bright blips and a steady pulse."><SymbolIcon Symbol="Cancel" /></Button>
                 </Grid>
 
                 <TextBlock Text="Outro" Style="{StaticResource SectionHeading}" />

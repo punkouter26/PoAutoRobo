@@ -1,7 +1,7 @@
 # Working agreement for coding agents
 
-How an agent works in this repository. `CLAUDE.md` says what the app is and the rules of its code; `SPEC.md` says
-what it does and why. Read both first. Where this file and `CLAUDE.md` disagree about the code, `CLAUDE.md` wins.
+How an agent works in this repository. `CLAUDE.md` says what the app is and the rules of its code; read it first.
+Where this file and `CLAUDE.md` disagree about the code, `CLAUDE.md` wins.
 
 ## 1. Branching and version control
 
@@ -21,9 +21,9 @@ what it does and why. Read both first. Where this file and `CLAUDE.md` disagree 
 
 ## 3. Architecture and configuration
 
-- **Read the docs first.** This repo keeps its architecture in `CLAUDE.md` and `SPEC.md` (there is no `DOCS/`
-  folder or `README.md`; if either is added, read it too). When a package, a configuration setting or an environment
-  variable changes, update the table in `CLAUDE.md` and `SPEC.md` in the same change.
+- **Read the docs first.** This repo keeps its architecture in `CLAUDE.md` (there is no spec, `DOCS/` folder or
+  `README.md`; if one is added, read it too). When a package, a configuration setting or an environment variable
+  changes, update the table in `CLAUDE.md` in the same change.
 - **Automate everything you can.** Do not leave the user a command to type or a page to click through when a script,
   build step or test can do it.
 

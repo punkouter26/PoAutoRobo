@@ -112,7 +112,6 @@ public partial class MainViewModel
     private List<GuideItem> IntroGuide() =>
     [
         new("Channel name", _kit.ChannelName.Length > 0),
-        new("Logo or mascot", _kit.Logo is not null || _kit.Mascot is not null, Optional: true),
         new("Watch the intro", IntroPreviewPath is not null, Optional: true),
     ];
 
@@ -147,7 +146,7 @@ public partial class MainViewModel
     private List<GuideItem> PreviewGuide() =>
     [
         new("Build the preview", HasPreview),
-        new("Music", HasMusic, Optional: true),
+        new("Outro music", HasMusic, Optional: true),
     ];
 
     private List<GuideItem> PublishGuide()

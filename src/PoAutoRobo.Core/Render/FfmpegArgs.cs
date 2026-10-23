@@ -227,6 +227,10 @@ public static class FfmpegArgs
     // Long enough that every line has faded in by the frame taken, and the card's own fade out has not begun.
     private static readonly TimeSpan IntroMaskLength = TimeSpan.FromSeconds(4);
 
+    /// <summary>Plain RGBA pixels the app worked out (see <see cref="Emblem"/>), saved as a PNG that keeps their see-through parts.</summary>
+    public static IReadOnlyList<string> Picture(string pixelsFile, int width, int height, string output) =>
+        ["-f", "rawvideo", "-pix_fmt", "rgba", "-s", $"{width}x{height}", "-i", pixelsFile, "-frames:v", "1", "-y", output];
+
     /// <summary>
     /// One frame, <paramref name="at"/> into an intro or outro card as <see cref="IntroVideo"/> or <see cref="OutroVideo"/>
     /// draws it, as a picture: the card's own drawing, so the still shows exactly what the video will.
@@ -410,6 +414,17 @@ public static class FfmpegArgs
         "-vn", "-t", Seconds(length), "-c:a", "pcm_s16le", "-y", output,
     ];
 
+    /// <summary>
+    /// The outro's sound: a music track repeated to fill the outro exactly, in the narration's form so it takes the
+    /// outro's slot like a clip's voice, coming in softly and fading out over its last two seconds.
+    /// </summary>
+    public static IReadOnlyList<string> OutroMusic(string music, TimeSpan length, string output) =>
+    [
+        "-stream_loop", "-1", "-i", music, "-map", "0:a:0",
+        "-af", $"aformat=sample_rates=48000:channel_layouts=stereo,afade=t=in:d=0.5,afade=t=out:st={Seconds(length - TimeSpan.FromSeconds(2))}:d=2",
+        "-vn", "-t", Seconds(length), "-c:a", "pcm_s16le", "-y", output,
+    ];
+
     /// <summary>A film's sound as speech to text reads it best: one channel at 16 kHz.</summary>
     public static IReadOnlyList<string> SpeechSound(string video, string output) =>
         ["-i", video, "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-y", output];
@@ -425,13 +440,12 @@ public static class FfmpegArgs
     public static string ClipList(IEnumerable<string> clips) =>
         string.Concat(clips.Select(path => $"file '{path.Replace("'", @"'\''")}'\n"));
 
-    /// <summary>How loud the music is before the voice pushes it down further: a quarter of its own level.</summary>
-    private const double MusicLevel = 0.25;
-
-    /// <summary>Joins the finished clips by copying their pictures, and lays the crossfaded, levelled narration under them.</summary>
-    /// <param name="music">A track to play quietly underneath, repeated to the video's length and dipped whenever the voice speaks; null for none.</param>
+    /// <summary>
+    /// Joins the finished clips by copying their pictures, and lays the crossfaded, levelled narration under them. No
+    /// music plays under the clips: the series' music is the outro's own sound (see <see cref="OutroMusic"/>).
+    /// </summary>
     /// <param name="whoosh">A sound (see <see cref="Synth.Whoosh"/>) played into each of the <paramref name="cuts"/>, loudest on the cut; null for none.</param>
-    public static IReadOnlyList<string> Join(string clipListFile, IReadOnlyList<string> audios, string output, string? music = null, string? whoosh = null,
+    public static IReadOnlyList<string> Join(string clipListFile, IReadOnlyList<string> audios, string output, string? whoosh = null,
         IReadOnlyList<TimeSpan>? cuts = null)
     {
         var starts = whoosh is null ? [] : (cuts ?? []).Select(cut => cut - Synth.WhooshPeak).Where(start => start >= TimeSpan.Zero).ToList();
@@ -447,21 +461,12 @@ public static class FfmpegArgs
         if (starts.Count > 0)
         {
             // One copy of the whoosh for each cut, each held back to its moment and laid over the voice.
-            var input = audios.Count + 1 + (music is null ? 0 : 1);
+            var input = audios.Count + 1;
             graph.Add($"[{input}:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit={starts.Count}{string.Concat(starts.Select((_, j) => $"[w{j}]"))}");
             for (var j = 0; j < starts.Count; j++)
                 graph.Add(FormattableString.Invariant($"[w{j}]adelay=delays={(long)starts[j].TotalMilliseconds}:all=1[d{j}]"));
             graph.Add($"{sound}{string.Concat(starts.Select((_, j) => $"[d{j}]"))}amix=inputs={starts.Count + 1}:duration=first:normalize=0[swept]");
             sound = "[swept]";
-        }
-        if (music is not null)
-        {
-            // The voice is heard twice over: once in the mix, and once as the signal that pushes the music down.
-            graph.Add($"{sound}asplit[voice][key]");
-            graph.Add($"[{audios.Count + 1}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={MusicLevel.ToString(CultureInfo.InvariantCulture)}[bed]");
-            graph.Add("[bed][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[ducked]");
-            graph.Add("[voice][ducked]amix=inputs=2:duration=first:normalize=0[mixed]"); // ends with the voice, however long the track is
-            sound = "[mixed]";
         }
         graph.Add($"{sound}loudnorm=I={TargetLufs.ToString(CultureInfo.InvariantCulture)}:TP=-1.5:LRA=11,aresample=48000[aout]");
 
@@ -469,7 +474,6 @@ public static class FfmpegArgs
         [
             "-f", "concat", "-safe", "0", "-i", clipListFile,
             .. audios.SelectMany(path => new[] { "-i", path }),
-            .. music is null ? [] : new[] { "-stream_loop", "-1", "-i", music },
             .. starts.Count == 0 ? [] : new[] { "-i", whoosh! },
             "-filter_complex", string.Join(';', graph),
             "-map", "0:v", "-map", "[aout]",

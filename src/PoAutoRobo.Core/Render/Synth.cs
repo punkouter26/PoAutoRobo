@@ -1,8 +1,8 @@
 namespace PoAutoRobo.Core.Render;
 
 /// <summary>
-/// The video's own sounds, worked out as numbers: the intro's sting when the series has none of its own, and the rush
-/// of air into each new beat. Nothing is shipped as a file, nothing is paid for, and the same request always gives the
+/// The video's own sounds, worked out as numbers: the intro's sting and the outro's music when the series has none of
+/// its own, and the rush of air into each new beat. Nothing is shipped as a file, nothing is paid for, and the same request always gives the
 /// same sound, so what is made from them caches like anything else.
 /// </summary>
 public static class Synth
@@ -19,8 +19,9 @@ public static class Synth
     public static readonly TimeSpan WhooshPeak = TimeSpan.FromSeconds(0.6);
 
     /// <summary>
-    /// An intro sting, <paramref name="length"/> long: a band of noise climbing for two seconds, then a low blow, a
-    /// bright chord ringing out and small high notes scattered left and right as the swarm settles.
+    /// An intro sting, <paramref name="length"/> long, for a robot being trained: a band of noise climbing for two
+    /// seconds under servo moves and quickening data blips, then a low blow, a bright chord ringing out and small high
+    /// notes scattered left and right as the swarm settles.
     /// </summary>
     /// <returns>A complete 16-bit stereo WAV file.</returns>
     public static byte[] Sting(TimeSpan length)
@@ -42,6 +43,35 @@ public static class Synth
             var tone = Math.Sin(2 * Math.PI * phase) * 0.25 * swell;
             left[i] += (float)(bandLeft.Pass(Noise(random), centre, 5) * 0.5 * swell + tone);
             right[i] += (float)(bandRight.Pass(Noise(random), centre, 5) * 0.5 * swell + tone);
+        }
+
+        // The robot waking for its lesson: three servo moves, each a small motor's buzz gliding up as a joint turns, from
+        // one side then the other; and a run of data blips quickening into the hit, as a machine finishing its checks.
+        double[] servos = [0.35, 0.95, 1.5];
+        for (var s = 0; s < servos.Length; s++)
+        {
+            var (start, run, pan) = ((int)(servos[s] * Rate), (int)(0.28 * Rate), s % 2 == 0 ? 0.25 : 0.75);
+            var motor = 0.0;
+            for (var i = start; i < Math.Min(hit, start + run); i++)
+            {
+                var x = (double)(i - start) / run;
+                motor += (180 + 220 * x) / Rate;
+                var buzz = (motor % 1 * 2 - 1) * Math.Sin(Math.PI * x) * 0.16; // a sawtooth: the hard edge of a small motor
+                left[i] += (float)(buzz * Math.Cos(pan * Math.PI / 2));
+                right[i] += (float)(buzz * Math.Sin(pan * Math.PI / 2));
+            }
+        }
+        double[] blips = [880.00, 1174.66, 1318.51, 1760.00];
+        for (var at = 0.7; at < Hit.TotalSeconds - 0.08; at += 0.16 - 0.08 * at / Hit.TotalSeconds)
+        {
+            var (start, pitch) = ((int)(at * Rate), blips[random.Next(blips.Length)]);
+            for (var i = start; i < Math.Min(hit, start + Rate / 25); i++)
+            {
+                var t = (double)(i - start) / Rate;
+                var blip = Math.Sign(Math.Sin(2 * Math.PI * pitch * t)) * Math.Exp(-t * 40) * 0.06; // a square wave: a machine's beep
+                left[i] += (float)blip;
+                right[i] += (float)blip;
+            }
         }
 
         // The blow: a thump falling in pitch, a crack of noise, and the chord (A with an added B), a little apart on each side.
@@ -80,6 +110,58 @@ public static class Synth
         }
 
         FadeOut(left, right, (int)(0.4 * Rate)); // ends in silence, so the join into the first clip never clicks
+        return Wave(left, right);
+    }
+
+    /// <summary>
+    /// The outro's music when the series has none of its own, <paramref name="length"/> long: a robot lab winding down
+    /// after the lesson. A soft pad moves through A, F sharp minor, D and E; quick bright blips run up each chord, left
+    /// and right in turn; a low pulse keeps the beat. It comes in softly and fades out over its last two seconds.
+    /// </summary>
+    /// <returns>A complete 16-bit stereo WAV file.</returns>
+    public static byte[] OutroTune(TimeSpan length)
+    {
+        var count = (int)(length.TotalSeconds * Rate);
+        var (left, right) = (new float[count], new float[count]);
+        const double Beat = 60.0 / 112; // a steady walking pace
+        (double Root, double[] Triad)[] chords =
+        [
+            (110.00, [220.00, 277.18, 329.63]), (92.50, [185.00, 220.00, 277.18]),
+            (73.42, [146.83, 185.00, 220.00]), (82.41, [164.81, 207.65, 246.94]),
+        ];
+        for (var i = 0; i < count; i++)
+        {
+            var t = (double)i / Rate;
+            var bar = (int)(t / (4 * Beat));
+            var (root, triad) = chords[bar % chords.Length];
+            var inBar = t - bar * 4 * Beat;
+
+            // The pad: each note of the chord, soft, a hair apart on each side, swelling in at each change.
+            var swell = Math.Min(1, inBar / 0.3) * 0.07;
+            var (padLeft, padRight) = (0.0, 0.0);
+            foreach (var note in triad)
+            {
+                padLeft += (Math.Sin(2 * Math.PI * note * 0.998 * t) + 0.3 * Math.Sin(4 * Math.PI * note * 0.998 * t)) * swell;
+                padRight += (Math.Sin(2 * Math.PI * note * 1.002 * t) + 0.3 * Math.Sin(4 * Math.PI * note * 1.002 * t)) * swell;
+            }
+
+            // The blips: eighth notes running up the chord two octaves higher, like a machine at work, panned in turn.
+            var step = (int)(inBar / (Beat / 2));
+            var sinceBlip = inBar - step * Beat / 2;
+            var blipPitch = triad[step % triad.Length] * 4;
+            var blip = (Math.Sin(2 * Math.PI * blipPitch * sinceBlip) + Math.Sin(6 * Math.PI * blipPitch * sinceBlip) / 3) * Math.Exp(-sinceBlip * 14) * 0.06;
+            var blipPan = step % 2 == 0 ? 0.3 : 0.7;
+
+            // The pulse: the chord's root, low and short, on every beat.
+            var sinceBeat = inBar % Beat;
+            var pulse = Math.Sin(2 * Math.PI * root * sinceBeat) * Math.Exp(-sinceBeat * 7) * 0.22;
+
+            left[i] = (float)(padLeft + pulse + blip * Math.Cos(blipPan * Math.PI / 2));
+            right[i] = (float)(padRight + pulse + blip * Math.Sin(blipPan * Math.PI / 2));
+        }
+        for (var i = 0; i < Math.Min(count, Rate / 2); i++) // in softly, as the outro's picture fades up
+            (left[i], right[i]) = (left[i] * i / (Rate / 2f), right[i] * i / (Rate / 2f));
+        FadeOut(left, right, 2 * Rate);
         return Wave(left, right);
     }
 
