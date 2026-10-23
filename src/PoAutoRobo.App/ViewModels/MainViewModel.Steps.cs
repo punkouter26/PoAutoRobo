@@ -59,6 +59,7 @@ public partial class MainViewModel
             OnPropertyChanged(nameof(ShowDeck));
             OnPropertyChanged(nameof(StepHint));
             if (wanted == LessonStep) _ = Guard(RefreshLibraryAsync);
+            if (wanted == IntroStep) RedrawStill(); // what was drawn last may be out of date: the episode number moves on
             ErrorMessage = null; // an error belongs to the page it happened on
         }
     }

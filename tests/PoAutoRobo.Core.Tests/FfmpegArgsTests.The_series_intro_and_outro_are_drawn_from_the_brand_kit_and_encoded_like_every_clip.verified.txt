@@ -97,6 +97,29 @@ rawvideo
 rgb24
 -y
 mask.rgb
+--- a still of the intro, for the Intro step to follow each change ---
+-f
+lavfi
+-i
+gradients=s=1280x720:r=10:c0=0x101828:c1=0x22CC88:x0=0:y0=720:x1=1280:y1=0:speed=0.002:d=5.000
+-loop
+1
+-i
+mascot.png
+-loop
+1
+-i
+logo.png
+-filter_complex
+[1:v]scale=-2:504,format=rgba,fade=t=in:st=0.4:d=0.6:alpha=1[mascot];[0:v][mascot]overlay=x=W-w-W*0.05:y=(H-h)/2[m];[2:v]scale=-2:90,format=rgba,fade=t=in:st=0.2:d=0.6:alpha=1[logo];[m][logo]overlay=x=W*0.04:y=H*0.06[l];[l]drawtext=textfile=intro_channel.txt:expansion=none:fontfile=title-font.ttf:fontcolor=white:fontsize=h/10:x=w*0.08:y=h*0.34:borderw=3:bordercolor=black@0.35:alpha='min(1,max(0,(t-0.8)/0.5))',drawtext=textfile=intro_tagline.txt:expansion=none:fontfile=title-font.ttf:fontcolor=white:fontsize=h/24:x=w*0.08:y=h*0.48:borderw=3:bordercolor=black@0.35:alpha='min(1,max(0,(t-1.2)/0.5))',drawtext=textfile=intro_title.txt:expansion=none:fontfile=title-font.ttf:fontcolor=white:fontsize=h/14:x=w*0.08:y=h*0.60:borderw=3:bordercolor=black@0.35:alpha='min(1,max(0,(t-1.6)/0.5))',fade=t=in:st=0:d=0.250,fade=t=out:st=4.750:d=0.250,format=yuv420p[v]
+-map
+[v]
+-ss
+3.000
+-frames:v
+1
+-y
+intro.png
 --- intro, channel name only ---
 -f
 lavfi

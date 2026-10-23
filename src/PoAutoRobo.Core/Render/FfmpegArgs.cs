@@ -228,6 +228,16 @@ public static class FfmpegArgs
     private static readonly TimeSpan IntroMaskLength = TimeSpan.FromSeconds(4);
 
     /// <summary>
+    /// One frame, <paramref name="at"/> into an intro or outro card as <see cref="IntroVideo"/> or <see cref="OutroVideo"/>
+    /// draws it, as a picture: the card's own drawing, so the still shows exactly what the video will.
+    /// </summary>
+    public static IReadOnlyList<string> Still(IReadOnlyList<string> card, TimeSpan at, string output)
+    {
+        var end = card.ToList().IndexOf("-map") + 2; // the inputs, the drawing and its output; the encoding is replaced
+        return [.. card.Take(end), "-ss", Seconds(at), "-frames:v", "1", "-y", output];
+    }
+
+    /// <summary>
     /// The intro with its swarm: the swarm's frames (read from FFmpeg's input, drawn at <paramref name="swarmSize"/>) with
     /// a soft glow, laid over the dark; the background rising out of it into the hit; and the finished card coming up
     /// under them as they land, so the points of light become the real words, logo and mascot. Encoded like every clip.

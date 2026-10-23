@@ -68,6 +68,7 @@ public sealed class FfmpegArgsTests : IDisposable
             $"--- intro ---\n{intro}\n" +
             $"--- the swarm gathering into it ---\n{swarm}\n" +
             $"--- where the swarm lands ---\n{Lines(FfmpegArgs.IntroMask(full, "intro_channel.txt", "intro_tagline.txt", "intro_title.txt", new ExportPreset(1280, 720, 30), "mask.rgb"))}\n" +
+            $"--- a still of the intro, for the Intro step to follow each change ---\n{Lines(FfmpegArgs.Still(FfmpegArgs.IntroVideo(full, "intro_channel.txt", "intro_tagline.txt", "intro_title.txt", S(5), new ExportPreset(1280, 720, 10), "card.mp4"), S(3), "intro.png"))}\n" +
             $"--- intro, channel name only ---\n{Lines(FfmpegArgs.IntroVideo(bare, "intro_channel.txt", null, "intro_title.txt", S(5), ExportPreset.Hd30, "intro.mp4"))}\n" +
             $"--- intro laid out about its centre: the mascot above the words ---\n{Lines(FfmpegArgs.IntroVideo(full with { Layout = IntroLayout.Centre }, "intro_channel.txt", "intro_tagline.txt", "intro_title.txt", S(5), ExportPreset.Hd30, "intro.mp4"))}\n" +
             $"--- intro with its words on a band across the lower third ---\n{Lines(FfmpegArgs.IntroVideo(full with { Layout = IntroLayout.Lower }, "intro_channel.txt", "intro_tagline.txt", "intro_title.txt", S(5), ExportPreset.Hd30, "intro.mp4"))}\n" +

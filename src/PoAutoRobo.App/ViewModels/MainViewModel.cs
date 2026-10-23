@@ -72,6 +72,7 @@ public partial class MainViewModel : ObservableObject
         (_scriptWriter, _builder, _grounding, _visualsFor, _imageModel, OfflineMessage, _hear) = (writer, builder, grounding, visualsFor, imageModel, offlineMessage, hear);
         IsConnected = true;
         Reopen();
+        RedrawStill(); // opening on the intro: show it as it stands
     }
 
     /// <summary>

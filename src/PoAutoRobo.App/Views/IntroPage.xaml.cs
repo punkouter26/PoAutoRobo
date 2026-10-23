@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Imaging;
 using PoAutoRobo.App.ViewModels;
 using Windows.Media.Core;
 using Windows.Media.Playback;
@@ -8,7 +9,8 @@ using Windows.Storage.Pickers;
 
 namespace PoAutoRobo.App.Views;
 
-/// <summary>Step 1: the intro every episode opens with and the outro it ends on, and what they are made of.</summary>
+/// <summary>Step 1: the intro every episode opens with and the outro it ends on, what they are made of, and a still of
+/// the intro that follows each change.</summary>
 public sealed partial class IntroPage : UserControl
 {
     private readonly MediaPlayer _player = new();
@@ -35,9 +37,18 @@ public sealed partial class IntroPage : UserControl
     /// <summary>Lets go of the video being shown, so the scratch sweep can remove it. The window calls this as it closes.</summary>
     public void Release() => _player.Dispose();
 
-    // A new intro or outro plays as soon as it is made; leaving the page stops it.
+    // A new still takes the screen as soon as it is drawn, as the last change asked for it; a new intro or outro plays
+    // over it as soon as it is made; leaving the page stops it.
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainViewModel.StillPath) && ViewModel?.StillPath is { } still)
+        {
+            _player.Pause();
+            IntroPlayer.Visibility = Visibility.Collapsed;
+            StillImage.Source = new BitmapImage(new Uri(still)); // each still has its own file, so none is shown from an old copy
+            StillBadge.Visibility = Visibility.Visible;
+            return;
+        }
         var made = e.PropertyName switch
         {
             nameof(MainViewModel.IntroPreviewPath) => ViewModel?.IntroPreviewPath,
@@ -46,6 +57,8 @@ public sealed partial class IntroPage : UserControl
         };
         if (made is not null)
         {
+            IntroPlayer.Visibility = Visibility.Visible;
+            StillBadge.Visibility = Visibility.Collapsed;
             _player.Source = MediaSource.CreateFromUri(new Uri(made));
             _player.Play();
         }

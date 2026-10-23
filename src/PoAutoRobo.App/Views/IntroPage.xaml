@@ -33,9 +33,9 @@
 
         <ScrollViewer Background="{ThemeResource LayerFillColorDefaultBrush}" VerticalScrollBarVisibility="Auto">
             <StackPanel Padding="{StaticResource PagePadding}" Spacing="{StaticResource Gap}">
-                <TextBox x:Name="ChannelBox" Header="Channel name" PlaceholderText="Teaching the R1" Text="{x:Bind ViewModel.SeriesChannel, Mode=TwoWay}" MaxLength="60"
+                <TextBox x:Name="ChannelBox" Header="Channel name" PlaceholderText="Teaching the R1" Text="{x:Bind ViewModel.SeriesChannel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MaxLength="60"
                          ToolTipService.ToolTip="Your channel's name, shown large in every intro and outro. Type it once; it is saved as you go. Without one, episodes are exported with no intro or outro." />
-                <TextBox x:Name="TaglineBox" Header="Tagline" PlaceholderText="One skill at a time" Text="{x:Bind ViewModel.SeriesTagline, Mode=TwoWay}" MaxLength="80"
+                <TextBox x:Name="TaglineBox" Header="Tagline" PlaceholderText="One skill at a time" Text="{x:Bind ViewModel.SeriesTagline, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MaxLength="80"
                          ToolTipService.ToolTip="A short line shown under the channel name in the intro. Optional: leave it empty to show the name alone." />
 
                 <TextBlock Text="Look" Style="{StaticResource SectionHeading}" />
@@ -51,7 +51,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:IntroStart">
                             <Button Tag="{x:Bind}" Click="OnStart" Padding="4" Background="Transparent" BorderThickness="0" AutomationProperties.Name="{x:Bind Name}"
-                                    ToolTipService.ToolTip="Click to give the intro this colour and layout. Press Show the intro to see it.">
+                                    ToolTipService.ToolTip="Click to give the intro this colour and layout. The picture on the right shows it a moment later.">
                                 <StackPanel Width="116" Spacing="4">
                                     <Grid Height="66" CornerRadius="6">
                                         <Grid.Background>
@@ -77,13 +77,13 @@
                 <StackPanel Spacing="4">
                     <TextBlock Text="Layout" />
                     <controls:Segmented x:Name="LayoutSelector" SelectedIndex="{x:Bind ViewModel.SeriesLayoutIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="Layout"
-                                        ToolTipService.ToolTip="Where the words and mascot sit in the intro. Side: words left, mascot right. Centre: mascot above, words centred under it. Lower band: words on a dark band across the bottom. Press Show the intro to see it.">
+                                        ToolTipService.ToolTip="Where the words and mascot sit in the intro. Side: words left, mascot right. Centre: mascot above, words centred under it. Lower band: words on a dark band across the bottom. The picture on the right shows each one as you pick it.">
                         <controls:SegmentedItem Content="Side" />
                         <controls:SegmentedItem Content="Centre" />
                         <controls:SegmentedItem Content="Lower band" />
                     </controls:Segmented>
                 </StackPanel>
-                <TextBox x:Name="AccentBox" Header="Accent colour" PlaceholderText="#FFD400" Text="{x:Bind ViewModel.SeriesAccent, Mode=TwoWay}" MaxLength="7"
+                <TextBox x:Name="AccentBox" Header="Accent colour" PlaceholderText="#FFD400" Text="{x:Bind ViewModel.SeriesAccent, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MaxLength="7"
                          ToolTipService.ToolTip="The series colour, typed as # and six letters or digits, such as #22CC88. It fills the intro and outro background and colours the section straps and captions of new episodes." />
 
                 <TextBlock Text="Pictures" Style="{StaticResource SectionHeading}" />
@@ -140,11 +140,17 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <TextBlock Style="{StaticResource QuietText}"
-                       Text="About five seconds, the same at the start of every episode: the swarm of light, your logo and mascot, the channel name and tagline, then the episode's number and title, over the sting. The outro at the end has the same look, with room on the right for YouTube's end-screen cards." />
-            <Border Grid.Row="1" CornerRadius="8" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
-                <MediaPlayerElement x:Name="IntroPlayer" AreTransportControlsEnabled="True" Stretch="Uniform" AutomationProperties.Name="Intro or outro preview"
-                                    ToolTipService.ToolTip="The intro or outro last drawn. Use the controls along its foot to play it again, pause it or watch it full screen." />
-            </Border>
+                       Text="The picture below follows your changes as you make them. The intro runs about five seconds, the same at the start of every episode: the swarm of light, your logo and mascot, the channel name and tagline, then the episode's number and title, over the sting. The outro at the end has the same look, with room on the right for YouTube's end-screen cards." />
+            <!-- A still of the intro as the settings stand, redrawn a moment after each change; the buttons below play it in full -->
+            <Grid Grid.Row="1" CornerRadius="8" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
+                <Image x:Name="StillImage" Stretch="Uniform" AutomationProperties.Name="The intro as it stands"
+                       ToolTipService.ToolTip="The intro as it will look once its words are in, redrawn a moment after each change on the left. Press Show the intro to watch it move, with its sound." />
+                <Border x:Name="StillBadge" Style="{StaticResource Badge}" HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed" IsHitTestVisible="False">
+                    <TextBlock x:Name="StillBadgeText" Style="{StaticResource QuietText}" Text="Still · follows your changes" />
+                </Border>
+                <MediaPlayerElement x:Name="IntroPlayer" AreTransportControlsEnabled="True" Stretch="Uniform" Visibility="Collapsed" AutomationProperties.Name="Intro or outro preview"
+                                    ToolTipService.ToolTip="The intro or outro last drawn. Use the controls along its foot to play it again, pause it or watch it full screen. Change anything on the left to go back to the still." />
+            </Grid>
             <StackPanel Grid.Row="2" Spacing="{StaticResource GapSmall}">
                 <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.PreviewIntroCommand.IsRunning, Mode=OneWay}" />
                 <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.PreviewOutroCommand.IsRunning, Mode=OneWay}" />
@@ -155,7 +161,7 @@
                     </Grid.ColumnDefinitions>
                     <Button x:Name="PreviewIntroButton" HorizontalAlignment="Stretch" MinHeight="44" Command="{x:Bind ViewModel.PreviewIntroCommand}"
                             Style="{x:Bind app:Ui.Primary(ViewModel.ShowIntroIsNext), Mode=OneWay}"
-                            ToolTipService.ToolTip="Draws the intro with the settings on the left, for the next episode's number, and plays it. Press it again after any change to see the difference. Made on this computer; it costs nothing.">
+                            ToolTipService.ToolTip="Plays the intro in full, moving and with its sound: the swarm of light gathering into the picture above, for the next episode's number. Takes a few seconds to draw; made on this computer, it costs nothing.">
                         <StackPanel Orientation="Horizontal" Spacing="{StaticResource GapSmall}">
                             <SymbolIcon Symbol="Play" />
                             <TextBlock Text="Show the intro" />

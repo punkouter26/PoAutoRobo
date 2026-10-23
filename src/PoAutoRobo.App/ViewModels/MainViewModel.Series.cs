@@ -89,6 +89,44 @@ public partial class MainViewModel
     [ObservableProperty]
     public partial string? OutroPreviewPath { get; set; }
 
+    /// <summary>
+    /// A still of the intro (or of the outro, once Show the outro has been pressed) as the settings stand now, redrawn a
+    /// moment after each change so the Intro step follows what is done on the left. Null until the first is drawn.
+    /// </summary>
+    [ObservableProperty]
+    public partial string? StillPath { get; set; }
+
+    private bool _stillOfOutro;
+    private CancellationTokenSource? _still;
+
+    // A burst of changes, such as typing a name, draws once, a moment after the last. Each still is drawn here, for free.
+    private void RedrawStill()
+    {
+        if (!FfmpegAvailable || Step != IntroStep) return;
+        _still?.Cancel();
+        _still = new CancellationTokenSource();
+        _ = DrawStillAsync(_still.Token);
+    }
+
+    private async Task DrawStillAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(300, ct);
+            var number = Episode?.Number is > 0 and var n ? n : Math.Max(1, (int)EpisodeNumber);
+            var still = await _builder.BookendStillAsync(!_stillOfOutro, SeriesBrand, number, ct);
+            if (!ct.IsCancellationRequested) StillPath = still;
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer change has asked for its own still.
+        }
+        catch (Exception e) when (e is IOException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            // The still is a help, not a job: the intro is still shown in full by its button, which says what went wrong.
+        }
+    }
+
     public static Choice<IntroLayout>[] LayoutChoices { get; } =
     [
         new("Side", IntroLayout.Side), new("Centre", IntroLayout.Centre), new("Lower band", IntroLayout.Lower),
@@ -128,6 +166,7 @@ public partial class MainViewModel
         }
         foreach (var name in SeriesFields)
             OnPropertyChanged(name); // the dialog's fields and labels all read from the kit
+        RedrawStill();
     }
 
     private static readonly string[] SeriesFields =
@@ -150,6 +189,7 @@ public partial class MainViewModel
             "music" => _kit with { Music = name },
             _ => _kit with { Mascot = name },
         });
+        RedrawStill(); // a new picture under the same name changes nothing in the kit, but changes what is drawn
     });
 
     public void ClearSeriesFile(string role) => Store(role switch
@@ -176,6 +216,7 @@ public partial class MainViewModel
         if (!FfmpegAvailable)
             throw new InvalidOperationException("FFmpeg is needed to draw the intro. Install it, then restart the app.");
         var number = Episode?.Number is > 0 and var n ? n : Math.Max(1, (int)EpisodeNumber);
+        _stillOfOutro = false;
         IntroPreviewPath = await _builder.PreviewIntroAsync(SeriesBrand, number, ct);
     });
 
@@ -185,6 +226,7 @@ public partial class MainViewModel
     {
         if (!FfmpegAvailable)
             throw new InvalidOperationException("FFmpeg is needed to draw the outro. Install it, then restart the app.");
+        _stillOfOutro = true;
         OutroPreviewPath = await _builder.PreviewOutroAsync(SeriesBrand, ct);
     });
 

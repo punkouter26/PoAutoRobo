@@ -616,21 +616,9 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
     /// </summary>
     private async Task<string> BookendPictureAsync(bool intro, Brand brand, Episode episode, ExportPreset preset, TimeSpan length, string work, MediaCache cache, CancellationToken ct)
     {
-        var (kit, name) = (brand.Kit, intro ? "intro" : "outro");
-        // The words, read by name from the working folder like a title card's; a line with nothing to say is left out.
-        var lines = intro
-            ? new (string Key, string Text)[] { ("channel", brand.ChannelName), ("tagline", kit.Tagline), ("title", TitleLine(episode)) }
-            : [("channel", brand.ChannelName), ("next", NextTime(episode) is { } next ? $"Next time: {next}" : "")];
-        string? File(string key) => lines.First(l => l.Key == key).Text.Trim() is { Length: > 0 } ? $"{name}_{key}.txt" : null;
-        foreach (var (key, text) in lines.Where(l => l.Text.Trim().Length > 0))
-            await System.IO.File.WriteAllTextAsync(Path.Combine(work, $"{name}_{key}.txt"), text.Trim(), ct);
-
-        var look = new BookendLook(kit.Captions.AccentColor, SeriesKit.PathOf(brand.Folder, kit.Logo), SeriesKit.PathOf(brand.Folder, kit.Mascot), kit.Layout);
-        IReadOnlyList<string> Args(string to) => intro
-            ? FfmpegArgs.IntroVideo(look, File("channel")!, File("tagline"), File("title")!, length, preset, to)
-            : FfmpegArgs.OutroVideo(look, File("channel")!, File("next"), length, preset, to);
-        List<string> made = [string.Join('\n', Args("clip.mp4")), .. lines.Select(l => l.Text), .. new[] { look.Logo, look.Mascot }.OfType<string>().Select(Stamp)];
-        var card = await cache.GetOrCreateAsync(made, ".mp4", scratch => ffmpeg.RunAsync(Args(scratch), work, length, null, ct));
+        var (look, words, draw, fileOf) = await BookendCardAsync(intro, brand, episode, preset, length, work, ct);
+        List<string> made = [string.Join('\n', draw("clip.mp4")), .. words, .. new[] { look.Logo, look.Mascot }.OfType<string>().Select(Stamp)];
+        var card = await cache.GetOrCreateAsync(made, ".mp4", scratch => ffmpeg.RunAsync(draw(scratch), work, length, null, ct));
         if (!intro) return card;
 
         // The intro opens on the swarm gathering into this card. The card's own name in the cache says what is on it.
@@ -639,7 +627,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         return await cache.GetOrCreateAsync([SwarmVersion, card, $"{size.Width}x{size.Height}", string.Join('\n', FfmpegArgs.SwarmIntroVideo(look, "card.mp4", size, length, preset, "clip.mp4"))], ".mp4", async scratch =>
         {
             var maskFile = Path.Combine(work, "intro_mask.rgb");
-            await ffmpeg.RunAsync(FfmpegArgs.IntroMask(look, File("channel")!, File("tagline"), File("title")!, size, maskFile), work, null, null, ct);
+            await ffmpeg.RunAsync(FfmpegArgs.IntroMask(look, fileOf("channel")!, fileOf("tagline"), fileOf("title")!, size, maskFile), work, null, null, ct);
             var accent = Convert.FromHexString(look.Accent.TrimStart('#'));
             var swarm = new Swarm(await System.IO.File.ReadAllBytesAsync(maskFile, ct), size.Width, size.Height, (accent[0], accent[1], accent[2]));
             if (swarm.Count == 0)
@@ -660,6 +648,48 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         });
     }
 
+    /// <summary>
+    /// The intro's or outro's words, written to the working folder for FFmpeg to read, with its look and how to draw its
+    /// card into a file. A line with nothing to say is left out.
+    /// </summary>
+    private static async Task<(BookendLook Look, string[] Words, Func<string, IReadOnlyList<string>> Args, Func<string, string?> File)> BookendCardAsync(
+        bool intro, Brand brand, Episode episode, ExportPreset preset, TimeSpan length, string work, CancellationToken ct)
+    {
+        var (kit, name) = (brand.Kit, intro ? "intro" : "outro");
+        var lines = intro
+            ? new (string Key, string Text)[] { ("channel", brand.ChannelName), ("tagline", kit.Tagline), ("title", TitleLine(episode)) }
+            : [("channel", brand.ChannelName), ("next", NextTime(episode) is { } next ? $"Next time: {next}" : "")];
+        string? File(string key) => lines.First(l => l.Key == key).Text.Trim() is { Length: > 0 } ? $"{name}_{key}.txt" : null;
+        foreach (var (key, text) in lines.Where(l => l.Text.Trim().Length > 0))
+            await System.IO.File.WriteAllTextAsync(Path.Combine(work, $"{name}_{key}.txt"), text.Trim(), ct);
+
+        var look = new BookendLook(kit.Captions.AccentColor, SeriesKit.PathOf(brand.Folder, kit.Logo), SeriesKit.PathOf(brand.Folder, kit.Mascot), kit.Layout);
+        IReadOnlyList<string> Args(string to) => intro
+            ? FfmpegArgs.IntroVideo(look, File("channel")!, File("tagline"), File("title")!, length, preset, to)
+            : FfmpegArgs.OutroVideo(look, File("channel")!, File("next"), length, preset, to);
+        return (look, [.. lines.Select(l => l.Text)], Args, File);
+    }
+
+    /// <summary>
+    /// One still of the intro or outro once all its words are in, drawn in a moment and costing nothing, so the Intro
+    /// step can show each change to the brand kit as it is made. Made in the scratch folder.
+    /// </summary>
+    /// <returns>The picture's path.</returns>
+    public async Task<string> BookendStillAsync(bool intro, Brand brand, int number, CancellationToken ct)
+    {
+        var name = intro ? "intro" : "outro";
+        var work = Files.NewScratchFolder($"{name}-still");
+        CopyTitleFont(work);
+        var sample = new Episode("Your next lesson", "", [], 0) { Number = number };
+        var length = intro ? IntroLength : brand.Kit.Outro;
+        var (_, _, args, _) = await BookendCardAsync(intro, brand, sample, StillSize, length, work, ct);
+        var output = Path.Combine(work, $"{name}.png");
+        await ffmpeg.RunAsync(FfmpegArgs.Still(args("card.mp4"), intro ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(2), output), work, null, null, ct);
+        return output;
+    }
+
+    // Sharp enough for the Intro step's screen, and few frames to work through before the one taken.
+    private static readonly ExportPreset StillSize = new(1280, 720, 10);
     /// <summary>The intro's line for the episode, "#7 · Walking up stairs"; never empty, as the intro always draws it.</summary>
     private static string TitleLine(Episode episode)
     {

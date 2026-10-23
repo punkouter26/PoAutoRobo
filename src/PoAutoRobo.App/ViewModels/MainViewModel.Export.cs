@@ -286,8 +286,12 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Stops a clip or teaser being got ready to watch. The window calls this as it closes.</summary>
-    public void StopWatching() => _watching?.Cancel();
+    /// <summary>Stops a clip or teaser being got ready to watch, and a still of the intro being drawn. The window calls this as it closes.</summary>
+    public void StopWatching()
+    {
+        _watching?.Cancel();
+        _still?.Cancel();
+    }
 
     // Progress<T> hops back to the UI thread, so it must be made on it.
     private Progress<RenderProgress> RenderProgress() => new(p =>
