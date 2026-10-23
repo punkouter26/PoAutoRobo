@@ -10,6 +10,19 @@ public sealed record ClipNote(int Clip, string Note);
 /// <param name="SearchWords">A few plain words that would find a photograph of the place or the object.</param>
 public sealed record SaferPicture(string Diagram, string SearchWords);
 
+/// <summary>What a model saw happen in one of the owner's films, from a few of its frames.</summary>
+/// <param name="Timeline">What happens, a line to each stretch, each line starting with its seconds.</param>
+/// <param name="Note">One line on what the film shows, as the owner might label it.</param>
+/// <param name="Highlight">The second of the most telling moment: a fall, a catch, a success.</param>
+public sealed record FootageSeen(string Timeline, string Note, double Highlight);
+
+/// <summary>One frame taken from a film or a scene, and when in it.</summary>
+public sealed record Frame(TimeSpan At, string Path);
+
+/// <summary>What a look at a drawn scene found.</summary>
+/// <param name="Problem">What to move or change, said as a designer would; empty when it is fine.</param>
+public sealed record SceneVerdict(bool Fine, string Problem);
+
 public interface IScriptWriter
 {
     /// <summary>The longest topic sent to the model. A larger paste is cut here so it cannot run up a large bill.</summary>
@@ -39,6 +52,22 @@ public interface IScriptWriter
 
     /// <summary>Reads the whole script as an editor would and notes the clips worth changing; none when it reads well.</summary>
     Task<IReadOnlyList<ClipNote>> ReviewAsync(Episode episode, CancellationToken ct);
+
+    /// <summary>Rewrites one clip's words to answer the editor's note on them, keeping what the note does not mention.</summary>
+    Task<string> ReviseAsync(Clip clip, string note, CancellationToken ct);
+
+    /// <summary>What happens in one of the owner's films, seen from a few of its frames; null when nothing here can see pictures.</summary>
+    /// <param name="note">The owner's own line on it, when they wrote one.</param>
+    Task<FootageSeen?> WatchAsync(IReadOnlyList<Frame> frames, string note, CancellationToken ct);
+
+    /// <summary>Looks at a scene's frame once it has built, for labels cut off, overlapping or under the captions.</summary>
+    Task<SceneVerdict> CheckSceneAsync(string framePath, CancellationToken ct);
+
+    /// <summary>How a picture of the host differs from its locked design; null when it keeps it, or nothing can tell.</summary>
+    Task<string?> CheckHostAsync(string picturePath, string sheetPath, CancellationToken ct);
+
+    /// <summary>The words a lesson's passages would be found by in the official repositories, besides its own.</summary>
+    Task<IReadOnlyList<string>> SearchTermsAsync(string topic, CancellationToken ct);
 
     /// <summary>Titles, a description and tags to upload with the finished video, written from its script.</summary>
     Task<PublishNotes> WritePublishNotesAsync(Episode episode, CancellationToken ct);

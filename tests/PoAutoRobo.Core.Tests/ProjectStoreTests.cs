@@ -210,6 +210,9 @@ public sealed class ProjectStoreTests : IDisposable
         Assert.Equal((0, BeatStructure.Story, null, false), (old.Number, old.Structure, old.Clips[0].Beat, old.Clips[0].OwnSound));
 
         Assert.Equal(8, ProjectStore.NextNumber(_folder));
+        // A new script is told the series before it: numbered episodes only, in order, by title and clip titles.
+        Assert.Equal([$"#7 · {episode.Title}: {string.Join("; ", episode.Clips.Select(c => c.Title))}"], ProjectStore.SeriesBefore(_folder, 8));
+        Assert.Empty(ProjectStore.SeriesBefore(_folder, 7));
         Assert.Equal(["Goal", "Try", "Fail", "Fix", "Result", "Recap"], BeatPlan.Beats(BeatStructure.Story).Select(b => b.Name));
         Assert.Equal(["Try", "Fail", "Result"], BeatPlan.Beats(BeatStructure.Story).Where(b => b.ForFootage).Select(b => b.Name));
         Assert.Equal(["Concept", "Setup", "Demo", "Recap"], BeatPlan.Beats(BeatStructure.Tutorial).Select(b => b.Name));

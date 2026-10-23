@@ -21,6 +21,7 @@ public static class SpendLog
     public const string ScriptTokens = "script tokens";
     public const string CachedScriptTokens = "script tokens reused from cache";
     public const string VoiceCharacters = "voice characters";
+    public const string HeardSeconds = "seconds of film listened to";
 
     private static readonly Lock Gate = new(); // recordings finish on background threads
 

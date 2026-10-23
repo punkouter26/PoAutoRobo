@@ -71,9 +71,22 @@
                 <TextBlock Text="{x:Bind ViewModel.SelectedClip.CheckWarning, Mode=OneWay}" Visibility="{x:Bind app:Ui.ShowText(ViewModel.SelectedClip.CheckWarning), Mode=OneWay}"
                            Style="{StaticResource CautionText}" Margin="0,-6,0,0"
                            ToolTipService.ToolTip="Figures and code names the script uses that appear nowhere in what it was written from (the passages below, or the topic you gave), and anything an editor reading the whole script would change. Check them before publishing." />
-                <Button x:Name="AuditionButton" MinHeight="44" ToolTipService.ToolTip="Hear this clip in the host&#39;s voice before building the video (Ctrl+P)." Content="Audition audio"
-                        HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.AuditionCommand}" />
+                <Button x:Name="ApplyNoteButton" HorizontalAlignment="Left" Content="Rewrite to answer the note" Command="{x:Bind ViewModel.ApplyNoteCommand}"
+                        Visibility="{x:Bind app:Ui.ShowText(ViewModel.SelectedClip.Review), Mode=OneWay}"
+                        ToolTipService.ToolTip="Has the script model rewrite this clip's words to answer the editor's note. One request; undo puts the old words back." />
+                <Grid ColumnSpacing="{StaticResource GapSmall}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="AuditionButton" MinHeight="44" ToolTipService.ToolTip="Hear this clip in the host&#39;s voice before building the video (Ctrl+P)." Content="Audition audio"
+                            HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.AuditionCommand}" />
+                    <Button x:Name="WatchClipButton" Grid.Column="1" MinHeight="44" Content="Watch clip" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.WatchClipCommand}"
+                            ToolTipService.ToolTip="See this clip on its own with its picture and sound, small and quick (Ctrl+Shift+P). Instant once the preview has been built; until then this clip alone is drawn first." />
+                </Grid>
                 <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.AuditionCommand.IsRunning, Mode=OneWay}" />
+                <!-- While a clip is auditioned, its voice as light, and its words lighting up as they are spoken -->
+                <local:NarrationScope x:Name="Scope" />
 
                 <!-- The passages this script was written from, beside the script they informed -->
                 <Expander x:Name="RepositoryInspector" ToolTipService.ToolTip="The passages from official Unitree, Isaac Lab and MuJoCo repositories that this script was written from." Header="{x:Bind ViewModel.SnippetsHeading, Mode=OneWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
@@ -116,7 +129,7 @@
                     <TextBlock Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" Style="{StaticResource QuietText}"
                                Text="{x:Bind ViewModel.SelectedClip.Pose, Mode=OneWay}" ToolTipService.ToolTip="What the host is doing in this clip&#39;s picture, taken from the subject." />
                 </Grid>
-                <ComboBox x:Name="KindBox" ToolTipService.ToolTip="Set this clip&#39;s picture type yourself. A clip set by hand keeps its type when the visual mix changes." Header="Picture type"
+                <ComboBox x:Name="KindBox" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}" ToolTipService.ToolTip="Set this clip&#39;s picture type yourself. A clip set by hand keeps its type when the visual mix changes." Header="Picture type"
                           HorizontalAlignment="Stretch" IsEnabled="{x:Bind ViewModel.SelectedClip.CanPickKind, Mode=OneWay}"
                           ItemsSource="{x:Bind vm:ClipViewModel.KindChoices}" SelectedIndex="{x:Bind ViewModel.SelectedClip.KindIndex, Mode=TwoWay}" />
                 <!-- Make it, or make it again a different way -->
@@ -127,12 +140,12 @@
                     </Grid.ColumnDefinitions>
                     <Button x:Name="GeneratePictureButton" MinHeight="44" ToolTipService.ToolTip="Make this one clip&#39;s picture now (Ctrl+G; a cent or two). An identical request reuses the saved picture free." Content="Generate picture"
                             HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.GeneratePictureCommand}" />
-                    <Button x:Name="AnotherTakeButton" Grid.Column="1" MinHeight="44" Content="Another take" Command="{x:Bind ViewModel.AnotherTakeCommand}"
+                    <Button x:Name="AnotherTakeButton" Grid.Column="1" MinHeight="44" Content="Another take" Command="{x:Bind ViewModel.AnotherTakeCommand}" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}"
                             ToolTipService.ToolTip="Make a different picture from the same words, at the same price as the first. The one you have is kept below, and you can go back to it free." />
                 </Grid>
                 <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.AnotherTakeCommand.IsRunning, Mode=OneWay}" />
                 <!-- The takes not in use: click one to swap it with the picture above -->
-                <GridView x:Name="EarlierTakes" ItemsSource="{x:Bind ViewModel.SelectedClip.EarlierTakes, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedClip.HasEarlierTakes, Mode=OneWay}"
+                <GridView x:Name="EarlierTakes" ItemsSource="{x:Bind ViewModel.SelectedClip.EarlierTakes, Mode=OneWay}" Visibility="{x:Bind app:Ui.ShowBoth(ViewModel.Advanced, ViewModel.SelectedClip.HasEarlierTakes), Mode=OneWay}"
                           SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnEarlierTake" Header="Earlier takes" AutomationProperties.Name="Earlier takes"
                           ToolTipService.ToolTip="Pictures made before for this clip. Click one to use it; the picture it replaces takes its place here. Nothing is charged.">
                     <GridView.ItemTemplate>
@@ -149,8 +162,11 @@
                 <ToggleSwitch x:Name="OwnSoundSwitch" Header="Sound" OnContent="My sound: the film plays with its own sound" OffContent="Narrate: the narrator speaks over the film"
                               IsOn="{x:Bind ViewModel.SelectedClip.OwnSound, Mode=OneWay}" Toggled="OnOwnSoundToggled" Visibility="{x:Bind ViewModel.SelectedClip.HasUserVideo, Mode=OneWay}"
                               ToolTipService.ToolTip="My sound keeps what the camera heard; any words in the box above become its captions. Narrate rewrites the words to fit the film and records them, which takes a moment." />
+                <ToggleSwitch x:Name="RobotViewSwitch" Header="Look" OnContent="Robot's eyes: depth colours, traced edges and a readout" OffContent="As filmed"
+                              IsOn="{x:Bind ViewModel.SelectedClip.RobotView, Mode=OneWay}" Toggled="OnRobotViewToggled" Visibility="{x:Bind app:Ui.ShowBoth(ViewModel.Advanced, ViewModel.SelectedClip.HasUserVideo), Mode=OneWay}"
+                              ToolTipService.ToolTip="Show the film as the R1's own camera might see it, with the beat and the clip's title in its readout. A film from the beat where it went wrong also glitches. Drawn here, so it costs nothing." />
                 <Button x:Name="RemoveVideoButton" Content="Use a generated picture instead" HorizontalAlignment="Stretch" MinHeight="44" Command="{x:Bind ViewModel.RemoveVideoCommand}"
-                        Visibility="{x:Bind ViewModel.SelectedClip.HasUserVideo, Mode=OneWay}" />
+                        Visibility="{x:Bind app:Ui.ShowBoth(ViewModel.Advanced, ViewModel.SelectedClip.HasUserVideo), Mode=OneWay}" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

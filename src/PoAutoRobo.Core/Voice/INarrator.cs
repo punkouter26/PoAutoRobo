@@ -6,7 +6,8 @@ public sealed record WordTiming(string Text, TimeSpan Start, TimeSpan Duration)
     /// Spreads the words of <paramref name="text"/> across <paramref name="duration"/>, each given time in proportion
     /// to its length. For sound where nothing says when each word was spoken.
     /// </summary>
-    // ponytail: guessed from word length, not heard. Speech-to-text would give the real times (SPEC open question 1).
+    // ponytail: guessed from word length, not heard. Used where a film was not listened to (no sign-in) or its words
+    // no longer match what was heard in number; listening again (EpisodeBuilder.HearAsync) gives the real times.
     public static IReadOnlyList<WordTiming> Spread(string text, TimeSpan duration)
     {
         var words = Durations.SplitWords(text);

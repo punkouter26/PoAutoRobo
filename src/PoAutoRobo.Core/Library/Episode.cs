@@ -53,6 +53,9 @@ public sealed record Clip(
     /// <summary>Where the frame taken from a video to stand for it is kept: beside the video.</summary>
     public static string PosterFor(string videoPath) => Path.ChangeExtension(videoPath, ".poster.png");
 
+    /// <summary>Where what is said in the owner's film, with when each word is said, is kept: beside the film.</summary>
+    public static string HeardFor(string videoPath) => Path.ChangeExtension(videoPath, ".heard.json");
+
     /// <summary>Speaking pace multiplier; moves off 1.0 only to fit narration to the user's footage.</summary>
     public double NarrationRate { get; init; } = 1.0;
 
@@ -61,6 +64,12 @@ public sealed record Clip(
 
     /// <summary>The user's footage plays with its own sound instead of being narrated over.</summary>
     public bool OwnSound { get; init; }
+
+    /// <summary>The user's footage is shown as the robot's own camera might see it: depth colours, traced edges and a readout.</summary>
+    public bool RobotView { get; init; }
+
+    /// <summary>What a model saw happen in the owner's film, a line to each stretch; null when it was not watched.</summary>
+    public string? FootageSeen { get; init; }
 }
 
 /// <summary>

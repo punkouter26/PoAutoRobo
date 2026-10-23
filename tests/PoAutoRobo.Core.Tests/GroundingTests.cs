@@ -58,6 +58,19 @@ public sealed class GroundingTests : IDisposable
         Assert.Equal("unitreerobotics/unitree_sdk2", first[0].Repo); // ties keep the fixed repository order
         Assert.DoesNotContain(first, s => s.Text.StartsWith("## License", StringComparison.Ordinal));
         Assert.Equal(first, second);
+
+        // Words from a model, as the code is written, are searched by first; when it fails, the lesson's own words still are.
+        var keywords = new List<IReadOnlyList<string>>();
+        RepoSource listening = (repo, words, ct) =>
+        {
+            keywords.Add(words);
+            return Serving(new() { ["unitreerobotics/unitree_rl_mjlab"] = MjlabReadme })(repo, words, ct);
+        };
+        var expanded = await new Grounding(listening, _cache) { Expand = (_, _) => Task.FromResult<IReadOnlyList<string>>(["height_scan", "Training"]) }.FindAsync("Training balance", Ct);
+        Assert.Equal(["height_scan", "training", "balance"], keywords[^1]);
+        Assert.StartsWith("## Training", expanded[0].Text);
+        await new Grounding(listening, _cache) { Expand = (_, _) => throw new HttpRequestException("No model.") }.FindAsync("Training balance", Ct);
+        Assert.Equal(["training", "balance"], keywords[^1]);
     }
 
     [Fact]
@@ -91,7 +104,7 @@ public sealed class GroundingTests : IDisposable
     public async Task Live_github_returns_snippets_from_official_repositories()
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
-        var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault, AppSettings.SignedInUser), Ct);
+        var settings = await AppSettings.LoadAsync(KeyVault.Default(), Ct);
 
         var snippets = await Grounding.Create(settings.GitHubToken, _cache).FindAsync("Training a walking policy for the R1 in MuJoCo", Ct);
 

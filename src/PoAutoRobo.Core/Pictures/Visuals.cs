@@ -180,11 +180,13 @@ public sealed class Visuals(ImageMaker images, MediaCache cache, string characte
             return new ImageRequest($"{style} A full-frame view of the subject itself, with no characters or robots presenting. {script.VisualPrompt}", null, Quality: Quality);
 
         var host = HasSheet ? "The host is the robot in the reference image; keep its design, colours and proportions exactly." : HostInWords;
-        return new ImageRequest($"{style} {script.VisualPrompt} {host} The host is {script.Pose}. What the host is saying, for context only: {script.Dialogue}", HasSheet ? characterSheetPath : null, Quality: Quality);
+        // The pose says what the host is doing. Its words are not sent: picture models letter what they are given,
+        // and every rewording would then make a new picture, paid for again, of the same thing.
+        return new ImageRequest($"{style} {script.VisualPrompt} {host} The host is {script.Pose}.", HasSheet ? characterSheetPath : null, Quality: Quality);
     }
 
     /// <summary>Pictures in a panel sequence.</summary>
-    public const int PanelCount = 3;
+    private const int PanelCount = 3;
 
     private static readonly string[] Beats = ["the setup", "the key moment", "the result"];
 

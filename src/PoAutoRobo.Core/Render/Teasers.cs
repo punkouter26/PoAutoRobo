@@ -4,7 +4,9 @@ namespace PoAutoRobo.Core.Render;
 public sealed record TeaserMoment(Guid ClipId, TimeSpan Start, TimeSpan Length);
 
 /// <summary>A ten-second upright cut for other video sites: a hook line over one to three moments of the episode.</summary>
-public sealed record Teaser(string Hook, IReadOnlyList<TeaserMoment> Moments)
+/// <param name="Fill">The picture is cropped to fill the upright frame, instead of shown whole over a blurred copy of
+/// itself. Fuller, but the sides are lost, and the robot with them when it is not in the middle.</param>
+public sealed record Teaser(string Hook, IReadOnlyList<TeaserMoment> Moments, bool Fill = false)
 {
     public TimeSpan Length => TimeSpan.FromTicks(Moments.Sum(m => m.Length.Ticks));
 }
@@ -57,7 +59,7 @@ public static class Teasers
             // Then each is placed as near as it fits to where it was asked for.
             moments = [.. moments.Where(m => m.Length >= MinMoment).Select(m => m with { Start = Clamp(m.Start, TimeSpan.Zero, lengths[m.ClipId] - m.Length) })];
 
-            var fitted = new Teaser(Hook(teaser.Hook), moments);
+            var fitted = teaser with { Hook = Hook(teaser.Hook), Moments = moments };
             if (moments.Count > 0 && (fitted.Length - Target).Duration() <= Tolerance && !kept.Any(k => k.Moments.SequenceEqual(moments)))
                 kept.Add(fitted);
             if (kept.Count == MaxTeasers) break;

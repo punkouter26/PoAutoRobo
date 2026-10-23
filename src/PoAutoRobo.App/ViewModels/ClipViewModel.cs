@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace PoAutoRobo.App.ViewModels;
 
@@ -7,13 +8,18 @@ public sealed record EarlierTake(int Index, string Picture);
 
 /// <summary>One card in the clip deck. Edits go through <paramref name="edit"/> so the episode stays the single source of truth.</summary>
 /// <param name="pickTier">Switches depth; the owner writes the depth first when the clip does not have it yet.</param>
-public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edit, Action<ClipViewModel, Tier> pickTier) : ObservableObject
+/// <param name="watch">Plays the clip on its own, beside its card.</param>
+public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edit, Action<ClipViewModel, Tier> pickTier, Action<ClipViewModel> watch) : ObservableObject
 {
+    /// <summary>The play button on the card.</summary>
+    [RelayCommand]
+    private void Watch() => watch(this);
+
     public static Choice<VisualKind>[] KindChoices { get; } = [.. Visuals.Kinds.Select(k => new Choice<VisualKind>(k.Label, k.Kind))];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Title), nameof(Heading), nameof(Summary), nameof(Warnings), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(VisualPrompt),
-        nameof(IsStale), nameof(StaleWarning), nameof(LengthWarning), nameof(HasUserVideo), nameof(OwnSound), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath), nameof(EarlierTakes), nameof(HasEarlierTakes))]
+        nameof(IsStale), nameof(StaleWarning), nameof(LengthWarning), nameof(HasUserVideo), nameof(OwnSound), nameof(RobotView), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath), nameof(EarlierTakes), nameof(HasEarlierTakes))]
     public partial Clip Clip { get; set; } = clip;
 
     [ObservableProperty]
@@ -100,6 +106,9 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
 
     /// <summary>The film plays with its own sound instead of being narrated over.</summary>
     public bool OwnSound => Clip.OwnSound;
+
+    /// <summary>The film is shown as the robot's own camera might see it.</summary>
+    public bool RobotView => Clip.RobotView;
 
     /// <summary>A picture for each earlier take still on disk, with its place among them, for going back to one.</summary>
     public IReadOnlyList<EarlierTake> EarlierTakes =>

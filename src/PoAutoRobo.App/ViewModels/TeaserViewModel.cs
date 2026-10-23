@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace PoAutoRobo.App.ViewModels;
 
@@ -7,15 +8,19 @@ namespace PoAutoRobo.App.ViewModels;
 public sealed partial class TeaserViewModel : ObservableObject
 {
     private readonly IReadOnlyList<Clip> _clips;
+    private readonly Action<TeaserViewModel> _watch;
 
-    public TeaserViewModel(Teaser teaser, IReadOnlyList<Clip> clips)
+    /// <param name="lengths">How long each clip runs, in seconds, in running order: measured where it can be, estimated otherwise.</param>
+    /// <param name="watch">Plays the teaser as it now stands, beside its card.</param>
+    public TeaserViewModel(Teaser teaser, IReadOnlyList<Clip> clips, IReadOnlyList<double> lengths, Action<TeaserViewModel> watch)
     {
-        _clips = clips;
+        (_clips, _watch) = (clips, watch);
         Hook = teaser.Hook;
+        Fill = teaser.Fill;
         var choices = clips.Select((c, i) => $"{i + 1} · {c.Title}").ToList();
         foreach (var moment in teaser.Moments)
         {
-            var row = new MomentViewModel(choices, Math.Max(0, clips.ToList().FindIndex(c => c.Id == moment.ClipId)), moment.Start.TotalSeconds, moment.Length.TotalSeconds);
+            var row = new MomentViewModel(choices, lengths, Math.Max(0, clips.ToList().FindIndex(c => c.Id == moment.ClipId)), moment.Start.TotalSeconds, moment.Length.TotalSeconds);
             row.PropertyChanged += (_, _) => OnPropertyChanged(nameof(Poster));
             Moments.Add(row);
         }
@@ -29,6 +34,14 @@ public sealed partial class TeaserViewModel : ObservableObject
     [ObservableProperty]
     public partial bool Keep { get; set; } = true;
 
+    /// <summary>The picture is cropped to fill the upright frame, instead of shown whole over a blurred copy of itself.</summary>
+    [ObservableProperty]
+    public partial bool Fill { get; set; }
+
+    /// <summary>True while its draft is being cut to watch; the card shows a ring.</summary>
+    [ObservableProperty]
+    public partial bool IsBusy { get; set; }
+
     public ObservableCollection<MomentViewModel> Moments { get; } = [];
 
     /// <summary>The picture of the clip the teaser opens on, for the card; empty when that clip has none yet.</summary>
@@ -36,17 +49,31 @@ public sealed partial class TeaserViewModel : ObservableObject
 
     /// <summary>The teaser as now set. The rules are applied again when it is rendered, so a moved moment still fits.</summary>
     public Teaser ToTeaser() => new(Hook, [.. Moments.Where(m => m.ClipIndex >= 0 && m.ClipIndex < _clips.Count)
-        .Select(m => new TeaserMoment(_clips[m.ClipIndex].Id, TimeSpan.FromSeconds(double.IsNaN(m.Start) ? 0 : Math.Max(0, m.Start)), TimeSpan.FromSeconds(m.Length)))]);
+        .Select(m => new TeaserMoment(_clips[m.ClipIndex].Id, TimeSpan.FromSeconds(double.IsNaN(m.Start) ? 0 : Math.Max(0, m.Start)), TimeSpan.FromSeconds(m.Length)))], Fill);
+
+    /// <summary>The play button on the card.</summary>
+    [RelayCommand]
+    private void Watch() => _watch(this);
 }
 
 /// <summary>One moment of a teaser card: which clip it is cut from, and where in that clip it starts.</summary>
-public sealed partial class MomentViewModel(IReadOnlyList<string> clipChoices, int clipIndex, double start, double length) : ObservableObject
+public sealed partial class MomentViewModel(IReadOnlyList<string> clipChoices, IReadOnlyList<double> clipLengths, int clipIndex, double start, double length) : ObservableObject
 {
     /// <summary>"N · title" for every clip, to swap the moment to another.</summary>
     public IReadOnlyList<string> ClipChoices { get; } = clipChoices;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LatestStart))]
     public partial int ClipIndex { get; set; } = clipIndex;
+
+    /// <summary>The latest the moment can start and still end inside its clip, in seconds.</summary>
+    public double LatestStart => Math.Max(0, (ClipIndex >= 0 && ClipIndex < clipLengths.Count ? clipLengths[ClipIndex] : Length) - Length);
+
+    // Moved to a shorter clip, a moment that would run past its end is drawn back to fit.
+    partial void OnClipIndexChanged(int value)
+    {
+        if (Start > LatestStart) Start = LatestStart;
+    }
 
     /// <summary>Seconds from the start of its clip; a number box gives a double.</summary>
     [ObservableProperty]

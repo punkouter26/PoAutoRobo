@@ -43,6 +43,9 @@ public partial class MainViewModel
             : null;
     }
 
+    /// <summary>What every episode has spent this calendar month, and the budget it is held to (0 for none).</summary>
+    public (decimal Spent, decimal Budget) MonthSpend() => (SpendLog.MonthTotal(AppPaths.Episodes, DateTimeOffset.Now), (decimal)MonthlyBudget);
+
     /// <summary>This episode's spending by kind, then the month's total across every episode; for the Settings panel.</summary>
     [ObservableProperty]
     public partial string SpendDetail { get; set; } = "";
@@ -86,33 +89,77 @@ public partial class MainViewModel
             return;
         }
         var kind = DraftPictures ? " These are draft-quality pictures." : "";
-        if (!await Confirm("Generate pictures?", $"{estimate.Summary}{kind} Pictures you already have are reused at no cost.", "Generate") || !CanGenerateAll)
+        if (!await ConfirmSpend("Generate pictures?", $"{estimate.Summary}{kind} Pictures you already have are reused at no cost.", "Generate", estimate.Dollars ?? 0) || !CanGenerateAll)
             return;
 
-        (int Made, List<string> Failures) drawn = (0, []);
+        (int Made, List<string> Failures, string? Halted) drawn = (0, [], null);
         var finished = await RunActivityAsync("Generating pictures", async ct => drawn = await DrawAllAsync(estimate, ct));
         // A clip that fails is recorded and never stops the batch, so "not finished" here means stopped by the user.
-        StatusMessage = finished ? $"Pictures are ready for {drawn.Made} clips." : $"Stopped. Pictures are ready for {drawn.Made} clips.";
+        StatusMessage = finished ? $"Pictures are ready for {drawn.Made} clips. {drawn.Halted}".TrimEnd() : $"Stopped. Pictures are ready for {drawn.Made} clips.";
         ReportFailures(drawn.Failures);
     }
 
-    /// <summary>Draws every clip the estimate names, one after another. A clip that fails is noted and the rest carry on.</summary>
-    private async Task<(int Made, List<string> Failures)> DrawAllAsync(CostEstimate estimate, CancellationToken ct)
+    /// <summary>Clips drawn at once. The picture service takes ten to thirty seconds a picture, nearly all of it waiting.</summary>
+    private const int PicturesAtOnce = 3;
+
+    /// <summary>
+    /// Draws every clip the estimate names, a few at a time. A clip that fails is noted and the rest carry on. No clip
+    /// is started that would take the spending (what is spent so far and what the clips being drawn will cost) past
+    /// the cost the user agreed to, or past the monthly budget: a substitute or a retry can cost more than was shown,
+    /// and agreeing to one figure is not agreeing to more.
+    /// </summary>
+    /// <returns>Halted: why the batch stopped short, said for the user; null when it drew every clip it was asked for.</returns>
+    private async Task<(int Made, List<string> Failures, string? Halted)> DrawAllAsync(CostEstimate estimate, CancellationToken ct)
     {
         var failures = new List<string>();
         var made = 0;
+        var started = 0;
         var total = estimate.ClipIds.Count;
-        foreach (var id in estimate.ClipIds)
+        var before = PictureSpending();
+        var drawing = 0m; // what the clips being drawn now will cost, not yet in the spend log
+        string? halted = null;
+        // Each piece carries on on the window's thread, so the counts and the episode are only ever changed there.
+        await Batch.EachAsync(estimate.ClipIds, PicturesAtOnce, async id =>
         {
             ct.ThrowIfCancellationRequested();
-            var done = made + failures.Count;
-            var title = Episode?.Clips.FirstOrDefault(c => c.Id == id)?.Title ?? "";
-            ReportActivity($"Drawing the picture for clip {done + 1} of {total} · {title}", (double)done / total);
-            if (await GenerateOneAsync(id, false, ct) is { } failure) failures.Add($"{title}: {failure}"); else made++;
-            ClipDone((double)done / Math.Max(1, total - 1));
-        }
-        return (made, failures);
+            if (halted is not null) return;
+            var clip = Episode?.Clips.FirstOrDefault(c => c.Id == id);
+            var price = clip is null ? 0 : CostEstimate.PriceOf(clip, _imageModel, Quality);
+            if (!estimate.Allows(PictureSpending() - before + drawing, price))
+            {
+                halted = $": the next picture would have taken the spending past the {SpendLog.Money(estimate.Dollars ?? 0)} you agreed to. Generate pictures again to see what the rest cost.";
+                return;
+            }
+            if (OverBudget(price + drawing) is { } refusal)
+            {
+                halted = ". " + refusal;
+                return;
+            }
+            started++;
+            drawing += price;
+            ReportActivity($"Drawing {clip?.Title} · {made + failures.Count} of {total} done", (double)(made + failures.Count) / total);
+            string? failure;
+            try
+            {
+                failure = await GenerateOneAsync(id, false, ct);
+            }
+            finally
+            {
+                drawing -= price;
+            }
+            ClipDone(id, made + failures.Count, total, failure is null);
+            if (failure is not null) failures.Add($"{clip?.Title}: {failure}"); else made++;
+            ReportActivity($"Drew {clip?.Title} · {made + failures.Count} of {total} done", (double)(made + failures.Count) / total);
+        }, ct);
+        if (halted is null) return (made, failures, null);
+        var rest = total - started == 1 ? "The last clip keeps its title card" : $"The last {total - started} clips keep their title cards";
+        return (made, failures, rest + halted);
     }
+
+    /// <summary>What this episode has spent on pictures and AI videos, the spending a batch of pictures is held to.</summary>
+    private decimal PictureSpending() => EpisodeFolder is { } folder
+        ? SpendLog.Breakdown(folder).Where(line => line.What is SpendLog.Picture or SpendLog.AiVideo).Sum(line => line.Dollars)
+        : 0;
 
     /// <summary>Says how many clips went without a picture and why the first did; every reason is kept in the message history.</summary>
     private void ReportFailures(List<string> failures)
@@ -136,8 +183,7 @@ public partial class MainViewModel
         return Guard(async () =>
         {
             if (SelectedClip is not { } card) return;
-            var price = Visuals.PictureCount(card.Clip.Visual.Kind) * (CostEstimate.PriceOf(_imageModel, Quality) ?? 0) + (card.Clip.Visual.Kind == VisualKind.AiVideo ? CostEstimate.VideoPrice : 0);
-            ErrorMessage = OverBudget(price) ?? await GenerateOneAsync(card.Id, anotherTake, ct);
+            ErrorMessage = OverBudget(CostEstimate.PriceOf(card.Clip, _imageModel, Quality)) ?? await GenerateOneAsync(card.Id, anotherTake, ct);
         });
     }
 
@@ -157,6 +203,7 @@ public partial class MainViewModel
         if (anotherTake) clip = EpisodeEditor.NextTake(clip);
         var card = Clips.FirstOrDefault(c => c.Id == clipId);
         card?.IsBusy = true;
+        var asked = DateTime.UtcNow;
         try
         {
             // When the picture service will not draw the clip as described, it is given a picture it will, and told so.
@@ -165,6 +212,7 @@ public partial class MainViewModel
             if (FfmpegAvailable)
                 foreach (var video in paths.Where(path => EpisodeBuilder.VideoExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) && !File.Exists(Clip.PosterFor(path))))
                     await _builder.PosterAsync(video, ct);
+            await CheckHostAsync(drawn, paths, asked, ct);
             // Attached to the clip as it is now: footage, a new picture type or changed words since the request win.
             if (change is null)
             {
@@ -193,6 +241,26 @@ public partial class MainViewModel
         {
             card?.IsBusy = false;
             RefreshMeta(); // a new picture adds to what has been spent
+        }
+    }
+
+    /// <summary>
+    /// Says when a new picture of the host has drifted from its locked design, so another take can be asked for. Only
+    /// for pictures really made just now: one found already made was looked at when it was made.
+    /// </summary>
+    private async Task CheckHostAsync(Clip clip, IReadOnlyList<string> paths, DateTime asked, CancellationToken ct)
+    {
+        if (!clip.HostVisible || clip.Visual.Kind is not (VisualKind.Still or VisualKind.MultiPanel) || !File.Exists(AppPaths.HostSheet)
+            || paths.FirstOrDefault() is not { } picture || File.GetCreationTimeUtc(picture) < asked)
+            return;
+        try
+        {
+            if (await _scriptWriter.CheckHostAsync(picture, AppPaths.HostSheet, ct) is { } difference)
+                Note($"The host in “{clip.Title}” may not match its design: {difference} Another take may put it right.");
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // A help on top of the picture, which is made either way.
         }
     }
 

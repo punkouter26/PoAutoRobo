@@ -191,7 +191,7 @@ public sealed class MediaCacheTests : IDisposable
     public async Task Live_pictures_come_back_with_and_without_a_reference()
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
-        var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault, AppSettings.SignedInUser), Ct);
+        var settings = await AppSettings.LoadAsync(KeyVault.Default(), Ct);
         var images = new AzureImageGen(settings, AzureImageGen.NewHttpClient());
         var plain = Path.Combine(_folder, "plain.png");
         var withReference = Path.Combine(_folder, "ref.png");

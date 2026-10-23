@@ -95,6 +95,16 @@ public sealed class ScriptRulesTests
     {
         A_clip_is_timed_at_165_words_a_minute_and_flagged_in_plain_words_when_its_active_tier_runs_outside_15_to_60_seconds();
         An_episode_runs_for_the_sum_of_its_active_tiers_and_is_flagged_under_three_minutes();
+        The_voices_pace_is_learned_a_little_from_each_recording_and_a_short_line_teaches_nothing();
+    }
+
+    private static void The_voices_pace_is_learned_a_little_from_each_recording_and_a_short_line_teaches_nothing()
+    {
+        var thirty = string.Join(' ', Enumerable.Repeat("word", 30));
+        Assert.Equal(0.8 * 165 + 0.2 * 200, Durations.Learned(165, thirty, TimeSpan.FromSeconds(9))); // 200 a minute moves 165 to 172
+        Assert.Null(Durations.Learned(165, "Too short to say much about it.", TimeSpan.FromSeconds(2)));
+        Assert.Equal(220, Durations.Learned(219, thirty, TimeSpan.FromSeconds(1))); // a glitch cannot make it race
+        Assert.Equal(55, Durations.WordsFor(TimeSpan.FromSeconds(20))); // what a film is narrated in, at the usual pace
     }
 
     private void A_clip_is_timed_at_165_words_a_minute_and_flagged_in_plain_words_when_its_active_tier_runs_outside_15_to_60_seconds()

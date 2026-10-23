@@ -192,6 +192,10 @@ public sealed class ClipEditingTests
         Assert.Equal((true, 1.0, "Fitted words."), (own.Clips[1].OwnSound, own.Clips[1].NarrationRate, own.Clips[1].Active.Dialogue));
         Assert.Same(own, EpisodeEditor.SetOwnSound(own, Target.Id, true)); // already so: nothing to undo
         Assert.Same(_episode, EpisodeEditor.SetOwnSound(_episode, Target.Id, true)); // a clip with no film has no sound of its own
+        // Seen through the robot's eyes, likewise only a film; taking the film away takes the look with it.
+        Assert.True(EpisodeEditor.SetRobotView(own, Target.Id, true).Clips[1].RobotView);
+        Assert.Same(_episode, EpisodeEditor.SetRobotView(_episode, Target.Id, true));
+        Assert.False(EpisodeEditor.RemoveVideo(EpisodeEditor.SetRobotView(own, Target.Id, true), Target.Id).Clips[1].RobotView);
 
         // A film kept with its own sound and no words: once it is gone the clip is narrated, so it needs words.
         var silent = EpisodeEditor.Update(own, Target.Id, c => EpisodeEditor.WithDialogue(c, ""));

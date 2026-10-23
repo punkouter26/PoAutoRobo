@@ -12,9 +12,6 @@ public sealed record Beat(string Name, bool ForFootage);
 
 public static class BeatPlan
 {
-    /// <summary>The most clips one beat is given, so no section swallows the episode.</summary>
-    public const int MaxClipsPerBeat = 3;
-
     /// <summary>The beats of a structure, in the order they are told.</summary>
     public static IReadOnlyList<Beat> Beats(BeatStructure structure) => structure switch
     {
@@ -74,6 +71,7 @@ public static class BeatPlan
         Visual = new VisualSpec(VisualKind.UserVideo, KindLocked: true, UserVideoPath: note.Path),
         OwnSound = note.OwnSound,
         HostVisible = false,
+        FootageSeen = note.Seen?.Timeline ?? clip.FootageSeen,
         Scripts = note.OwnSound ? clip.Scripts.ToDictionary(s => s.Key, s => s.Value with { Dialogue = "" }) : clip.Scripts,
     };
 

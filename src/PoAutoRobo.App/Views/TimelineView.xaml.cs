@@ -29,9 +29,34 @@ public sealed partial class TimelineView : UserControl
     private MainViewModel? _viewModel;
     private bool _updatingScrubber;
 
+    // The accent colours offered at a touch; any other is a pick away beneath them.
+    private static readonly (string Name, Color Colour)[] Accents =
+    [
+        ("Yellow", Color.FromArgb(255, 255, 212, 0)), ("Green", Color.FromArgb(255, 34, 197, 94)), ("Sky", Color.FromArgb(255, 56, 189, 248)),
+        ("Orange", Color.FromArgb(255, 249, 115, 22)), ("Red", Color.FromArgb(255, 239, 68, 68)), ("Violet", Color.FromArgb(255, 168, 85, 247)),
+        ("Pink", Color.FromArgb(255, 236, 72, 153)), ("White", Color.FromArgb(255, 255, 255, 255)),
+    ];
+
     public TimelineView()
     {
         InitializeComponent();
+        foreach (var (name, colour) in Accents)
+        {
+            var swatch = new Button
+            {
+                Width = 30,
+                Height = 30,
+                Padding = new Thickness(0),
+                CornerRadius = new CornerRadius(15),
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(colour),
+                BorderThickness = new Thickness(1),
+            };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(swatch, name);
+            ToolTipService.SetToolTip(swatch, name);
+            swatch.Click += (_, _) => { if (ViewModel is not null) ViewModel.CaptionAccent = colour; };
+            Swatches.Children.Add(swatch);
+        }
+        CaptionsButton.Tapped += (_, e) => e.Handled = true; // a tap on the button is not a tap on the picture, which would play it
         Player.SetMediaPlayer(_player);
         _tick.Tick += (_, _) => Refresh();
         // The length is only known once the file has opened, and that event arrives off the UI thread.
@@ -67,6 +92,43 @@ public sealed partial class TimelineView : UserControl
         e.Handled = true;
     }
 
+    // The usual editing keys, from anywhere in the preview: L plays, and pressed again plays twice then four times as
+    // fast; K pauses at normal speed; J slows a fast play, or steps five seconds back; comma and full stop step one
+    // frame while paused. ponytail: J steps back instead of playing backwards, which the media player cannot do smoothly.
+    private void OnTransportKey(object sender, KeyRoutedEventArgs e)
+    {
+        if (!Scrubber.IsEnabled) return;
+        var session = _player.PlaybackSession;
+        var playing = session.PlaybackState == MediaPlaybackState.Playing;
+        switch (e.Key)
+        {
+            case Windows.System.VirtualKey.J when playing && session.PlaybackRate > 1: session.PlaybackRate /= 2; break;
+            case Windows.System.VirtualKey.J: Scrubber.Value -= 5; break;
+            case Windows.System.VirtualKey.K: _player.Pause(); session.PlaybackRate = 1; break;
+            case Windows.System.VirtualKey.L when playing: session.PlaybackRate = Math.Min(4, session.PlaybackRate * 2); break;
+            case Windows.System.VirtualKey.L: session.PlaybackRate = 1; _player.Play(); break;
+            case Comma when !playing: _player.StepBackwardOneFrame(); break;
+            case FullStop when !playing: _player.StepForwardOneFrame(); break;
+            default: return;
+        }
+        e.Handled = true;
+        Refresh();
+    }
+
+    private const Windows.System.VirtualKey Comma = (Windows.System.VirtualKey)188, FullStop = (Windows.System.VirtualKey)190; // the keyboard's own codes; VirtualKey has no names for them
+
+    // A click on the picture plays or pauses it, and leaves the keyboard on the waveform so the keys above work at once.
+    private void OnScreenTapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (!PlayButton.IsEnabled) return;
+        OnPlayPause(sender, e);
+        Wave.Focus(FocusState.Pointer);
+    }
+
+    /// <summary>Where the preview is, out of how long it runs, and how fast it is playing when that is not normal speed.</summary>
+    private string Clock(TimeSpan position) =>
+        $"{position:m\\:ss} / {_player.PlaybackSession.NaturalDuration:m\\:ss}" + (_player.PlaybackSession.PlaybackRate is var rate && rate != 1 ? $" · {rate:0.#}×" : "");
+
     public MainViewModel? ViewModel
     {
         get => _viewModel;
@@ -79,6 +141,7 @@ public sealed partial class TimelineView : UserControl
                 value.PropertyChanged += OnViewModelChanged;
                 value.ReleasePreview = Release;
             }
+            Bindings.Update(); // the caption controls are bound to it
         }
     }
 
@@ -112,6 +175,7 @@ public sealed partial class TimelineView : UserControl
         if (preview is not null)
         {
             _player.Source = MediaSource.CreateFromUri(new Uri(preview.VideoPath));
+            _player.PlaybackSession.PlaybackRate = 1; // a new preview starts at normal speed, whatever L left it at
             _ = LoadWaveAsync(preview.Marks);
         }
         Refresh();
@@ -162,7 +226,7 @@ public sealed partial class TimelineView : UserControl
         if (_updatingScrubber) return;
         var position = TimeSpan.FromSeconds(e.NewValue);
         _player.PlaybackSession.Position = position;
-        TimeText.Text = $"{position:m\\:ss} / {_player.PlaybackSession.NaturalDuration:m\\:ss}"; // the clock only ticks while playing
+        TimeText.Text = Clock(position); // the clock only ticks while playing
         Overlay.Invalidate();
         Wave.Invalidate();
     }
@@ -174,7 +238,7 @@ public sealed partial class TimelineView : UserControl
         Scrubber.Maximum = Math.Max(1, session.NaturalDuration.TotalSeconds);
         Scrubber.Value = session.Position.TotalSeconds;
         _updatingScrubber = false;
-        TimeText.Text = $"{session.Position:m\\:ss} / {session.NaturalDuration:m\\:ss}";
+        TimeText.Text = Clock(session.Position);
         Overlay.Invalidate();
         Wave.Invalidate();
     }

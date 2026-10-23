@@ -1,0 +1,58 @@
+<ContentDialog
+    x:Class="PoAutoRobo.App.Views.SettingsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:app="using:PoAutoRobo.App"
+    Title="Settings"
+    CloseButtonText="Done"
+    DefaultButton="Close">
+    <!-- Everything the app remembers between runs that is not part of an episode, saved as it is changed. -->
+    <ScrollViewer MaxHeight="560" VerticalScrollBarVisibility="Auto" Padding="0,0,12,0">
+        <StackPanel Width="380" Spacing="{StaticResource GapSmall}">
+            <TextBlock Text="Sound" Style="{StaticResource SectionHeading}" />
+            <ToggleSwitch x:Name="SoundsSwitch" Header="Sounds" IsOn="{x:Bind ViewModel.SoundsOn, Mode=TwoWay}"
+                          ToolTipService.ToolTip="A chime when a long job finishes, a tick as each clip of a batch is done, a low note when something goes wrong, and the buttons' own clicks." />
+            <Slider Header="Volume" Minimum="0" Maximum="1" StepFrequency="0.05" IsThumbToolTipEnabled="False" Value="{x:Bind ViewModel.SoundVolume, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.SoundsOn, Mode=OneWay}" />
+
+            <TextBlock Text="Pictures" Style="{StaticResource SectionHeading}" />
+            <ToggleSwitch x:Name="DraftPicturesSwitch" Header="Draft-quality pictures" IsOn="{x:Bind ViewModel.DraftPictures, Mode=TwoWay}"
+                          ToolTipService.ToolTip="Draw pictures at low quality: quicker and well under half the price. Turn it off and generate again for the pictures you will publish." />
+
+            <TextBlock Text="Spending" Style="{StaticResource SectionHeading}" />
+            <NumberBox x:Name="BudgetBox" Header="Monthly budget in dollars (0 for none)" Minimum="0" SmallChange="5" LargeChange="20" SpinButtonPlacementMode="Compact" Value="{x:Bind ViewModel.MonthlyBudget, Mode=TwoWay}"
+                       ToolTipService.ToolTip="Once this month's spending across every episode would pass this, the app stops before making anything that costs money." />
+            <TextBlock x:Name="SpendText" Text="{x:Bind ViewModel.SpendDetail, Mode=OneWay}" Style="{StaticResource QuietText}" IsTextSelectionEnabled="True" />
+
+            <TextBlock Text="Display" Style="{StaticResource SectionHeading}" />
+            <ToggleSwitch x:Name="EffectsSwitch" Header="Effects" IsOn="{x:Bind ViewModel.Effects, Mode=TwoWay}"
+                          ToolTipService.ToolTip="Light and motion for the moments that matter: a cloud of light behind the lesson page, sparks as each clip is done, the clips developing like prints while they are drawn, the voice as light while it is auditioned, and confetti for a finished video." />
+            <TextBlock x:Name="NoAnimationText" Style="{StaticResource QuietText}" TextWrapping="Wrap" Visibility="Collapsed"
+                       Text="Windows is set to show no animation, so effects stay off whatever this says." />
+            <ToggleSwitch x:Name="AdvancedSwitch" Header="Advanced controls" IsOn="{x:Bind ViewModel.Advanced, Mode=TwoWay}"
+                          ToolTipService.ToolTip="Each clip's picture type, another take, earlier takes and the robot's-eye view; the mix of picture types; 4K or 60 fps video; the editor's read of the script; and making the whole episode in one go. Turned off, the video size goes back to 1080p at 30 fps." />
+
+            <TextBlock Text="Services" Style="{StaticResource SectionHeading}" />
+            <TextBlock x:Name="LiveText" Style="{StaticResource QuietText}" TextWrapping="Wrap" />
+            <ToggleSwitch x:Name="VideoSwitch" Header="AI video" IsOn="{x:Bind Services.Video, Mode=TwoWay}"
+                          ToolTipService.ToolTip="Offers a short AI-made video for a clip. Each one costs more than a picture, and you are shown the cost and asked first." />
+            <TextBox Header="Video model" Text="{x:Bind Services.VideoModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Visibility="{x:Bind Services.Video, Mode=OneWay}"
+                     ToolTipService.ToolTip="The name of the video deployment on your Azure AI resource." />
+            <ToggleSwitch x:Name="StockSwitch" Header="Stock photos" IsOn="{x:Bind Services.StockPhotos, Mode=TwoWay}"
+                          ToolTipService.ToolTip="Offers real photographs from Pexels, free, with the Pexels key in your vault." />
+            <ToggleSwitch x:Name="LocalSwitch" Header="Small jobs on this computer" IsOn="{x:Bind Services.Local, Mode=TwoWay}"
+                          ToolTipService.ToolTip="A model run on this computer in Ollama does the small jobs for free: checking a picture still fits, search terms, teaser ideas and upload notes. Ollama must be running; without it the fast model does them." />
+            <TextBox Header="Local model" Text="{x:Bind Services.LocalModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Visibility="{x:Bind Services.Local, Mode=OneWay}"
+                     ToolTipService.ToolTip="The model's name in Ollama." />
+            <ToggleSwitch x:Name="MeaningSwitch" Header="Find passages by meaning" IsOn="{x:Bind Services.Meaning, Mode=TwoWay}"
+                          ToolTipService.ToolTip="Finds the passages of the robot's documentation a script is written from by what they mean, not only by the words they share. Costs a little each time a script is written." />
+            <TextBox Header="Embedding model" Text="{x:Bind Services.EmbeddingModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Visibility="{x:Bind Services.Meaning, Mode=OneWay}"
+                     ToolTipService.ToolTip="The name of the embedding deployment on your Azure AI resource." />
+            <TextBlock x:Name="OutsideText" Style="{StaticResource QuietText}" TextWrapping="Wrap" Visibility="Collapsed" />
+            <StackPanel Spacing="{StaticResource GapSmall}" Visibility="{x:Bind Services.NeedsRestart, Mode=OneWay}">
+                <TextBlock Style="{StaticResource QuietText}" TextWrapping="Wrap" Text="Services are set up as the app starts, so this change takes effect when it starts again." />
+                <Button x:Name="RestartButton" Content="Restart now" Click="OnRestart" IsEnabled="{x:Bind app:Ui.Not(ViewModel.IsWorking), Mode=OneWay}"
+                        ToolTipService.ToolTip="Closes the app and opens it again, back where you are. Not while a job is running." />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</ContentDialog>

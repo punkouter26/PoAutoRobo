@@ -11,3 +11,7 @@ TestResults/
 .idea/
 *.user
 *.suo
+
+# A code-graph tool and its editor link: rewritten on every run and tied to this computer, so kept local.
+.aura/
+.vscode/mcp.json

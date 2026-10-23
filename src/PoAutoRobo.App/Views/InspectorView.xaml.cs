@@ -13,7 +13,11 @@ public sealed partial class InspectorView : UserControl
     private readonly MediaPlayer _player = new();
     private MainViewModel? _viewModel;
 
-    public InspectorView() => InitializeComponent();
+    public InspectorView()
+    {
+        InitializeComponent();
+        _player.MediaEnded += (_, _) => DispatcherQueue.TryEnqueue(Scope.Hide); // told off the window's thread
+    }
 
     public MainViewModel? ViewModel
     {
@@ -33,10 +37,11 @@ public sealed partial class InspectorView : UserControl
     /// <summary>True while the picture half is the one on screen.</summary>
     public bool ShowsPicture => PicturePane.Visibility == Visibility.Visible;
 
-    private void Play(string path)
+    private void Play(Narration narration)
     {
-        _player.Source = MediaSource.CreateFromUri(new Uri(path));
+        _player.Source = MediaSource.CreateFromUri(new Uri(narration.AudioPath));
         _player.Play();
+        Scope.Show(narration, _player);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e) => _player.Dispose();
@@ -73,6 +78,13 @@ public sealed partial class InspectorView : UserControl
         await ViewModel.SetOwnSoundCommand.ExecuteAsync(OwnSoundSwitch.IsOn);
         if (ViewModel.SelectedClip is { } now)
             OwnSoundSwitch.IsOn = now.OwnSound;
+    }
+
+    // As with the sound switch, only a change the user made is passed on.
+    private void OnRobotViewToggled(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel?.SelectedClip is { } clip && RobotViewSwitch.IsOn != clip.RobotView)
+            ViewModel.SetRobotViewCommand.Execute(RobotViewSwitch.IsOn);
     }
 
     // Applied when the box loses focus, not per keystroke: each apply can ask the model whether the picture still fits.

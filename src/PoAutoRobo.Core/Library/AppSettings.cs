@@ -25,6 +25,9 @@ public sealed record AppSettings(Uri? Endpoint, string? GitHubToken)
     public static string Choice(string variable, string fallback) =>
         Environment.GetEnvironmentVariable(variable) is { Length: > 0 } value ? value : fallback;
 
+    // A deployment or model that may be left unnamed: null when neither the variable nor the fallback names one.
+    private static string? Named(string variable, string fallback = "") => Choice(variable, fallback.Trim()) is { Length: > 0 } name ? name : null;
+
     public string ChatDeployment { get; init; } = Choice("POAUTOROBO_CHAT_MODEL", "gpt-5.4");
     public string FastChatDeployment { get; init; } = Choice("POAUTOROBO_FAST_CHAT_MODEL", "gpt-5.4-mini");
     public string Voice { get; init; } = Choice("POAUTOROBO_VOICE", "en-US-DavisNeural");
@@ -33,13 +36,22 @@ public sealed record AppSettings(Uri? Endpoint, string? GitHubToken)
     public string ImageDeployment { get; init; } = Choice("POAUTOROBO_IMAGE_MODEL", "gpt-image-1-mini");
 
     /// <summary>The video model's deployment (for example "sora-2"). Null until named: AI video is dear, so it is opt-in.</summary>
-    public string? VideoDeployment { get; init; } = Choice("POAUTOROBO_VIDEO_MODEL", "") is { Length: > 0 } name ? name : null;
+    public string? VideoDeployment { get; init; } = Named("POAUTOROBO_VIDEO_MODEL");
 
     /// <summary>
     /// The embedding model's deployment (for example "text-embedding-3-small"). Null until named; reference passages
     /// are then found by matching words alone.
     /// </summary>
-    public string? EmbeddingDeployment { get; init; } = Choice("POAUTOROBO_EMBEDDING_MODEL", "") is { Length: > 0 } name ? name : null;
+    public string? EmbeddingDeployment { get; init; } = Named("POAUTOROBO_EMBEDDING_MODEL");
+
+    /// <summary>
+    /// A model run on this computer (for example "qwen3:8b" in Ollama) that does the small jobs for free: checking
+    /// whether a picture still fits, search terms, teaser ideas and upload notes. Null until named.
+    /// </summary>
+    public string? LocalModel { get; init; } = Named("POAUTOROBO_LOCAL_MODEL");
+
+    /// <summary>Where the local model answers, in the OpenAI style; Ollama's own address unless POAUTOROBO_LOCAL_URL says otherwise.</summary>
+    public Uri LocalUrl { get; init; } = new(Choice("POAUTOROBO_LOCAL_URL", "http://localhost:11434/v1/").TrimEnd('/') + "/");
 
     // What script and voice cost depends on the user's own Azure agreement, so the app carries no price for them.
     // Each is null until given, and that service's use is then shown as an amount used, without a price.
@@ -55,12 +67,27 @@ public sealed record AppSettings(Uri? Endpoint, string? GitHubToken)
         decimal.TryParse(Choice("POAUTOROBO_VOICE_RATE", ""), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var rate) && rate >= 0 ? rate : null;
 
     /// <summary>Key for the Pexels stock photo library; null when there is none and stock photos are not offered.</summary>
-    public string? PexelsKey { get; init; } = Choice("POAUTOROBO_PEXELS_KEY", "") is { Length: > 0 } key ? key : null;
+    public string? PexelsKey { get; init; } = Named("POAUTOROBO_PEXELS_KEY");
+
+    /// <summary>The variables that switch the optional services; one that is set wins over the switch in Settings.</summary>
+    public static readonly string[] ServiceVariables = ["POAUTOROBO_VIDEO_MODEL", "POAUTOROBO_LOCAL_MODEL", "POAUTOROBO_EMBEDDING_MODEL"];
+
+    /// <summary>
+    /// These settings with the optional services as switched in Settings. A service's environment variable, when set,
+    /// still names its model; stock photos switched off are off, whatever key there is.
+    /// </summary>
+    public AppSettings Using(ServiceChoices choices) => this with
+    {
+        VideoDeployment = Named("POAUTOROBO_VIDEO_MODEL", choices.Video ? choices.VideoModel : ""),
+        LocalModel = Named("POAUTOROBO_LOCAL_MODEL", choices.Local ? choices.LocalModel : ""),
+        EmbeddingDeployment = Named("POAUTOROBO_EMBEDDING_MODEL", choices.Meaning ? choices.EmbeddingModel : ""),
+        PexelsKey = choices.StockPhotos ? PexelsKey : null,
+    };
 
     /// <summary>Why the vault could not be read, in words fit to show the user.</summary>
     public string? LoadError { get; init; }
 
-    public static async Task<AppSettings> LoadAsync(ISecretSource vault, CancellationToken ct)
+    public static async Task<AppSettings> LoadAsync(SecretSource vault, CancellationToken ct)
     {
         try
         {
@@ -77,7 +104,7 @@ public sealed record AppSettings(Uri? Endpoint, string? GitHubToken)
         }
 
         async Task<string?> Get(string name) =>
-            await vault.GetAsync(name, ct) is { } value && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
+            await vault(name, ct) is { } value && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
     }
 
     // Records print every property by default; secrets must never reach a log or an error message.

@@ -26,7 +26,7 @@ public sealed partial class Grounding(RepoSource source, string cacheFolder)
 
     /// <summary>How alike in meaning (0 to 1) a passage must be to the topic to be used when it shares none of its words.</summary>
     // ponytail: a round number, not a measured one. Lower it if reworded topics find too little; raise it if they find noise.
-    public const double NearEnough = 0.5;
+    private const double NearEnough = 0.5;
 
     /// <summary>Null when no embedding model is set up; passages are then found by matching words alone.</summary>
     public Embed? Embed { get; init; }
@@ -43,7 +43,8 @@ public sealed partial class Grounding(RepoSource source, string cacheFolder)
         "a", "an", "the", "of", "on", "in", "to", "for", "and", "or", "with", "using", "use", "how", "what", "why", "is", "are", "its", "it", "my", "by", "from", "at",
     ];
 
-    public static Grounding Create(string? gitHubToken, string cacheFolder, Embed? embed = null)
+    /// <param name="expand">More words to search by, from the lesson (see <see cref="Expand"/>); null for its own words alone.</param>
+    public static Grounding Create(string? gitHubToken, string cacheFolder, Embed? embed = null, Func<string, CancellationToken, Task<IReadOnlyList<string>>>? expand = null)
     {
         var http = new HttpClient { BaseAddress = new Uri("https://api.github.com/"), Timeout = TimeSpan.FromSeconds(20) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("PoAutoRobo/1.0"); // GitHub refuses requests with no user agent
@@ -60,10 +61,68 @@ public sealed partial class Grounding(RepoSource source, string cacheFolder)
         // A file arrives as base64 text; one too large to send that way arrives empty and is left out.
         static string TextOf(JsonElement file) => Encoding.UTF8.GetString(Convert.FromBase64String(file.GetProperty("content").GetString() ?? ""));
 
+        // Raw files are served from a different address with no rate limit worth the name, and need no sign-in.
+        var raw = new HttpClient { BaseAddress = new Uri("https://raw.githubusercontent.com/"), Timeout = TimeSpan.FromSeconds(20) };
+        var docsFolder = Path.Combine(cacheFolder, "docs");
+
+        // Each repository's documentation pages whose path names the lesson's words. The list of pages is asked for
+        // at most once a day, and each page once ever: its blob id names it, so a changed page is a new name.
+        async Task<IReadOnlyList<RepoDocument>> DocsAsync(string repo, IReadOnlyList<string> keywords, CancellationToken ct)
+        {
+            var listFile = Path.Combine(docsFolder, repo.Replace('/', '_') + ".pages.json");
+            List<DocPage> pages;
+            if (File.Exists(listFile) && File.GetLastWriteTimeUtc(listFile) > DateTime.UtcNow - TimeSpan.FromDays(1))
+            {
+                pages = JsonSerializer.Deserialize<List<DocPage>>(await File.ReadAllTextAsync(listFile, ct)) ?? [];
+            }
+            else
+            {
+                var tree = await Get($"repos/{repo}/git/trees/HEAD?recursive=1", ct);
+                pages = [.. tree.GetProperty("tree").EnumerateArray()
+                    .Where(entry => entry.GetProperty("type").GetString() == "blob" && entry.TryGetProperty("size", out var size) && size.GetInt64() < MaxPageBytes)
+                    .Select(entry => new DocPage(entry.GetProperty("path").GetString()!, entry.GetProperty("sha").GetString()!))
+                    .Where(page => DocExtensions.Contains(Path.GetExtension(page.Path), StringComparer.OrdinalIgnoreCase)
+                        && !NotDocs.Any(name => Path.GetFileName(page.Path).StartsWith(name, StringComparison.OrdinalIgnoreCase)))];
+                Directory.CreateDirectory(docsFolder);
+                await File.WriteAllTextAsync(listFile, JsonSerializer.Serialize(pages), ct);
+            }
+
+            var wanted = pages
+                .Select(page => (page, hits: keywords.Count(k => page.Path.Contains(k, StringComparison.OrdinalIgnoreCase))))
+                .Where(p => p.hits > 0)
+                .OrderByDescending(p => p.hits).ThenBy(p => p.page.Path, StringComparer.Ordinal)
+                .Take(DocsPerRepo)
+                .Select(p => p.page);
+            var documents = new List<RepoDocument>();
+            foreach (var page in wanted)
+            {
+                var saved = Path.Combine(docsFolder, page.Sha + ".txt");
+                var text = File.Exists(saved) ? await File.ReadAllTextAsync(saved, ct) : null;
+                if (text is null)
+                {
+                    text = await raw.GetStringAsync($"{repo}/HEAD/{string.Join('/', page.Path.Split('/').Select(Uri.EscapeDataString))}", ct);
+                    await File.WriteAllTextAsync(saved, text, ct);
+                }
+                // Markdown is cut at its headings later; any other page is cut to the part about the lesson now.
+                var isMarkdown = page.Path.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
+                documents.Add(new RepoDocument(repo, page.Path, $"https://github.com/{repo}/blob/HEAD/{page.Path}", isMarkdown ? text : Around(text, keywords)));
+            }
+            return documents;
+        }
+
         return new Grounding(async (repo, keywords, ct) =>
         {
             var readme = await Get($"repos/{repo}/readme", ct);
             var documents = new List<RepoDocument> { new(repo, readme.GetProperty("name").GetString()!, readme.GetProperty("html_url").GetString()!, TextOf(readme)) };
+
+            try
+            {
+                documents.AddRange(await DocsAsync(repo, keywords, ct));
+            }
+            catch (Exception e) when (e is HttpRequestException or JsonException or KeyNotFoundException or IOException)
+            {
+                // The pages are a help on top of the README; without them the README is still used.
+            }
 
             // Code search needs a signed-in caller; without a token the READMEs alone are used.
             if (gitHubToken is not null && keywords.Count > 0)
@@ -84,7 +143,7 @@ public sealed partial class Grounding(RepoSource source, string cacheFolder)
                 }
             return documents;
         }, cacheFolder)
-        { Embed = embed };
+        { Embed = embed, Expand = expand };
     }
 
     /// <summary>An <see cref="Embed"/> that asks the Azure AI resource's embedding deployment.</summary>
@@ -94,9 +153,35 @@ public sealed partial class Grounding(RepoSource source, string cacheFolder)
         return async (texts, ct) => [.. (await client.GenerateEmbeddingsAsync(texts, cancellationToken: ct)).Value.Select(e => e.ToFloats().ToArray())];
     }
 
+    /// <summary>Documentation pages read from each repository for one lesson, besides its README.</summary>
+    private const int DocsPerRepo = 4;
+
+    private const long MaxPageBytes = 100_000;
+    private static readonly string[] DocExtensions = [".md", ".rst"];
+    private static readonly string[] NotDocs = ["CHANGELOG", "LICENSE", "CODE_OF_CONDUCT", "CONTRIBUTING", "SECURITY"];
+
+    private sealed record DocPage(string Path, string Sha);
+
+    /// <summary>
+    /// More words to search by, as they would be written in the code and the documents, from the lesson; null to
+    /// search by the lesson's own words alone. When it fails the lesson's own words are used.
+    /// </summary>
+    public Func<string, CancellationToken, Task<IReadOnlyList<string>>>? Expand { get; init; }
+
     public async Task<IReadOnlyList<GroundingSnippet>> FindAsync(string topic, CancellationToken ct)
     {
         var keywords = Keywords(topic);
+        if (Expand is { } expand)
+            try
+            {
+                // The model's terms first: they are what the code is written in, and the search reads the first few.
+                var terms = Keywords(string.Join(' ', await expand(topic, ct)));
+                keywords = [.. terms, .. keywords.Except(terms)];
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                // No model, no network: the lesson's own words still find passages, as they did before.
+            }
         // The repositories are independent, so they are fetched together; results come back in repository order.
         var chunks = (await Task.WhenAll(OfficialRepos.Select(repo => FetchAsync(repo, keywords, ct)))).SelectMany(d => d).SelectMany(Chunk).ToList();
         var near = await NearnessAsync(topic, chunks, ct);

@@ -4,11 +4,16 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:PoAutoRobo.App.Views"
     xmlns:app="using:PoAutoRobo.App"
-    PointerEntered="OnPointerEntered" PointerExited="OnPointerExited">
-    <!-- Compact on purpose, and always the same height: the card shows a clip's state, and the inspector beside the deck changes it. -->
-    <StackPanel Width="{StaticResource CardWidth}" Spacing="4" Padding="4" ToolTipService.ToolTip="{x:Bind Card.Heading, Mode=OneWay}">
-        <Grid Height="{StaticResource CardPictureHeight}" CornerRadius="4" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
+    PointerEntered="OnPointerEntered" PointerExited="OnPointerExited" PointerMoved="OnPointerMoved">
+    <!-- Compact on purpose, and always the same height: the card shows a clip's state, and the inspector beside the deck changes it.
+         A pane of frosted glass over the deck's moving light, which leans towards the pointer. -->
+    <Border x:Name="Face" Width="{StaticResource CardWidth}" CornerRadius="8" Background="{ThemeResource GlassBrush}" BorderBrush="{ThemeResource GlassEdgeBrush}" BorderThickness="1">
+    <StackPanel Spacing="4" Padding="4" ToolTipService.ToolTip="{x:Bind Card.Heading, Mode=OneWay}">
+        <Grid x:Name="PictureArea" Height="{StaticResource CardPictureHeight}" CornerRadius="4" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
             <Image Source="{x:Bind local:ClipCard.ToImage(Card.ThumbnailPath), Mode=OneWay}" Stretch="UniformToFill" AutomationProperties.Name="Clip picture" />
+            <!-- Under the pointer, the picture seen through a lens of glass that follows it -->
+            <canvas:CanvasControl x:Name="LensView" Draw="OnDrawLens" IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
             <!-- A mark for each kind of thing worth a second look, told apart by sign and colour; pointing at one says what -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="6" HorizontalAlignment="Left" VerticalAlignment="Top" AutomationProperties.Name="{x:Bind Card.Warnings, Mode=OneWay}">
                 <!-- The picture no longer matches the words: it wants making again -->
@@ -32,6 +37,11 @@
                     ToolTipService.ToolTip="Depth of explanation (A accessible, B applied, C advanced), picture type, and length: measured once the voice is recorded, estimated from the word count until then.">
                 <TextBlock Text="{x:Bind Card.Summary, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
             </Border>
+            <!-- Watch the clip on its own, with its sound. Shown under the pointer; the inspector has the same, for the keyboard. -->
+            <Button x:Name="PlayButton" Style="{StaticResource PlayOverPicture}" Opacity="0" Command="{x:Bind Card.WatchCommand, Mode=OneWay}"
+                    AutomationProperties.Name="Watch this clip" ToolTipService.ToolTip="Watch this clip on its own, with its sound. Instant once the preview has been built.">
+                <SymbolIcon Symbol="Play" />
+            </Button>
             <!-- Something is being made for this clip right now; a render says how far it has got -->
             <Grid Background="{ThemeResource SmokeFillColorDefaultBrush}" Visibility="{x:Bind Card.Working, Mode=OneWay}">
                 <ProgressRing IsActive="{x:Bind Card.Working, Mode=OneWay}" IsIndeterminate="{x:Bind Card.ProgressUnknown, Mode=OneWay}" Value="{x:Bind Card.Progress, Mode=OneWay}" Width="32" Height="32" />
@@ -39,4 +49,5 @@
         </Grid>
         <TextBlock Text="{x:Bind Card.Heading, Mode=OneWay}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
     </StackPanel>
+    </Border>
 </UserControl>

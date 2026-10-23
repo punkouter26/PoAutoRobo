@@ -4,18 +4,19 @@ using ComputeSharp.D2D1;
 namespace PoAutoRobo.App.Views;
 
 /// <summary>
-/// The topic page's backdrop: slow folds of light in the accent colour, worked out afresh for every point of every
+/// The backdrop behind the lesson page and the deck of clips: slow folds of light in the accent colour, worked out afresh for every point of every
 /// frame on the graphics card. Written here in C# and turned into the graphics card's own language when the app is
 /// built, so no shader file is shipped.
 /// </summary>
 /// <param name="time">Seconds since the page appeared.</param>
 /// <param name="size">The backdrop's size in pixels.</param>
 /// <param name="accent">The colour of the light, each part 0 to 1.</param>
+/// <param name="fade">1 to fade the light out towards the left edge, where a page's form begins; 0 for none.</param>
 [D2DInputCount(0)]
 [D2DRequiresScenePosition]
 [D2DShaderProfile(D2D1ShaderProfile.PixelShader50)]
 [D2DGeneratedPixelShaderDescriptor]
-internal readonly partial struct Nebula(float time, float2 size, float3 accent) : ID2D1PixelShader
+internal readonly partial struct Nebula(float time, float2 size, float3 accent, float fade) : ID2D1PixelShader
 {
     public float4 Execute()
     {
@@ -32,8 +33,7 @@ internal readonly partial struct Nebula(float time, float2 size, float3 accent) 
         float3 colour = Hlsl.Lerp(accent, accent.ZXY, Hlsl.Saturate(r.X * 0.7f));
         float light = Hlsl.Saturate(folds * folds * 1.9f + 0.25f * Hlsl.Length(q) - 0.18f) * 0.24f;
 
-        // Fades out towards the left edge, where the page's form begins.
-        light *= Hlsl.SmoothStep(0f, 0.25f, D2D.GetScenePosition().X / size.X);
+        light *= Hlsl.Lerp(1f, Hlsl.SmoothStep(0f, 0.25f, D2D.GetScenePosition().X / size.X), fade);
         return new float4(colour * light, light); // light and colour multiplied together, as the drawing surface expects
     }
 

@@ -22,7 +22,7 @@ public sealed class HardTopicTests(ITestOutputHelper output)
     public async Task A_topic_of_your_choosing_goes_from_script_to_video_and_every_refusal_on_the_way_says_what_refused_it()
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_WITNESS_TOPIC") is not { Length: > 0 } topic) return;
-        var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault, AppSettings.SignedInUser), Ct);
+        var settings = await AppSettings.LoadAsync(KeyVault.Default(), Ct);
         Assert.True(settings.IsLive, $"The live services are needed for this. {settings.LoadError}");
         var folder = Path.Combine(Path.GetTempPath(), "PoAutoRobo-witness", ProjectStore.Slug(topic));
         if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);

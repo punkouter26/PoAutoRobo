@@ -28,7 +28,7 @@ jobs:
         run: dotnet build PoAutoRobo.slnx --configuration Release
       # No Azure sign-in here, so everything runs on the mocks. These need nothing installed and take a second.
       - name: Unit tests
-        run: dotnet test PoAutoRobo.slnx --configuration Release --no-build --filter "Category!=Integration"
+        run: dotnet test PoAutoRobo.slnx --configuration Release --no-build --filter "Category!=Integration&Category!=Live"
       # Tests that render video skip themselves without FFmpeg, so it is installed for them to really run.
       - name: FFmpeg
         shell: pwsh

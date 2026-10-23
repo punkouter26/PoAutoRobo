@@ -4,7 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
     Unloaded="OnUnloaded">
-    <Grid RowSpacing="8">
+    <!-- J, K and L, and comma and full stop, work wherever the keyboard is in the preview -->
+    <Grid RowSpacing="8" KeyDown="OnTransportKey">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="56" />
@@ -13,19 +14,41 @@
 
         <!-- The preview takes whatever room the window gives it, kept at 16:9. Captions are drawn live on top, so style changes show without re-rendering. -->
         <Grid x:Name="Stage" SizeChanged="OnStageSized">
-            <Grid x:Name="Screen" Width="640" Height="360" CornerRadius="4" Background="Black">
+            <Grid x:Name="Screen" Width="640" Height="360" CornerRadius="4" Background="Black" Tapped="OnScreenTapped">
                 <MediaPlayerElement x:Name="Player" AreTransportControlsEnabled="False" Stretch="Uniform" />
                 <canvas:CanvasControl x:Name="Overlay" Draw="OnDrawCaption" IsHitTestVisible="False" />
                 <!-- Until there is a preview, the empty screen offers the one thing to do here -->
                 <Button x:Name="BuildHereButton" Content="Build preview" Style="{ThemeResource AccentButtonStyle}" HorizontalAlignment="Center" VerticalAlignment="Center" Click="OnBuildPreview"
                         ToolTipService.ToolTip="Make a quick low-resolution version to watch here." />
+                <!-- The captions are set here, on the picture they are drawn over, and show each change as it is made -->
+                <Button x:Name="CaptionsButton" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Padding="10,4" MinHeight="36" Content="Aa" FontWeight="SemiBold"
+                        Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}" AutomationProperties.Name="Caption style"
+                        ToolTipService.ToolTip="How the burned-in captions look: their style, size, outline and colour. The words on the preview change as you do.">
+                    <Button.Flyout>
+                        <Flyout Placement="LeftEdgeAlignedTop">
+                            <StackPanel Width="300" Spacing="10">
+                                <TextBlock Text="Captions" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                <ComboBox x:Name="CaptionPresetBox" HorizontalAlignment="Stretch" AutomationProperties.Name="Caption style" ToolTipService.ToolTip="How the burned-in captions look."
+                                          ItemsSource="{x:Bind ViewModel.CaptionChoices}" SelectedIndex="{x:Bind ViewModel.CaptionPresetIndex, Mode=TwoWay}" />
+                                <Slider Header="Font size" Minimum="32" Maximum="96" StepFrequency="2" Value="{x:Bind ViewModel.CaptionFontSize, Mode=TwoWay}" />
+                                <Slider Header="Outline" Minimum="0" Maximum="10" StepFrequency="1" Value="{x:Bind ViewModel.CaptionStroke, Mode=TwoWay}" />
+                                <TextBlock Text="Accent colour" ToolTipService.ToolTip="The colour of the word being spoken, or of the banner behind the words." />
+                                <VariableSizedWrapGrid x:Name="Swatches" Orientation="Horizontal" MaximumRowsOrColumns="8" ItemWidth="36" ItemHeight="36" />
+                                <Expander Header="Any colour" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                    <ColorPicker IsAlphaEnabled="False" IsMoreButtonVisible="False" IsColorSliderVisible="True" IsColorChannelTextInputVisible="False"
+                                                 IsHexInputVisible="True" Color="{x:Bind ViewModel.CaptionAccent, Mode=TwoWay}" />
+                                </Expander>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
             </Grid>
         </Grid>
 
         <!-- The narration's waveform with a mark where each clip starts; click anywhere on it to jump there -->
         <canvas:CanvasControl x:Name="Wave" Grid.Row="1" Draw="OnDrawWave" PointerPressed="OnWavePressed" AutomationProperties.Name="Waveform and clip markers"
                               IsTabStop="True" UseSystemFocusVisuals="True" KeyDown="OnWaveKey"
-                              ToolTipService.ToolTip="The narration, with a mark where each clip starts. Click to jump to that point. With the keyboard: Space plays or pauses, the left and right arrows step five seconds." />
+                              ToolTipService.ToolTip="The narration, with a mark where each clip starts. Click to jump to that point. With the keyboard: Space plays or pauses and the arrows step five seconds; L plays, and pressed again plays faster; K pauses; J steps back; comma and full stop step one frame while paused." />
 
         <Grid Grid.Row="2" ColumnSpacing="12">
             <Grid.ColumnDefinitions>

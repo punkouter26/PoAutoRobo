@@ -35,4 +35,27 @@
     <PackageReference Include="WinUIEx" />
   </ItemGroup>
 
+  <!-- The build version shown in the window's corner: the day of the last commit as YYMMDD, in this machine's time
+       like the fallback, then the commit itself, so two builds from one day can be told apart. A + after it means the
+       code had changes not yet committed. Building the same commit again gives the same version. Today's date alone
+       when git is missing or this is not a clone: its complaint goes to nul, so nothing comes back. -->
+  <Target Name="StampBuildVersion" BeforeTargets="GetAssemblyAttributes">
+    <Exec Command="git log -1 --format=%25%25cd --date=format-local:%25%25y%25%25m%25%25d 2&gt;nul" ConsoleToMSBuild="true"
+          IgnoreExitCode="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="CommitDay" />
+    </Exec>
+    <!-- Tags are left out so this is always the bare commit, never a tag name. -->
+    <Exec Command="git describe --always --abbrev=7 --exclude=* --dirty=+ 2&gt;nul" ConsoleToMSBuild="true"
+          IgnoreExitCode="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="CommitId" />
+    </Exec>
+    <PropertyGroup>
+      <BuildVersion Condition="'$(CommitDay.Trim())' != ''">$(CommitDay.Trim()) $(CommitId.Trim())</BuildVersion>
+      <BuildVersion Condition="'$(BuildVersion)' == ''">$([System.DateTime]::Now.ToString('yyMMdd'))</BuildVersion>
+    </PropertyGroup>
+    <ItemGroup>
+      <AssemblyMetadata Include="BuildVersion" Value="$(BuildVersion)" />
+    </ItemGroup>
+  </Target>
+
 </Project>

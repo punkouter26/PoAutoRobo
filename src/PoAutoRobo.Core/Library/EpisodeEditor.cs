@@ -5,7 +5,7 @@ namespace PoAutoRobo.Core.Library;
 public static class EpisodeEditor
 {
     /// <summary>Share of words two versions of a line must have in common to count as the same subject without asking the model.</summary>
-    public const double SameSubject = 0.85;
+    private const double SameSubject = 0.85;
 
     /// <summary>A blank clip for the user to write, shown as a title card until it is given a picture.</summary>
     public static Clip NewClip() => new(
@@ -114,7 +114,7 @@ public static class EpisodeEditor
         });
 
     public static Episode RemoveVideo(Episode episode, Guid clipId) =>
-        Update(episode, clipId, c => Narratable(c with { NarrationRate = 1.0, OwnSound = false, Visual = new VisualSpec(VisualKind.TitleCard) }));
+        Update(episode, clipId, c => Narratable(c with { NarrationRate = 1.0, OwnSound = false, RobotView = false, Visual = new VisualSpec(VisualKind.TitleCard) }));
 
     /// <summary>
     /// A clip that is to be narrated needs words to say. One that played a film with its own sound may have none, so it
@@ -130,6 +130,12 @@ public static class EpisodeEditor
     public static Episode SetOwnSound(Episode episode, Guid clipId, bool ownSound) =>
         episode.Clips.FirstOrDefault(c => c.Id == clipId) is { Visual.UserVideoPath: not null } clip && clip.OwnSound != ownSound
             ? Update(episode, clipId, c => c with { OwnSound = ownSound, NarrationRate = 1.0 })
+            : episode;
+
+    /// <summary>Shows the clip's film through the robot's eyes, or as it was filmed. Only a clip with a film has one to show.</summary>
+    public static Episode SetRobotView(Episode episode, Guid clipId, bool on) =>
+        episode.Clips.FirstOrDefault(c => c.Id == clipId) is { Visual.UserVideoPath: not null } clip && clip.RobotView != on
+            ? Update(episode, clipId, c => c with { RobotView = on })
             : episode;
 
     // Attaches finished pictures to the clip they were drawn for, as that clip is now. Drawing takes a while, so the

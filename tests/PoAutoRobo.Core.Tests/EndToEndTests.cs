@@ -106,7 +106,9 @@ public sealed class EndToEndTests : IDisposable
     [FfmpegFact]
     public async Task The_series_intro_and_outro_open_and_close_the_export_and_the_chapters_still_start_at_nought()
     {
-        var episode = await ThreeClipEpisodeAsync() with { Number = 7 };
+        var three = await ThreeClipEpisodeAsync();
+        // The film seen through the robot's eyes, and each clip a beat of its own, so a whoosh carries each one in.
+        var episode = three with { Number = 7, Clips = [.. three.Clips.Select((c, i) => c with { Beat = $"Beat {i}", RobotView = c.Visual.UserVideoPath is not null })] };
         var kitFolder = Directory.CreateDirectory(Path.Combine(_folder, "series")).FullName;
         var brand = new Brand(new SeriesKit { ChannelName = "Teaching the R1", OutroSeconds = 6 }, kitFolder);
 
@@ -128,6 +130,8 @@ public sealed class EndToEndTests : IDisposable
         var preview = await Builder.PreviewAsync(episode, _folder, brand, null, default);
         Assert.Equal(["Intro", .. episode.Clips.Select(c => c.Title), "Outro"], preview.Marks.Select(m => m.Title));
         Assert.All(preview.Marks, m => Assert.True(File.Exists(m.AudioPath), m.Title));
+        // A kit with no sting of its own has one made up, so the intro is never silent.
+        Assert.InRange(await Ffmpeg.MeasureLoudnessAsync(preview.Marks[0].AudioPath, default), -30.0, 0.0);
 
         // Without a channel name there is nothing to put in an intro, so the episode is exported without one.
         var plain = await Builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), brand with { Kit = new SeriesKit() }, null, default);
@@ -171,6 +175,41 @@ public sealed class EndToEndTests : IDisposable
     }
 
     [FfmpegFact]
+    public async Task A_clip_or_a_teaser_is_watched_on_its_own_from_the_pictures_the_preview_drew()
+    {
+        var episode = await ThreeClipEpisodeAsync();
+        var brand = new Brand(new SeriesKit { ChannelName = "Teaching the R1" }, Directory.CreateDirectory(Path.Combine(_folder, "series")).FullName);
+        var cache = Path.Combine(_folder, "clips");
+        var builder = new EpisodeBuilder(new MockNarrator(), Ffmpeg) { ClipCacheFolder = cache };
+        await builder.PreviewAsync(episode, _folder, brand, null, default);
+        var drawn = Directory.GetFiles(cache).Length;
+
+        var clip = await builder.ClipPreviewAsync(episode, _folder, 1, brand, default);
+
+        // The preview's own drawing of the clip is used and only its sound is added: one new file, and none the second time.
+        Assert.Equal(drawn + 1, Directory.GetFiles(cache).Length);
+        Assert.Equal(clip, await builder.ClipPreviewAsync(episode, _folder, 1, brand, default));
+        Assert.Equal(drawn + 1, Directory.GetFiles(cache).Length);
+        var probe = await Ffmpeg.ProbeAsync(["-v", "error", "-show_entries", "stream=codec_name,width,height", "-of", "default=nw=1", clip], default);
+        Assert.Contains("codec_name=h264", probe);
+        Assert.Contains("codec_name=aac", probe);
+        Assert.Contains("width=640", probe);
+        var voice = (await builder.NarrateClipAsync(episode.Clips[1], _folder, default)).Duration;
+        Assert.InRange(await Ffmpeg.ProbeDurationAsync(clip, default), voice - TimeSpan.FromSeconds(0.3), voice + TimeSpan.FromSeconds(0.1));
+
+        // A teaser's draft is small and upright, filled to the frame when asked, and cut from clips already drawn.
+        var lengths = await builder.ClipLengthsAsync(episode, _folder, default);
+        var teaser = new Teaser("Watch it climb", [new(episode.Clips[0].Id, TimeSpan.Zero, lengths[episode.Clips[0].Id]), new(episode.Clips[1].Id, TimeSpan.Zero, TimeSpan.FromSeconds(1))], Fill: true);
+        var before = Directory.GetFiles(cache).Length;
+        var draft = await builder.TeaserDraftAsync(episode, _folder, teaser, new CaptionStyle(), brand, default);
+        var upright = await Ffmpeg.ProbeAsync(["-v", "error", "-show_entries", "stream=codec_name,width,height", "-of", "default=nw=1", draft], default);
+        Assert.Contains("width=360", upright);
+        Assert.Contains("height=640", upright);
+        Assert.Contains("codec_name=aac", upright);
+        Assert.Equal(before + 1, Directory.GetFiles(cache).Length);
+    }
+
+    [FfmpegFact]
     public async Task A_film_that_keeps_its_own_sound_is_heard_in_the_export_and_no_voice_is_recorded_for_it()
     {
         // A film whose sound stops a second before its picture, and one with no sound track at all.
@@ -189,12 +228,30 @@ public sealed class EndToEndTests : IDisposable
             ],
         };
 
+        // What was heard said in the first film is kept beside it; the typed words, as many, take its times.
+        File.WriteAllText(Clip.HeardFor(falls), System.Text.Json.JsonSerializer.Serialize(new[] { new WordTiming("it", TimeSpan.FromSeconds(0.2), TimeSpan.FromSeconds(0.3)), new WordTiming("falls", TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(0.4)), new WordTiming("over", TimeSpan.FromSeconds(1.6), TimeSpan.FromSeconds(0.4)) }));
+
         var sound = await builder.NarrateAsync(episode, _folder, default);
 
         await narrator.DidNotReceiveWithAnyArgs().SynthesizeAsync(default!, default!, default, default); // nothing is spoken, or paid for
         Assert.Equal([3.0, 2.0], sound.Select(s => Math.Round(s.Duration.TotalSeconds, 1))); // each as long as its film
         Assert.Equal(["It", "falls", "over"], sound[0].Words.Select(w => w.Text)); // what was typed becomes its captions
+        Assert.Equal([0.2, 1.0, 1.6], sound[0].Words.Select(w => w.Start.TotalSeconds)); // at the times it was heard said
         Assert.Empty(sound[1].Words);
+
+        // Listening sends the film's sound alone, as speech; a film with no sound is not listened to at all.
+        var heard = await builder.HearAsync(falls, (wav, _) =>
+        {
+            Assert.Equal(2.0, Math.Round(WavInfo.Duration(wav).TotalSeconds, 1));
+            return Task.FromResult<IReadOnlyList<WordTiming>>([new("Beep", TimeSpan.Zero, TimeSpan.FromSeconds(2))]);
+        }, default);
+        Assert.Equal("Beep", Assert.Single(heard).Text);
+        Assert.Empty(await builder.HearAsync(silent, (_, _) => throw new InvalidOperationException("Asked to listen to silence."), default));
+        // A film is watched from a few frames spread across it.
+        var frames = await builder.FramesAsync(falls, 3, default);
+        Assert.Equal([0.5, 1.5, 2.5], frames.Select(f => Math.Round(f.At.TotalSeconds, 1)));
+        Assert.All(frames, f => Assert.True(File.Exists(f.Path)));
+        Directory.Delete(Path.GetDirectoryName(frames[0].Path)!, recursive: true);
 
         var output = await builder.ExportAsync(episode, _folder, Small, new CaptionStyle(), null, null, default);
         // The film's own tone is heard: silence would measure about -70. (Five seconds of tone and gaps is too short

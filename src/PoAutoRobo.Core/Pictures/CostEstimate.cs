@@ -15,7 +15,7 @@ public sealed record CostEstimate(IReadOnlyList<Guid> ClipIds, int Pictures, dec
     public const decimal MiniPicturePrice = 0.015m;
 
     /// <summary>The same picture at low quality, for drafts. Approximate, like the price above.</summary>
-    public const decimal MiniDraftPrice = 0.006m;
+    private const decimal MiniDraftPrice = 0.006m;
 
     public bool NothingToDo => ClipIds.Count == 0;
 
@@ -53,8 +53,19 @@ public sealed record CostEstimate(IReadOnlyList<Guid> ClipIds, int Pictures, dec
         _ => null,
     };
 
+    /// <summary>What drawing one clip costs: its pictures at the model's price (nothing when that is not known) and any AI video.</summary>
+    public static decimal PriceOf(Clip clip, string imageModel, Quality quality = Quality.Medium) =>
+        Visuals.PictureCount(clip.Visual.Kind) * (PriceOf(imageModel, quality) ?? 0) + (clip.Visual.Kind == VisualKind.AiVideo ? VideoPrice : 0);
+
+    /// <summary>
+    /// Whether a batch run under this estimate may draw its next clip, given what it has spent on pictures so far. The
+    /// estimate is what the user agreed to, so a run that costs more than expected (a substitute, a retry) stops there
+    /// instead of running on. With no known price there is no figure to hold to, and only the monthly budget applies.
+    /// </summary>
+    public bool Allows(decimal spent, decimal next) => Dollars is not { } agreed || spent + next <= agreed;
+
     /// <summary>Generated kinds with no picture yet, or one the dialogue has since moved away from.</summary>
-    public static bool NeedsPicture(Clip clip) =>
+    private static bool NeedsPicture(Clip clip) =>
         Visuals.IsGenerated(clip.Visual.Kind)
         && (clip.Visual.Stale || clip.Visual.MediaPaths is not { Count: > 0 });
 }

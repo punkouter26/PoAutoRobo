@@ -117,6 +117,31 @@ public static class ProjectStore
             }
         })];
 
+    /// <summary>How many earlier episodes a new script is told about: enough to build on, few enough to stay cheap.</summary>
+    private const int EarlierShown = 10;
+
+    /// <summary>
+    /// The series before episode <paramref name="number"/>, a line to each in order: its number, title and clip
+    /// titles. A new script is told these so it can call back to them and not explain them again.
+    /// </summary>
+    public static IReadOnlyList<string> SeriesBefore(string root, int number) =>
+        [.. ListEpisodes(root)
+            .Select(folder =>
+            {
+                try
+                {
+                    return Load(folder);
+                }
+                catch (InvalidDataException)
+                {
+                    return null; // damaged: it says nothing about the series that can be trusted
+                }
+            })
+            .OfType<Episode>()
+            .Where(e => e.Number > 0 && e.Number < number)
+            .OrderByDescending(e => e.Number).Take(EarlierShown).OrderBy(e => e.Number)
+            .Select(e => $"#{e.Number} · {e.Title}: {string.Join("; ", e.Clips.Select(c => c.Title))}")];
+
     /// <summary>The number the next episode of the series gets: one more than the highest saved, so a gap is never filled.</summary>
     public static int NextNumber(string root) => NextNumber(Summaries(root));
 
@@ -130,18 +155,9 @@ public static class ProjectStore
         File.WriteAllText(Path.Combine(folder, SnippetsFile), JsonSerializer.Serialize(snippets, JsonOptions));
 
     /// <summary>The saved passages with web links only; none when the file is absent or unreadable.</summary>
-    public static IReadOnlyList<GroundingSnippet> LoadSnippets(string folder)
-    {
-        try
-        {
-            var snippets = JsonSerializer.Deserialize<List<GroundingSnippet>>(File.ReadAllText(Path.Combine(folder, SnippetsFile)), JsonOptions) ?? [];
-            return [.. snippets.Where(s => s is { Repo: not null, Path: not null, Text: not null } && Files.IsWebLink(s.Url ?? ""))];
-        }
-        catch (Exception e) when (e is IOException or JsonException)
-        {
-            return [];
-        }
-    }
+    public static IReadOnlyList<GroundingSnippet> LoadSnippets(string folder) =>
+        [.. JsonFile.Load<List<GroundingSnippet>>(Path.Combine(folder, SnippetsFile), [], JsonOptions)
+            .Where(s => s is { Repo: not null, Path: not null, Text: not null } && Files.IsWebLink(s.Url ?? ""))];
 
     /// <summary>Copies an episode to a new folder beside it, without its finished videos, and returns that folder.</summary>
     public static string Duplicate(string folder, string root)

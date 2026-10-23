@@ -190,8 +190,14 @@ public partial class MainViewModel
     {
         if (SelectedClip is not { } card) return;
         var from = Clips.IndexOf(card);
-        var to = from + by;
-        if (from < 0 || to < 0 || to >= Clips.Count) return;
+        MoveClip(from, from + by);
+    }
+
+    /// <summary>Moves the clip at one place to another, as a drag along the clip strip does, and keeps it picked.</summary>
+    public void MoveClip(int from, int to)
+    {
+        if (from < 0 || to < 0 || from >= Clips.Count || to >= Clips.Count || from == to) return;
+        var card = Clips[from];
         Clips.Move(from, to);
         SelectedClip = card; // a move can drop the selection in the list control
     }
@@ -257,7 +263,7 @@ public partial class MainViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection), nameof(DraftProblem))]
-    [NotifyCanExecuteChangedFor(nameof(AuditionCommand), nameof(GeneratePictureCommand), nameof(AnotherTakeCommand), nameof(AddClipCommand), nameof(DuplicateClipCommand), nameof(RemoveClipCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AuditionCommand), nameof(GeneratePictureCommand), nameof(AnotherTakeCommand), nameof(AddClipCommand), nameof(DuplicateClipCommand), nameof(RemoveClipCommand), nameof(ApplyNoteCommand))]
     public partial ClipViewModel? SelectedClip { get; set; }
 
     /// <summary>The dialogue box's text while it is being typed; applied to the clip when the box loses focus.</summary>
@@ -310,7 +316,31 @@ public partial class MainViewModel
         await ApplyDialogueAsync(ct);
         var narration = await _builder.NarrateClipAsync(SelectedClip!.Clip, EpisodeFolder!, ct);
         SyncCards();
-        PlayAudio(narration.AudioPath);
+        PlayAudio(narration);
+    });
+
+    private bool CanApplyNote => HasSelection && !IsWorking;
+
+    /// <summary>
+    /// Rewrites the selected clip's words to answer the editor's note on them. One request to the script model, made
+    /// only when asked; the new words go through the usual edit, so undo puts the old ones back.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanApplyNote))]
+    private Task ApplyNoteAsync(CancellationToken ct) => Guard(async () =>
+    {
+        if (SelectedClip is not { Review.Length: > 0 } card) return;
+        card.IsBusy = true;
+        try
+        {
+            var revised = await _scriptWriter.ReviseAsync(card.Clip, card.Review, ct);
+            if (SelectedClip == card) DraftDialogue = revised; // shown where it can still be changed
+            await ApplyDialogueToAsync(card, revised, ct);
+            StatusMessage = $"“{card.Clip.Title}” was rewritten to answer the editor's note. Undo puts the old words back.";
+        }
+        finally
+        {
+            card.IsBusy = false;
+        }
     });
 
     private bool CanStartJob => HasEpisode && !IsWorking;
@@ -320,26 +350,33 @@ public partial class MainViewModel
     private Task NarrateAllAsync() =>
         RunActivityAsync("Recording the voices", NarrateEveryClipAsync, "Voices recorded. Clip lengths and the running time are now measured, not estimated.");
 
-    /// <summary>Records every clip's voice, one after another. Part of a job already under way.</summary>
+    /// <summary>Voices recorded at once. The voice service answers each line in a second or two, so a few side by side take a fraction of the time.</summary>
+    private const int VoicesAtOnce = 4;
+
+    /// <summary>Records every clip's voice, a few at a time. Part of a job already under way.</summary>
     private async Task NarrateEveryClipAsync(CancellationToken ct)
     {
         var folder = EpisodeFolder!;
         var cards = Clips.ToList();
-        for (var i = 0; i < cards.Count; i++)
+        var done = 0;
+        ReportActivity($"Recording {cards.Count} clips", 0);
+        // Each piece carries on on the window's thread, so the cards and the count are only ever changed there.
+        await Batch.EachAsync(cards, VoicesAtOnce, async card =>
         {
-            ReportActivity($"Recording clip {i + 1} of {cards.Count} · {cards[i].Clip.Title}", (double)i / cards.Count);
-            cards[i].IsBusy = true;
+            card.IsBusy = true;
             try
             {
-                await _builder.NarrateClipAsync(cards[i].Clip, folder, ct);
+                await _builder.NarrateClipAsync(card.Clip, folder, ct);
             }
             finally
             {
-                cards[i].IsBusy = false;
+                card.IsBusy = false;
             }
             SyncCards();
-            ClipDone((double)i / Math.Max(1, cards.Count - 1));
-        }
+            ClipDone(card.Id, done, cards.Count, true);
+            done++;
+            ReportActivity($"Recorded {done} of {cards.Count} clips · {card.Clip.Title}", (double)done / cards.Count);
+        }, ct);
     }
 
     // ---- The user's own footage ----
@@ -422,6 +459,13 @@ public partial class MainViewModel
             }
             var (copy, fit) = await ImportFootageAsync(clip, note.Path, note.Length, folder, ct);
             episode = EpisodeEditor.AttachVideo(EpisodeEditor.ReplaceClip(episode, clip), clip.Id, copy, fit);
+            // What was heard said in it is kept beside the copy and becomes its captions, timed as it was said, for the owner to correct.
+            if (note.Heard is { Count: > 0 } heard)
+            {
+                JsonFile.Save(Clip.HeardFor(copy), heard);
+                if (clip.OwnSound && clip.Active.Dialogue.Trim().Length == 0)
+                    episode = EpisodeEditor.ReplaceClip(episode, EpisodeEditor.WithDialogue(episode.Clips.First(c => c.Id == clip.Id), string.Join(' ', heard.Select(w => w.Text))));
+            }
             if (clip.OwnSound) // its sound is taken now, which is free, so the cards and running time show the real length
                 await _builder.NarrateClipAsync(episode.Clips.First(c => c.Id == clip.Id), folder, ct);
         }
@@ -458,6 +502,14 @@ public partial class MainViewModel
             var (copy, fit) = await ImportFootageAsync(clip, film, length, folder, ct);
             Edit(e => EpisodeEditor.AttachVideo(EpisodeEditor.SetOwnSound(e, card.Id, false), card.Id, copy, fit));
         });
+    }
+
+    /// <summary>Shows the selected clip's film through the robot's eyes, or as it was filmed. Free: it is drawn here.</summary>
+    [RelayCommand]
+    private void SetRobotView(bool on)
+    {
+        if (SelectedClip is { HasUserVideo: true } card && card.RobotView != on)
+            Edit(e => EpisodeEditor.SetRobotView(e, card.Id, on));
     }
 
     [RelayCommand]

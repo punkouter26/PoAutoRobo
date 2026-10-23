@@ -25,16 +25,18 @@ public sealed partial class FfmpegRunner(string ffmpegPath)
             .FirstOrDefault(File.Exists);
 
     /// <param name="total">Expected output length; with <paramref name="progress"/> it turns FFmpeg's clock into 0..1.</param>
-    public async Task RunAsync(IReadOnlyList<string> args, string workingDirectory, TimeSpan? total, IProgress<double>? progress, CancellationToken ct)
+    /// <param name="feed">Writes what FFmpeg reads as <c>pipe:0</c>, such as frames drawn here; null when it reads only files.</param>
+    public async Task RunAsync(IReadOnlyList<string> args, string workingDirectory, TimeSpan? total, IProgress<double>? progress, CancellationToken ct,
+        Func<Stream, CancellationToken, Task>? feed = null)
     {
         var (exitCode, _, log) = await StartAsync(
-            ffmpegPath, ["-hide_banner", "-nostdin", "-nostats", "-progress", "pipe:1", .. args], workingDirectory,
+            ffmpegPath, ["-hide_banner", .. feed is null ? new[] { "-nostdin" } : [], "-nostats", "-progress", "pipe:1", .. args], workingDirectory,
             line =>
             {
                 if (total is { Ticks: > 0 } && progress is not null && line.StartsWith("out_time_us=", StringComparison.Ordinal)
                     && long.TryParse(line.AsSpan(12), out var microseconds))
                     progress.Report(Math.Clamp(microseconds / 1e6 / total.Value.TotalSeconds, 0, 1));
-            }, ct);
+            }, ct, feed: feed);
         if (exitCode != 0)
             throw new FfmpegException($"FFmpeg stopped with an error.{Environment.NewLine}{log}");
     }
@@ -68,11 +70,13 @@ public sealed partial class FfmpegRunner(string ffmpegPath)
     }
 
     private static async Task<(int ExitCode, string Output, string Log)> StartAsync(
-        string exe, IReadOnlyList<string> args, string workingDirectory, Action<string>? onOutputLine, CancellationToken ct, int keepLogLines = LogLinesKept)
+        string exe, IReadOnlyList<string> args, string workingDirectory, Action<string>? onOutputLine, CancellationToken ct, int keepLogLines = LogLinesKept,
+        Func<Stream, CancellationToken, Task>? feed = null)
     {
         var info = new ProcessStartInfo(exe)
         {
             WorkingDirectory = workingDirectory,
+            RedirectStandardInput = feed is not null,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -107,6 +111,22 @@ public sealed partial class FfmpegRunner(string ffmpegPath)
         using var stop = ct.Register(() => Kill(process));
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
+        if (feed is not null)
+        {
+            try
+            {
+                await using var input = process.StandardInput.BaseStream;
+                await feed(input, ct);
+            }
+            catch (IOException)
+            {
+                // FFmpeg stopped reading: it has failed, and its log below says why.
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancelled while feeding: the process is being killed above, and the wait below sees it go.
+            }
+        }
         await process.WaitForExitAsync(CancellationToken.None); // files stay locked until it is really gone
         ct.ThrowIfCancellationRequested();
         return (process.ExitCode, output.ToString(), string.Join(Environment.NewLine, log));

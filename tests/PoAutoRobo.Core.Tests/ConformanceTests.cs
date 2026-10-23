@@ -100,7 +100,7 @@ public sealed class ConformanceTests
     private async Task Live_narration_lands_within_a_second_of_the_footageCase(double footage)
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
-        var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault, AppSettings.SignedInUser), Ct);
+        var settings = await AppSettings.LoadAsync(KeyVault.Default(), Ct);
         var narrator = new AzureNarrator(settings);
         var folder = Directory.CreateTempSubdirectory("poautorobo-").FullName;
         const string line = "Next up, balance. I stay upright by reading my joint angles and my inertial sensor many times a second, then nudging my ankles, knees and hips before a wobble can grow. In simulation I practise that on thousands of slightly different floors, so the real lab floor feels like just one more of them.";

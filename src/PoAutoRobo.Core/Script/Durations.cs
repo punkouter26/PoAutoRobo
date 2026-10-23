@@ -3,8 +3,29 @@ namespace PoAutoRobo.Core.Script;
 
 public static class Durations
 {
-    // Estimate only: real audio duration replaces it once a clip is narrated. Tune here if the host voice runs faster or slower.
-    public const int WordsPerMinute = 165;
+    /// <summary>How fast a voice is taken to speak until it has been heard. Real audio replaces every estimate once a clip is narrated.</summary>
+    public const double DefaultWordsPerMinute = 165;
+
+    /// <summary>
+    /// How fast the voice speaks, learned from its recordings (<see cref="Learned"/>), so estimates, scene lengths and
+    /// the words asked for to fit a film come out close the first time.
+    /// </summary>
+    public static double WordsPerMinute { get; set; } = DefaultWordsPerMinute;
+
+    /// <summary>Lines shorter than this say too little about the pace: a pause weighs too much in them.</summary>
+    private const int FewestWordsToLearnFrom = 12;
+
+    /// <summary>
+    /// The pace once one recording at the normal pace is taken into account. Each moves it a fifth of the way towards
+    /// its own, so one odd line cannot swing it; and it stays within what any voice speaks at.
+    /// </summary>
+    /// <returns>Null when the line is too short to say anything about the pace.</returns>
+    public static double? Learned(double pace, string text, TimeSpan spoken)
+    {
+        var words = WordCount(text);
+        if (words < FewestWordsToLearnFrom || spoken <= TimeSpan.Zero) return null;
+        return Math.Clamp(0.8 * pace + 0.2 * (words / spoken.TotalMinutes), 110, 220);
+    }
     public static readonly TimeSpan Min = TimeSpan.FromSeconds(15);
     public static readonly TimeSpan Max = TimeSpan.FromSeconds(60);
 
@@ -28,6 +49,9 @@ public static class Durations
     public static int WordCount(string text) => SplitWords(text).Length;
 
     public static TimeSpan Estimate(string text) => TimeSpan.FromMinutes((double)WordCount(text) / WordsPerMinute);
+
+    /// <summary>About how many words the voice says in <paramref name="length"/>.</summary>
+    public static int WordsFor(TimeSpan length) => Math.Max(1, (int)Math.Round(length.TotalMinutes * WordsPerMinute));
 
     /// <summary>The running time the series aims for, without the intro and outro. Outside it is flagged, never blocked.</summary>
     public static readonly TimeSpan MinEpisode = TimeSpan.FromMinutes(3);

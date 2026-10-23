@@ -69,7 +69,7 @@ public sealed class SsmlTests : IDisposable
     public async Task Live_voice_returns_audio_and_a_timing_for_every_word()
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
-        var settings = await AppSettings.LoadAsync(new KeyVaultSecretSource(KeyVaultSecretSource.DefaultVault, AppSettings.SignedInUser), default);
+        var settings = await AppSettings.LoadAsync(KeyVault.Default(), default);
         const string line = "Balance is hard, but I make tiny corrections every few milliseconds.";
         var path = Path.Combine(_folder, "line.wav");
 

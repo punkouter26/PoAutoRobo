@@ -39,6 +39,11 @@ public sealed class CostEstimateTests : IDisposable
         Assert.Equal([episode.Clips[0].Id, episode.Clips[2].Id, episode.Clips[5].Id], estimate.ClipIds);
         Assert.Equal(2 * CostEstimate.MiniPicturePrice + CostEstimate.VideoPrice, estimate.Dollars);
 
+        // A batch holds to the figure agreed: each clip's price adds up to it, and a clip that would pass it is not drawn.
+        Assert.Equal(estimate.Dollars, estimate.ClipIds.Sum(id => CostEstimate.PriceOf(episode.Clips.First(c => c.Id == id), "gpt-image-1-mini")));
+        Assert.True(estimate.Allows(2 * CostEstimate.MiniPicturePrice, CostEstimate.VideoPrice)); // the last clip lands exactly on it
+        Assert.False(estimate.Allows(3 * CostEstimate.MiniPicturePrice, CostEstimate.VideoPrice)); // one picture more than planned was made
+
         // A known model gets a dollar figure, an unknown one does not guess, and the summary names no model.
         var two = CostEstimate.For(With(new VisualSpec(VisualKind.Still), new VisualSpec(VisualKind.Still)), "gpt-image-1-mini");
         var unknown = CostEstimate.For(With(new VisualSpec(VisualKind.Still)), "some-future-model");
@@ -46,6 +51,7 @@ public sealed class CostEstimateTests : IDisposable
 
         Assert.Equal(2 * CostEstimate.PriceOf("gpt-image-1-mini"), two.Dollars);
         Assert.Null(unknown.Dollars);
+        Assert.True(unknown.Allows(100, 1)); // no figure to hold to: only the monthly budget stops it
         Assert.Equal("2 pictures, about $0.03.", two.Summary);
         Assert.Equal("1 picture. The cost depends on your Azure pricing.", unknown.Summary);
         Assert.Equal("Every clip already has its picture.", none.Summary);

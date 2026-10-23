@@ -69,14 +69,16 @@ public sealed class VisualKindsTests : IDisposable
     public async Task The_model_is_offered_only_the_kinds_that_can_be_made_and_its_choice_becomes_the_clips_kind()
     {
         var calls = new List<(string System, string Schema)>();
-        var writer = new AzureScriptWriter(AppSettings.Offline, (_, system, _, _, schema, _, _) =>
+        var writer = new AzureScriptWriter(AppSettings.Offline, (_, system, _, schemaName, schema, _, _) =>
         {
             calls.Add((system, schema));
-            return Task.FromResult("""{ "title": "Who checks the checker", "clips": [ { "title": "The hook", "kind": "chart", "b": { "dialogue": "d", "visualPrompt": "bar chart: a 1, b 2", "pose": "none" } } ] }""");
+            return Task.FromResult(schemaName == "outline"
+                ? """{ "title": "Who checks the checker", "clips": [ { "title": "The hook", "kind": "chart", "about": "Who checks it." } ] }"""
+                : """{ "dialogue": "d", "visualPrompt": "bar chart: a 1, b 2", "pose": "none" }""");
         })
         { CanMake = kind => kind != VisualKind.AiVideo };
 
-        var episode = await writer.WriteEpisodeAsync(Lesson.Of("Teaching the R1 to wave"), [], EpisodeLength.QuickTest, Ct);
+        var episode = await writer.WriteEpisodeAsync(Lesson.Of("Teaching the R1 to wave"), [], new EpisodeLength(1, 1), Ct);
 
         Assert.Equal(VisualKind.Chart, episode.Clips[0].Visual.Kind);
         Assert.Contains("\"chart\"", calls[0].Schema);

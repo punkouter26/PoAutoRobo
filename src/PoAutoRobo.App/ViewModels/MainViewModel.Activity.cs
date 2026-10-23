@@ -20,7 +20,8 @@ public partial class MainViewModel
     /// <summary>True while a script, a recording pass, a preview, a render or a batch of pictures is running. Only one runs at a time.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(SuggestTeasersCommand), nameof(RenderTeasersCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(GeneratePictureCommand),
-        nameof(NarrateAllCommand), nameof(CleanMediaCommand), nameof(CancelActivityCommand), nameof(CreateEpisodeCommand), nameof(AnotherTakeCommand), nameof(MakeAllCommand))]
+        nameof(NarrateAllCommand), nameof(CleanMediaCommand), nameof(CancelActivityCommand), nameof(CreateEpisodeCommand), nameof(AnotherTakeCommand), nameof(MakeAllCommand), nameof(MakeDraftCommand),
+        nameof(WatchClipCommand), nameof(WatchTeaserCommand), nameof(SuggestNoteCommand), nameof(ApplyNoteCommand))]
     public partial bool IsWorking { get; set; }
 
     /// <summary>What the job is, e.g. "Rendering the master video (1080p, 30 fps)".</summary>
@@ -33,6 +34,10 @@ public partial class MainViewModel
 
     [ObservableProperty]
     public partial double ActivityPercent { get; set; }
+
+    /// <summary>True while the job is drawing clips, and each card says how far its clip has got.</summary>
+    [ObservableProperty]
+    public partial bool DrawingClips { get; set; }
 
     /// <summary>Time spent and a rough time left, worked out from the pace so far.</summary>
     [ObservableProperty]
@@ -75,6 +80,7 @@ public partial class MainViewModel
             _activityClock.Stop();
             _cancel = null;
             IsWorking = false;
+            DrawingClips = false;
             foreach (var card in Clips)
                 card.Progress = 0; // no card is left showing a half-finished ring
         }

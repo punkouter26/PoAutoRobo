@@ -93,6 +93,17 @@ public sealed class MockScriptWriter : IScriptWriter
 
     public Task<IReadOnlyList<ClipNote>> ReviewAsync(Episode episode, CancellationToken ct) => Task.FromResult<IReadOnlyList<ClipNote>>([]);
 
+    // The stand-ins below cannot see pictures or answer a note, so they find nothing and change nothing.
+    public Task<string> ReviseAsync(Clip clip, string note, CancellationToken ct) => Task.FromResult(clip.Active.Dialogue);
+
+    public Task<FootageSeen?> WatchAsync(IReadOnlyList<Frame> frames, string note, CancellationToken ct) => Task.FromResult<FootageSeen?>(null);
+
+    public Task<SceneVerdict> CheckSceneAsync(string framePath, CancellationToken ct) => Task.FromResult(new SceneVerdict(true, ""));
+
+    public Task<string?> CheckHostAsync(string picturePath, string sheetPath, CancellationToken ct) => Task.FromResult<string?>(null);
+
+    public Task<IReadOnlyList<string>> SearchTermsAsync(string topic, CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>([]);
+
     public Task<Scene> WriteSceneAsync(SceneRequest request, CancellationToken ct, Scene? failed = null, string? problem = null) => Task.FromResult(new Scene(
         $"""
         <svg viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
