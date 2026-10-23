@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using PoAutoRobo.App.ViewModels;
@@ -19,27 +18,10 @@ public sealed partial class LessonPage : UserControl
         get => _viewModel;
         set
         {
-            if (_viewModel is not null) _viewModel.PropertyChanged -= OnViewModelChanged;
             _viewModel = value;
-            if (value is not null) value.PropertyChanged += OnViewModelChanged;
             Bindings.Update();
         }
     }
-
-    /// <summary>Told by the window: false while another app is in front, when there is nobody to draw for.</summary>
-    public void SetInFront(bool inFront) => Backdrop.SetInFront(inFront);
-
-    // ---- The moving backdrop ----
-
-    private void OnLoaded(object sender, RoutedEventArgs e) => PaceBackdrop();
-
-    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(MainViewModel.ShowTopic) or nameof(MainViewModel.Effects)) PaceBackdrop();
-    }
-
-    // Drawn only while it can be seen: this page showing, and the app in front; and only with Effects on.
-    private void PaceBackdrop() => Backdrop.Wanted = ViewModel?.ShowTopic == true;
 
     // ---- Saved episodes ----
 

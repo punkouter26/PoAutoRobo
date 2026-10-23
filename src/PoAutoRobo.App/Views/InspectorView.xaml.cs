@@ -2,22 +2,15 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using PoAutoRobo.App.ViewModels;
 using Windows.ApplicationModel.DataTransfer;
-using Windows.Media.Core;
-using Windows.Media.Playback;
 using Windows.Storage.Pickers;
 
 namespace PoAutoRobo.App.Views;
 
 public sealed partial class InspectorView : UserControl
 {
-    private readonly MediaPlayer _player = new();
     private MainViewModel? _viewModel;
 
-    public InspectorView()
-    {
-        InitializeComponent();
-        _player.MediaEnded += (_, _) => DispatcherQueue.TryEnqueue(Scope.Hide); // told off the window's thread
-    }
+    public InspectorView() => InitializeComponent();
 
     public MainViewModel? ViewModel
     {
@@ -25,8 +18,6 @@ public sealed partial class InspectorView : UserControl
         set
         {
             _viewModel = value;
-            if (value is not null)
-                value.PlayAudio = Play;
             Bindings.Update();
         }
     }
@@ -36,15 +27,6 @@ public sealed partial class InspectorView : UserControl
 
     /// <summary>True while the picture half is the one on screen.</summary>
     public bool ShowsPicture => PicturePane.Visibility == Visibility.Visible;
-
-    private void Play(Narration narration)
-    {
-        _player.Source = MediaSource.CreateFromUri(new Uri(narration.AudioPath));
-        _player.Play();
-        Scope.Show(narration, _player);
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e) => _player.Dispose();
 
     private void OnVideoDragOver(object sender, DragEventArgs e)
     {

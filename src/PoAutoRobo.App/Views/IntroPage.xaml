@@ -6,8 +6,9 @@
     xmlns:local="using:PoAutoRobo.App.Views"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:vm="using:PoAutoRobo.App.ViewModels">
-    <!-- Left: what the intro is made of, saved as it is changed. Right: the intro or outro itself, drawn on request.
-         Set once, it opens every episode the same way: only the episode's number and title change. -->
+    <!-- Left: what the intro is made of, and the rest of what every episode shares, saved as it is changed. Right: the
+         intro or outro itself, drawn on request. Set once, it opens every episode the same way: only the episode's
+         number and title change. -->
     <Grid>
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
@@ -136,9 +137,45 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <Button x:Name="HostMascotButton" Content="Use the host design as the mascot" Command="{x:Bind ViewModel.UseHostAsMascotCommand}" HorizontalAlignment="Stretch"
-                        IsEnabled="{x:Bind vm:MainViewModel.HasHostDesign}"
-                        ToolTipService.ToolTip="Uses the cartoon robot chosen under Series and look, on its Host tab, as the mascot. It is already made, so this costs nothing. Greyed out until a host has been chosen." />
+
+                <!-- The host: the cartoon robot in every episode's pictures, chosen once so the character always looks the same -->
+                <StackPanel Spacing="{StaticResource Gap}" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}">
+                    <TextBlock Text="Host" Style="{StaticResource SectionHeading}" />
+                    <TextBlock Style="{StaticResource QuietText}" TextWrapping="Wrap"
+                               Text="The cartoon robot that presents every episode. Pick one design and every new picture keeps it, so the character always looks the same." />
+                    <Grid ColumnSpacing="{StaticResource GapSmall}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="MakeHostsButton" Content="Make 3 hosts" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.MakeHostCandidatesCommand}" IsEnabled="{x:Bind ViewModel.PicturesAvailable, Mode=OneWay}"
+                                ToolTipService.ToolTip="Draws three possible designs for the host; click the one to keep. It costs three pictures, the price shown just below. Needs the picture service." />
+                        <Button Grid.Column="1" Content="Cancel" Command="{x:Bind ViewModel.MakeHostCandidatesCancelCommand}" Visibility="{x:Bind ViewModel.MakeHostCandidatesCommand.IsRunning, Mode=OneWay}"
+                                ToolTipService.ToolTip="Stop drawing the host designs." />
+                    </Grid>
+                    <TextBlock Text="{x:Bind ViewModel.HostCandidatesCost, Mode=OneWay}" Style="{StaticResource QuietText}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+                    <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.MakeHostCandidatesCommand.IsRunning, Mode=OneWay}" />
+                    <ItemsControl x:Name="HostList" ItemsSource="{x:Bind ViewModel.HostCandidates}" IsTabStop="False" AutomationProperties.Name="Host designs">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource GapSmall}" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <Button Tag="{x:Bind}" Click="OnUseHost" Padding="4" AutomationProperties.Name="A host design"
+                                        ToolTipService.ToolTip="Keep this design as the host, so every new picture shows the same character. Pictures already made are not changed.">
+                                    <Image Width="96" Height="64" Stretch="UniformToFill" Source="{x:Bind local:ClipCard.ToImage((x:String))}" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="Use my own image…" HorizontalAlignment="Stretch" Click="OnPickOwnHost"
+                            ToolTipService.ToolTip="Choose a PNG of your own design to be the host. It is kept straight away for every new picture. Free." />
+                    <Button x:Name="HostMascotButton" Content="Use the host design as the mascot" Command="{x:Bind ViewModel.UseHostAsMascotCommand}" HorizontalAlignment="Stretch"
+                            IsEnabled="{x:Bind ViewModel.HasHostDesign, Mode=OneWay}"
+                            ToolTipService.ToolTip="Uses the cartoon robot that presents your episodes as the mascot of the intro and outro. It is already made, so this costs nothing. Greyed out until a host has been chosen just above." />
+                </StackPanel>
 
                 <TextBlock Text="Sound" Style="{StaticResource SectionHeading}" />
                 <Grid ColumnSpacing="{StaticResource GapSmall}" RowSpacing="{StaticResource GapSmall}">
@@ -164,9 +201,31 @@
                             ToolTipService.ToolTip="Go back to the app's own outro tune: a robot lab winding down, soft chords, bright blips and a steady pulse."><SymbolIcon Symbol="Cancel" /></Button>
                 </Grid>
 
-                <TextBlock Text="Outro" Style="{StaticResource SectionHeading}" />
-                <NumberBox x:Name="OutroBox" Header="Outro length (seconds)" Minimum="5" Maximum="20" SpinButtonPlacementMode="Compact" Value="{x:Bind ViewModel.SeriesOutro, Mode=TwoWay}"
-                           ToolTipService.ToolTip="How long the outro at the end of every episode runs, 5 to 20 seconds. YouTube's end-screen cards (subscribe, next video) can be placed over it when you upload. Type a number or use the arrows." />
+                <!-- Advanced: fifteen seconds suits YouTube's end screen. Shown anyway while it is set to another length. -->
+                <StackPanel Spacing="{StaticResource Gap}" Visibility="{x:Bind app:Ui.ShowEither(ViewModel.Advanced, ViewModel.OutroTuned), Mode=OneWay}">
+                    <TextBlock Text="Outro" Style="{StaticResource SectionHeading}" />
+                    <NumberBox x:Name="OutroBox" Header="Outro length (seconds)" Minimum="5" Maximum="20" SpinButtonPlacementMode="Compact" Value="{x:Bind ViewModel.SeriesOutro, Mode=TwoWay}"
+                               ToolTipService.ToolTip="How long the outro at the end of every episode runs, 5 to 20 seconds; 15 unless changed. YouTube's end-screen cards (subscribe, next video) can be placed over it when you upload. Type a number or use the arrows." />
+                </StackPanel>
+
+                <TextBlock Text="New episodes" Style="{StaticResource SectionHeading}" />
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Told as" />
+                    <controls:Segmented x:Name="StructureSelector" SelectedIndex="{x:Bind ViewModel.SeriesStructureIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="Structure"
+                                        ToolTipService.ToolTip="The shape every episode of the series follows, so each lesson is told the same way. Story: goal, try, fail, fix, result, recap. Tutorial: concept, setup, demo, recap. Hook first: the best moment, then how it works.">
+                        <controls:SegmentedItem Content="Story" />
+                        <controls:SegmentedItem Content="Tutorial" />
+                        <controls:SegmentedItem Content="Hook first" />
+                    </controls:Segmented>
+                    <TextBlock x:Name="BeatsText" Text="{x:Bind ViewModel.StructureBeats, Mode=OneWay}" Style="{StaticResource QuietText}" TextWrapping="Wrap"
+                               ToolTipService.ToolTip="The beats in order. Your footage goes in the ones marked with a camera." />
+                </StackPanel>
+                <ComboBox x:Name="LookBox" Header="Picture style" HorizontalAlignment="Stretch" ItemsSource="{x:Bind vm:MainViewModel.LookChoices}" SelectedIndex="{x:Bind ViewModel.SeriesLookIndex, Mode=TwoWay}"
+                          ToolTipService.ToolTip="The art style new episodes' pictures are drawn in: comic book, photograph, flat vector or cinematic. Episodes already made keep theirs; the button below, when it shows, gives it to the open one." />
+                <!-- Only while the open episode was made before the look changed -->
+                <Button x:Name="SeriesLookButton" Content="Give the open episode this look" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.UseSeriesLookCommand}"
+                        Visibility="{x:Bind ViewModel.EpisodeOffSeriesLook, Mode=OneWay}"
+                        ToolTipService.ToolTip="The open episode was made before the series' picture style, captions or outro music changed. This gives it the series look, as one step Undo reverses. Pictures already drawn are not redrawn, and nothing is paid for." />
             </StackPanel>
         </ScrollViewer>
 

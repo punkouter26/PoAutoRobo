@@ -43,6 +43,23 @@ public sealed partial class ServicesViewModel : ObservableObject
     [ObservableProperty]
     public partial string EmbeddingModel { get; set; } = "";
 
+    private static readonly ServiceChoices Standard = new();
+
+    /// <summary>Advanced controls are on, so every model's name can be changed. Set by the Settings page as its switch moves.</summary>
+    [ObservableProperty]
+    public partial bool Advanced { get; set; }
+
+    // A model's name is an advanced control, shown anyway while it is not the standard one, so nothing hidden changes
+    // which model is used.
+
+    public bool ShowVideoModel => Video && (Advanced || VideoModel.Trim() != Standard.VideoModel);
+
+    public bool ShowLocalModel => Local && (Advanced || LocalModel.Trim() != Standard.LocalModel);
+
+    public bool ShowEmbeddingModel => Meaning && (Advanced || EmbeddingModel.Trim() != Standard.EmbeddingModel);
+
+    private static readonly string[] Shown = [nameof(ShowVideoModel), nameof(ShowLocalModel), nameof(ShowEmbeddingModel)];
+
     private ServiceChoices Choices => new(Video, VideoModel.Trim(), StockPhotos, Local, LocalModel.Trim(), Meaning, EmbeddingModel.Trim());
 
     /// <summary>The switches differ from what the app started with, so it must start again to use them.</summary>
@@ -54,7 +71,10 @@ public sealed partial class ServicesViewModel : ObservableObject
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (!_ready || e.PropertyName == nameof(NeedsRestart)) return;
+        if (e.PropertyName is nameof(NeedsRestart) || Shown.Contains(e.PropertyName)) return;
+        foreach (var name in Shown)
+            OnPropertyChanged(name);
+        if (!_ready || e.PropertyName == nameof(Advanced)) return;
         Choices.Save(AppPaths.Services);
         OnPropertyChanged(nameof(NeedsRestart));
     }

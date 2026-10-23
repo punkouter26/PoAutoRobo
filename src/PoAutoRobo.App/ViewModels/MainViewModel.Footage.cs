@@ -3,7 +3,8 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace PoAutoRobo.App.ViewModels;
 
-// The owner's films: listed for the next episode, then watched and listened to so the script can be written to them.
+// The owner's films: listed for the next episode, watched and listened to so the script can be written to them, then
+// brought into the episode, each in its clip, with its own sound or narrated.
 public partial class MainViewModel
 {
     /// <summary>The owner's films for the next episode. The script places each in one clip.</summary>
@@ -114,4 +115,156 @@ public partial class MainViewModel
         row.Note = seen.Note.Trim();
         StatusMessage = $"Seen in “{row.Name}”: {seen.Timeline.ReplaceLineEndings(" ")}";
     });
+
+    /// <summary>Footage added before cards showed a frame of it has none saved; take one now so those cards are not blank.</summary>
+    private async Task ShowFootageAsync()
+    {
+        if (!FfmpegAvailable) return;
+        foreach (var card in Clips.Where(c => c.HasUserVideo && c.ThumbnailPath.Length == 0).ToList())
+        {
+            if (card.Clip.Visual.UserVideoPath is not { } video || !File.Exists(video)) continue;
+            await _builder.PosterAsync(video, CancellationToken.None);
+            card.PictureChanged();
+        }
+    }
+
+    // ---- The user's own footage ----
+
+    [RelayCommand]
+    private Task AttachVideoAsync(string path)
+    {
+        if (Episode is null || SelectedClip is not { } card) return Task.CompletedTask;
+        if (IsWorking || !FfmpegAvailable)
+        {
+            ErrorMessage = null; // said again after being closed, it must show again
+            ErrorMessage = IsWorking
+                ? "Wait for the job in progress to finish, or cancel it, before adding your video."
+                : "FFmpeg is needed to read your video. Install it, then restart the app.";
+            return Task.CompletedTask;
+        }
+        return RunActivityAsync("Fitting the narration to your video", async ct =>
+        {
+            var clip = card.Clip;
+            var length = await _builder.ProbeDurationAsync(path, ct);
+            if (length < Conformance.MinFootage || length > Conformance.MaxFootage)
+                throw new InvalidOperationException("Footage must be between 5 seconds and 2 minutes long.");
+            var (copy, fit) = await ImportFootageAsync(clip, path, length, EpisodeFolder!, ct);
+            Edit(e => EpisodeEditor.AttachVideo(e, clip.Id, copy, fit));
+            StatusMessage = fit.WithinTolerance
+                ? $"Video {length:m\\:ss} · narration fitted to {fit.Duration.TotalSeconds:0.0} s."
+                : $"Closest fit is {Math.Abs(fit.Gap.TotalSeconds):0.0} s too {(fit.Gap > TimeSpan.Zero ? "short" : "long")}. Edit the dialogue to close the gap.";
+        });
+    }
+
+    /// <summary>
+    /// Copies one of the owner's films into the episode and, unless it keeps its own sound, fits the clip's
+    /// narration to it. Gives the copy and the dialogue and pace to attach with it.
+    /// </summary>
+    private async Task<(string Copy, FitResult Fit)> ImportFootageAsync(Clip clip, string path, TimeSpan length, string folder, CancellationToken ct)
+    {
+        var fit = new FitResult(clip.Active.Dialogue, 1.0, length, TimeSpan.Zero, WithinTolerance: true); // its own sound: nothing to fit
+        if (!clip.OwnSound)
+        {
+            ReportActivity($"Fitting the narration to “{clip.Title}”", 0.2);
+            fit = await Conformance.FitAsync(clip.Active.Dialogue, length, _scriptWriter,
+                async (text, rate, c) => (await _builder.NarrateClipAsync(EpisodeEditor.WithDialogue(clip, text) with { NarrationRate = rate }, folder, c)).Duration,
+                ct);
+        }
+        // Named for the clip as well as the file, so two different videos called "take.mp4" cannot overwrite each other.
+        ReportActivity("Copying your video into the episode", 0.9);
+        var copy = await ImportAsync(path, folder, $"{clip.Id:N}-{Path.GetFileName(path)}", ct);
+        await _builder.PosterAsync(copy, ct); // a frame of the footage, so its card is not left blank
+        return (copy, fit);
+    }
+
+    /// <summary>Copies a file into the episode's imports folder under <paramref name="name"/>, and gives the copy's path.</summary>
+    private static async Task<string> ImportAsync(string path, string folder, string name, CancellationToken ct)
+    {
+        // Already in the episode (a film being narrated again, say): used where it is, never copied a second time.
+        var imports = Path.GetFullPath(Path.Combine(folder, "imports"));
+        if (string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), imports, StringComparison.OrdinalIgnoreCase))
+            return Path.GetFullPath(path);
+        var copy = Path.Combine(folder, "imports", name);
+        Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
+        if (!string.Equals(Path.GetFullPath(path), copy, StringComparison.OrdinalIgnoreCase))
+            await Task.Run(() => File.Copy(path, copy, overwrite: true), ct); // can be hundreds of megabytes
+        return copy;
+    }
+
+    /// <summary>
+    /// Brings the owner's films into a newly written episode: each is copied in beside the clip the script gave it,
+    /// and narrated ones have their words fitted to the film. A film too short to narrate over keeps its own sound.
+    /// </summary>
+    private async Task<Episode> BringInFootageAsync(Episode episode, IReadOnlyList<FootageNote> footage, string folder, CancellationToken ct)
+    {
+        foreach (var note in footage)
+        {
+            if (episode.Clips.FirstOrDefault(c => string.Equals(c.Visual.UserVideoPath, note.Path, StringComparison.OrdinalIgnoreCase)) is not { } clip)
+                continue; // the script always places every film; nothing to bring in if it somehow did not
+            if (!clip.OwnSound && note.Length < Conformance.MinFootage)
+            {
+                clip = BeatPlan.WithFootage(clip, note with { OwnSound = true });
+                Note($"“{clip.Title}” keeps its own sound: under 5 seconds is too short to narrate over.");
+            }
+            var (copy, fit) = await ImportFootageAsync(clip, note.Path, note.Length, folder, ct);
+            episode = EpisodeEditor.AttachVideo(EpisodeEditor.ReplaceClip(episode, clip), clip.Id, copy, fit);
+            // What was heard said in it is kept beside the copy and becomes its captions, timed as it was said, for the owner to correct.
+            if (note.Heard is { Count: > 0 } heard)
+            {
+                JsonFile.Save(Clip.HeardFor(copy), heard);
+                if (clip.OwnSound && clip.Active.Dialogue.Trim().Length == 0)
+                    episode = EpisodeEditor.ReplaceClip(episode, EpisodeEditor.WithDialogue(episode.Clips.First(c => c.Id == clip.Id), string.Join(' ', heard.Select(w => w.Text))));
+            }
+            if (clip.OwnSound) // its sound is taken now, which is free, so the cards and running time show the real length
+                await _builder.NarrateClipAsync(episode.Clips.First(c => c.Id == clip.Id), folder, ct);
+        }
+        return episode;
+    }
+
+    /// <summary>
+    /// Plays the selected clip's film with its own sound, or narrates over it again. Its own sound is taken at once
+    /// and costs nothing; narrating again rewrites the words to the film's length and records them.
+    /// </summary>
+    [RelayCommand]
+    private Task SetOwnSoundAsync(bool ownSound)
+    {
+        if (Episode is null || EpisodeFolder is not { } folder || SelectedClip is not { HasUserVideo: true } card || card.OwnSound == ownSound)
+            return Task.CompletedTask;
+        if (ownSound)
+            return Guard(async () =>
+            {
+                Edit(e => EpisodeEditor.SetOwnSound(e, card.Id, true));
+                await _builder.NarrateClipAsync(card.Clip, folder, CancellationToken.None); // measured, so the running time is right
+                SyncCards();
+            });
+        return RunActivityAsync("Fitting the narration to your video", async ct =>
+        {
+            var film = card.Clip.Visual.UserVideoPath!;
+            var length = await _builder.ProbeDurationAsync(film, ct);
+            if (length < Conformance.MinFootage)
+                throw new InvalidOperationException("This film is under 5 seconds, too short to narrate over, so it keeps its own sound.");
+            // Words to fit from: the captions typed for it, else what the film shows, else its title. Fitting
+            // scales the words it starts with, so it must start with some.
+            var clip = card.Clip with { OwnSound = false };
+            var seed = new[] { clip.Active.Dialogue, clip.Active.VisualPrompt, clip.Title }.FirstOrDefault(t => t.Trim().Length > 0) ?? "Your footage";
+            clip = EpisodeEditor.WithDialogue(clip, seed);
+            var (copy, fit) = await ImportFootageAsync(clip, film, length, folder, ct);
+            Edit(e => EpisodeEditor.AttachVideo(EpisodeEditor.SetOwnSound(e, card.Id, false), card.Id, copy, fit));
+        });
+    }
+
+    /// <summary>Shows the selected clip's film through the robot's eyes, or as it was filmed. Free: it is drawn here.</summary>
+    [RelayCommand]
+    private void SetRobotView(bool on)
+    {
+        if (SelectedClip is { HasUserVideo: true } card && card.RobotView != on)
+            Edit(e => EpisodeEditor.SetRobotView(e, card.Id, on));
+    }
+
+    [RelayCommand]
+    private void RemoveVideo()
+    {
+        if (SelectedClip is { } card)
+            Edit(e => EpisodeEditor.RemoveVideo(e, card.Id));
+    }
 }

@@ -1,10 +1,11 @@
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace PoAutoRobo.App.ViewModels;
 
-// The one long job in progress, and turning whatever goes wrong into words for the user.
+// The one long job in progress, turning whatever goes wrong into words for the user, and what has been said, kept to read back.
 public partial class MainViewModel
 {
     private readonly Stopwatch _activityClock = new();
@@ -20,7 +21,7 @@ public partial class MainViewModel
     /// <summary>True while a script, a recording pass, a preview, a render or a batch of pictures is running. Only one runs at a time.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(SuggestTeasersCommand), nameof(RenderTeasersCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(GeneratePictureCommand),
-        nameof(NarrateAllCommand), nameof(CleanMediaCommand), nameof(CancelActivityCommand), nameof(CreateEpisodeCommand), nameof(AnotherTakeCommand), nameof(MakeAllCommand), nameof(MakeDraftCommand),
+        nameof(NarrateAllCommand), nameof(CleanMediaCommand), nameof(CancelActivityCommand), nameof(CreateEpisodeCommand), nameof(AnotherTakeCommand), nameof(MakeDraftCommand),
         nameof(WatchClipCommand), nameof(WatchTeaserCommand), nameof(SuggestNoteCommand), nameof(ApplyNoteCommand))]
     public partial bool IsWorking { get; set; }
 
@@ -34,10 +35,6 @@ public partial class MainViewModel
 
     [ObservableProperty]
     public partial double ActivityPercent { get; set; }
-
-    /// <summary>True while the job is drawing clips, and each card says how far its clip has got.</summary>
-    [ObservableProperty]
-    public partial bool DrawingClips { get; set; }
 
     /// <summary>Time spent and a rough time left, worked out from the pace so far.</summary>
     [ObservableProperty]
@@ -80,7 +77,6 @@ public partial class MainViewModel
             _activityClock.Stop();
             _cancel = null;
             IsWorking = false;
-            DrawingClips = false;
             foreach (var card in Clips)
                 card.Progress = 0; // no card is left showing a half-finished ring
         }
@@ -137,4 +133,47 @@ public partial class MainViewModel
         ActivityDetail = "Stopping…";
         _cancel?.Cancel();
     }
+
+    // ---- What has been said, kept to read back ----
+
+    private const int MessagesKept = 20;
+
+    /// <summary>The last things the app said, newest first, each with the time. The message bar shows only the latest.</summary>
+    public ObservableCollection<string> Messages { get; } = [];
+
+    partial void OnErrorMessageChanged(string? value) => Remember(value);
+
+    partial void OnStatusMessageChanged(string? value) => Remember(value);
+
+    private readonly Microsoft.UI.Dispatching.DispatcherQueue? _ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+    private string? _lastNote;
+
+    /// <summary>
+    /// Something out of the ordinary in how a script or a picture came to be made: a clip left for the user to
+    /// write, a picture made another way. Shown while the job runs and kept in the messages. Safe to call from any thread.
+    /// </summary>
+    public void Note(string message)
+    {
+        if (_ui is null || _ui.HasThreadAccess) Say();
+        else _ui.TryEnqueue(Say);
+
+        void Say()
+        {
+            Remember(message);
+            _lastNote = message;
+            if (IsWorking) ActivityDetail = message;
+        }
+    }
+
+    private void Remember(string? message)
+    {
+        if (string.IsNullOrEmpty(message)) return;
+        Messages.Insert(0, $"{DateTime.Now:HH:mm} · {message}");
+        while (Messages.Count > MessagesKept)
+            Messages.RemoveAt(Messages.Count - 1);
+        OnPropertyChanged(nameof(Notice));
+    }
+
+    /// <summary>The user closed the message bar. Clearing both means the same message, said again, shows again.</summary>
+    public void DismissMessages() => (ErrorMessage, StatusMessage) = (null, null);
 }

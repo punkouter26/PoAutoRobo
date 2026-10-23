@@ -7,24 +7,41 @@ namespace PoAutoRobo.App.ViewModels;
 /// <summary>One suggested teaser as its card shows it: the hook to edit, the moments to move, and whether to keep it.</summary>
 public sealed partial class TeaserViewModel : ObservableObject
 {
+    private readonly Teaser _suggested;
     private readonly IReadOnlyList<Clip> _clips;
+    private readonly IReadOnlyList<double> _lengths;
     private readonly Action<TeaserViewModel> _watch;
 
     /// <param name="lengths">How long each clip runs, in seconds, in running order: measured where it can be, estimated otherwise.</param>
     /// <param name="watch">Plays the teaser as it now stands, beside its card.</param>
     public TeaserViewModel(Teaser teaser, IReadOnlyList<Clip> clips, IReadOnlyList<double> lengths, Action<TeaserViewModel> watch)
     {
-        (_clips, _watch) = (clips, watch);
+        (_suggested, _clips, _lengths, _watch) = (teaser, clips, lengths, watch);
         Hook = teaser.Hook;
-        Fill = teaser.Fill;
-        var choices = clips.Select((c, i) => $"{i + 1} · {c.Title}").ToList();
-        foreach (var moment in teaser.Moments)
+        Reset();
+    }
+
+    /// <summary>
+    /// The moments and framing go back to those suggested, as advanced controls are turned off: hidden, they must not
+    /// change what is rendered. The hook and whether to keep it are not advanced, and stay as they are.
+    /// </summary>
+    public void Reset()
+    {
+        Fill = _suggested.Fill;
+        var choices = _clips.Select((c, i) => $"{i + 1} · {c.Title}").ToList();
+        Moments.Clear();
+        foreach (var moment in _suggested.Moments)
         {
-            var row = new MomentViewModel(choices, lengths, Math.Max(0, clips.ToList().FindIndex(c => c.Id == moment.ClipId)), moment.Start.TotalSeconds, moment.Length.TotalSeconds);
+            var row = new MomentViewModel(choices, _lengths, Math.Max(0, _clips.ToList().FindIndex(c => c.Id == moment.ClipId)), moment.Start.TotalSeconds, moment.Length.TotalSeconds);
             row.PropertyChanged += (_, _) => OnPropertyChanged(nameof(Poster));
             Moments.Add(row);
         }
+        OnPropertyChanged(nameof(Poster));
     }
+
+    /// <summary>Advanced controls are on, so each moment and the framing can be changed on the card.</summary>
+    [ObservableProperty]
+    public partial bool Advanced { get; set; }
 
     /// <summary>The line shown across the top of the teaser.</summary>
     [ObservableProperty]

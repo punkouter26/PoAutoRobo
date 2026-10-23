@@ -29,7 +29,7 @@ public partial class MainViewModel
         var teasers = await _scriptWriter.SuggestTeasersAsync(episode, lengths, ct);
         SyncCards(); // the clips' lengths are now measured
         ShowTeasers(episode, teasers, lengths);
-        StatusMessage = teasers.Count == 0 ? "No teaser could be cut from this episode." : $"{teasers.Count} teasers suggested. Change a hook or a moment, untick any you do not want, then render.";
+        StatusMessage = teasers.Count == 0 ? "No teaser could be cut from this episode." : $"{teasers.Count} teasers suggested. Change a hook, untick any you do not want, then render.";
     });
 
     private void ShowTeasers(Episode episode, IReadOnlyList<Teaser> teasers, IReadOnlyDictionary<Guid, TimeSpan>? measured = null)
@@ -42,7 +42,7 @@ public partial class MainViewModel
         TeaserCards.Clear();
         foreach (var teaser in teasers)
         {
-            var card = new TeaserViewModel(teaser, episode.Clips, lengths, Watch);
+            var card = new TeaserViewModel(teaser, episode.Clips, lengths, Watch) { Advanced = Advanced };
             card.PropertyChanged += OnTeaserChanged;
             TeaserCards.Add(card);
         }

@@ -4,7 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace PoAutoRobo.App.ViewModels;
 
-// Pictures, the host and the visual mix. Pictures are the one thing here with a known price, so every way of
+// Pictures and the host. Pictures are the one thing here with a known price, so every way of
 // making one is explicit, and no two of them may run at once.
 public partial class MainViewModel
 {
@@ -13,6 +13,9 @@ public partial class MainViewModel
     public ObservableCollection<string> HostCandidates { get; } = [];
 
     private Quality Quality => DraftPictures ? Quality.Low : Quality.Medium;
+
+    /// <summary>The open episode's picture style, given it by the series as it was made or by Use the series look.</summary>
+    private Look Look => Episode?.Look ?? Look.Comic;
 
     private Visuals? CurrentVisuals => _visualsFor?.Invoke(EpisodeFolder ?? AppPaths.Host, Quality);
 
@@ -147,7 +150,6 @@ public partial class MainViewModel
             {
                 drawing -= price;
             }
-            ClipDone(id, made + failures.Count, total, failure is null);
             if (failure is not null) failures.Add($"{clip?.Title}: {failure}"); else made++;
             ReportActivity($"Drew {clip?.Title} · {made + failures.Count} of {total} done", (double)(made + failures.Count) / total);
         }, ct);
@@ -284,27 +286,12 @@ public partial class MainViewModel
         {
             CurrentVisuals?.LockSheet(path);
             StatusMessage = "Host locked. New pictures will use this character.";
+            HostCandidates.Clear();
+            HasHostDesign = File.Exists(AppPaths.HostSheet);
         }
         catch (IOException e)
         {
             ErrorMessage = e.Message;
         }
     }
-
-    // ---- Visual mix ----
-
-    public MixPercentages Mix => Episode?.Mix ?? MixPercentages.Default;
-
-    public void ApplyMix(MixPercentages mix) => Edit(e => EpisodeEditor.SetMix(e, mix));
-
-    public void RerollMix() => Edit(e => EpisodeEditor.RerollMix(e, Random.Shared.Next()));
-
-    public Look Look => Episode?.Look ?? Look.Comic;
-
-    /// <summary>True when at least half the clips show the host; what the "host in every clip" switch starts on.</summary>
-    public bool HostMostlyVisible => Episode is { } episode && episode.Clips.Count(c => c.HostVisible) * 2 >= episode.Clips.Count;
-
-    public void ApplyLook(Look look) => Edit(e => EpisodeEditor.SetLook(e, look));
-
-    public void ShowHostEverywhere(bool visible) => Edit(e => EpisodeEditor.SetHostEverywhere(e, visible));
 }

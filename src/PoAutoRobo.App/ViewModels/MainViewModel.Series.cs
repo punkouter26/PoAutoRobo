@@ -11,7 +11,7 @@ public sealed record IntroStart(string Name, string Accent, IntroLayout Layout)
     public Windows.UI.Color Colour => Windows.UI.Color.FromArgb(255, Convert.ToByte(Accent[1..3], 16), Convert.ToByte(Accent[3..5], 16), Convert.ToByte(Accent[5..7], 16));
 }
 
-/// <summary>The series brand kit: what every episode shares, set up once on the Intro step and in the Series dialog.</summary>
+/// <summary>The series brand kit: what every episode shares, set up once on the Intro step.</summary>
 public partial class MainViewModel
 {
     // Each look with the words shown for it, kept together so the list cannot drift out of step with the looks there are.
@@ -25,7 +25,7 @@ public partial class MainViewModel
     /// <summary>The kit and where its files are, for the intro, the outro and new episodes.</summary>
     public Brand SeriesBrand => new(_kit, AppPaths.Series);
 
-    // The intro page's and the dialog's fields. Each change is saved at once: there is nothing to lose by leaving.
+    // The intro page's fields. Each change is saved at once: there is nothing to lose by leaving.
 
     public string SeriesChannel
     {
@@ -46,6 +46,26 @@ public partial class MainViewModel
         set => Store(_kit with { OutroSeconds = Math.Clamp((int)Math.Round(double.IsNaN(value) ? 15 : value), SeriesKit.MinOutroSeconds, SeriesKit.MaxOutroSeconds) });
     }
 
+    /// <summary>The outro runs other than the standard fifteen seconds, so its length stays in view without advanced controls.</summary>
+    public bool OutroTuned => _kit.OutroSeconds != new SeriesKit().OutroSeconds;
+
+    /// <summary>How every episode is told, as an index into <see cref="StructureChoices"/>.</summary>
+    public int SeriesStructureIndex
+    {
+        get => Math.Max(0, Array.FindIndex(StructureChoices, c => c.Value == _kit.Structure));
+        set
+        {
+            if (value >= 0 && value < StructureChoices.Length) Store(_kit with { Structure = StructureChoices[value].Value });
+        }
+    }
+
+    /// <summary>
+    /// The open episode looks other than the series now does: made before the picture style, captions or outro music
+    /// changed. The Intro step then offers to bring it into line.
+    /// </summary>
+    public bool EpisodeOffSeriesLook => Episode is { } episode && (EpisodeEditor.UseSeriesLook(episode, _kit, null) != episode
+        || (_kit.Music is { } music && !string.Equals(Path.GetFileName(episode.MusicPath), "music-" + music, StringComparison.OrdinalIgnoreCase)));
+
     public int SeriesLookIndex
     {
         get => Math.Max(0, Array.FindIndex(LookChoices, c => c.Value == _kit.Look));
@@ -55,14 +75,8 @@ public partial class MainViewModel
         }
     }
 
-    public int SeriesCaptionIndex
-    {
-        get => Math.Max(0, Array.FindIndex(CaptionChoices, c => c.Value == _kit.Captions.Preset));
-        set
-        {
-            if (value >= 0 && value < CaptionChoices.Length) Store(_kit with { Captions = _kit.Captions with { Preset = CaptionChoices[value].Value } });
-        }
-    }
+    /// <summary>New episodes start with the caption style last picked on the Preview step, so it is chosen in one place.</summary>
+    private void RememberCaptionPreset(CaptionPreset preset) => Store(_kit with { Captions = _kit.Captions with { Preset = preset } });
 
     /// <summary>The accent colour as #RRGGBB. Anything else is kept in the box but not saved.</summary>
     public string SeriesAccent
@@ -167,14 +181,15 @@ public partial class MainViewModel
             ErrorMessage = $"The series settings could not be saved: {e.Message}";
         }
         foreach (var name in SeriesFields)
-            OnPropertyChanged(name); // the dialog's fields and labels all read from the kit
+            OnPropertyChanged(name); // the page's fields and labels all read from the kit
         RedrawStill();
     }
 
     private static readonly string[] SeriesFields =
     [
-        nameof(SeriesChannel), nameof(SeriesTagline), nameof(SeriesOutro), nameof(SeriesLookIndex), nameof(SeriesCaptionIndex), nameof(SeriesAccent), nameof(SeriesLayoutIndex),
+        nameof(SeriesChannel), nameof(SeriesTagline), nameof(SeriesOutro), nameof(SeriesLookIndex), nameof(SeriesAccent), nameof(SeriesLayoutIndex),
         nameof(SeriesLogoLabel), nameof(SeriesStingLabel), nameof(SeriesMusicLabel), nameof(SeriesMascotLabel), nameof(SeriesBrand),
+        nameof(OutroTuned), nameof(SeriesStructureIndex), nameof(StructureBeats), nameof(EpisodeOffSeriesLook),
     ];
 
     /// <summary>
@@ -203,7 +218,8 @@ public partial class MainViewModel
     });
 
     /// <summary>True when a host design has been chosen, which can then stand as the series mascot.</summary>
-    public static bool HasHostDesign => File.Exists(AppPaths.HostSheet);
+    [ObservableProperty]
+    public partial bool HasHostDesign { get; private set; } = File.Exists(AppPaths.HostSheet);
 
     // ---- A logo, made the way the host is: three candidates, one chosen ----
 
@@ -279,7 +295,10 @@ public partial class MainViewModel
         OutroPreviewPath = await _builder.PreviewOutroAsync(SeriesBrand, ct);
     });
 
-    /// <summary>Gives the open episode the series look again (picture style, captions, music), as one step Undo reverses.</summary>
+    /// <summary>
+    /// Gives the open episode the series look again (picture style, captions, music), as one step Undo reverses: the
+    /// way an episode made before the look changed catches up. An episode has no look of its own to set otherwise.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(HasEpisode))]
     private Task UseSeriesLookAsync() => Guard(async () =>
     {

@@ -72,10 +72,6 @@ public static class EpisodeEditor
     public static Episode SetHostVisible(Episode episode, Guid clipId, bool visible) =>
         Update(episode, clipId, clip => clip with { HostVisible = visible });
 
-    /// <summary>Shows or hides the host in every clip at once.</summary>
-    public static Episode SetHostEverywhere(Episode episode, bool visible) =>
-        episode with { Clips = [.. episode.Clips.Select(c => c with { HostVisible = visible })] };
-
     /// <summary>Changes the art direction. Whatever was drawn in the old look is out of date.</summary>
     public static Episode SetLook(Episode episode, Look look) => episode.Look == look ? episode : episode with
     {
@@ -211,12 +207,7 @@ public static class EpisodeEditor
     public static Episode ReplaceClip(Episode episode, Clip clip) =>
         episode.Clips.Any(c => c.Id == clip.Id) ? Update(episode, clip.Id, _ => clip) : episode;
 
-    public static Episode SetMix(Episode episode, MixPercentages mix) => VisualMix.Assign(episode with { Mix = mix }, mix);
-
-    /// <summary>Same proportions, dealt to different clips.</summary>
-    public static Episode RerollMix(Episode episode, int newSeed) => VisualMix.Assign(episode with { MixSeed = newSeed }, episode.Mix);
-
-    /// <summary>The user's own choice for one clip; mix changes and re-rolls leave it alone from then on.</summary>
+    /// <summary>The user's own choice for one clip; dealing the picture types afresh leaves it alone from then on.</summary>
     public static Episode SetKind(Episode episode, Guid clipId, VisualKind kind)
     {
         if (kind == VisualKind.UserVideo)

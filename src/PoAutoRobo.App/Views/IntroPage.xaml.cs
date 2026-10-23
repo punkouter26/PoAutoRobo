@@ -10,7 +10,7 @@ using Windows.Storage.Pickers;
 namespace PoAutoRobo.App.Views;
 
 /// <summary>Step 1: the intro every episode opens with and the outro it ends on, what they are made of, and a still of
-/// the intro that follows each change.</summary>
+/// the intro that follows each change; and the rest of what every episode shares: the host and the picture style.</summary>
 public sealed partial class IntroPage : UserControl
 {
     private readonly MediaPlayer _player = new();
@@ -78,6 +78,21 @@ public sealed partial class IntroPage : UserControl
     private void OnUseLogo(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { Tag: string logo }) ViewModel?.UseLogo(logo);
+    }
+
+    // Each host design's button carries its picture in Tag.
+    private void OnUseHost(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string sheet }) ViewModel?.LockHost(sheet);
+    }
+
+    private async void OnPickOwnHost(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is null) return;
+        var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.PicturesLibrary };
+        picker.FileTypeFilter.Add(".png");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, App.WindowHandle);
+        if (await picker.PickSingleFileAsync() is { } file) ViewModel.LockHost(file.Path);
     }
 
     // The buttons carry the file's role in Tag: logo, mascot, sting or music.

@@ -14,7 +14,12 @@ public partial class MainViewModel
     public int CaptionPresetIndex
     {
         get => Array.FindIndex(CaptionChoices, c => c.Value == Captions.Preset);
-        set { if (value >= 0 && value < CaptionChoices.Length && value != CaptionPresetIndex) SetCaptions(Captions with { Preset = CaptionChoices[value].Value }); }
+        set
+        {
+            if (value < 0 || value >= CaptionChoices.Length || value == CaptionPresetIndex) return;
+            SetCaptions(Captions with { Preset = CaptionChoices[value].Value });
+            RememberCaptionPreset(CaptionChoices[value].Value);
+        }
     }
 
     public double CaptionFontSize
@@ -107,8 +112,7 @@ public partial class MainViewModel
     private async Task RenderAsync()
     {
         var preset = ExportChoices[ExportPresetIndex].Value;
-        if (await RunActivityAsync($"Rendering the master video ({preset.Height}p, {preset.Fps} fps)", ct => RenderMasterAsync(preset, ct)))
-            Premiere();
+        await RunActivityAsync($"Rendering the master video ({preset.Height}p, {preset.Fps} fps)", ct => RenderMasterAsync(preset, ct));
     }
 
     /// <summary>Renders the master video and writes everything that is uploaded with it. Part of a job already under way.</summary>
@@ -132,31 +136,22 @@ public partial class MainViewModel
         {
             ErrorMessage = "The video is finished, but its upload description could not be written. " + Plain(e);
         }
-        var bookends = _kit.ChannelName.Trim().Length > 0 ? "" : " It has no intro or outro: give the channel a name under Series to add them.";
+        var bookends = _kit.ChannelName.Trim().Length > 0 ? "" : " It has no intro or outro: give the channel a name on the Intro step to add them.";
         StatusMessage = $"Saved {Path.GetFileName(video)}, with its chapter list{withNotes} beside it.{bookends}";
     }
 
     // Not while one picture is being drawn, for the reason a batch of pictures may not start then.
-    private bool CanMakeAll => CanRender && !GeneratePictureCommand.IsRunning && !AnotherTakeCommand.IsRunning;
+    private bool CanMakeDraft => CanRender && !GeneratePictureCommand.IsRunning && !AnotherTakeCommand.IsRunning;
 
     /// <summary>
-    /// Everything from the script to the finished video in one job: every voice, every picture still wanted, then
-    /// the master video. Asked about once, with the cost, and then left to run.
+    /// Everything from the script to a draft to watch in one job: every voice, every picture still wanted, then the
+    /// quick preview, to find what to change before anything is rendered at full size. Asked about once, with the
+    /// cost, and then left to run. The master video is its own button on the Publish step.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanMakeAll))]
-    private Task MakeAllAsync() => MakeEpisodeAsync(draft: false);
-
-    /// <summary>
-    /// The same, ending on the quick preview instead of the master: a draft to watch, to find what to change before
-    /// anything is rendered at full size.
-    /// </summary>
-    [RelayCommand(CanExecute = nameof(CanMakeAll))]
-    private Task MakeDraftAsync() => MakeEpisodeAsync(draft: true);
-
-    private async Task MakeEpisodeAsync(bool draft)
+    [RelayCommand(CanExecute = nameof(CanMakeDraft))]
+    private async Task MakeDraftAsync()
     {
         var estimate = CostEstimate.For(Episode!, _imageModel, Quality);
-        var preset = ExportChoices[ExportPresetIndex].Value;
         var draw = PicturesAvailable && !estimate.NothingToDo;
         ErrorMessage = null;
         if (draw && OverBudget(estimate.Dollars ?? 0) is { } refusal)
@@ -166,35 +161,25 @@ public partial class MainViewModel
         }
         var pictures = draw ? $"draws {char.ToLowerInvariant(estimate.Summary[0])}{estimate.Summary[1..]}" : PicturesAvailable ? "draws nothing new, as every clip has its picture." : "draws no pictures, as the picture service is not connected.";
         var held = draw && estimate.Dollars is { } agreed ? $" It stops drawing rather than spend more than {SpendLog.Money(agreed)}." : "";
-        var end = draft ? "Then builds the quick preview to watch on the Preview step; nothing is rendered at full size." : $"Then renders the master video at {preset.Height}p, {preset.Fps} fps.";
-        var plan = $"Records every clip's voice, {pictures}{held} {end} You can stop it at any point and keep what is made.";
-        if (!await ConfirmSpend(draft ? "Make a draft to watch?" : "Make the whole episode?", plan, "Make it", draw ? estimate.Dollars ?? 0 : 0) || !CanMakeAll)
+        var plan = $"Records every clip's voice, {pictures}{held} Then builds the quick preview to watch on the Preview step; nothing is rendered at full size. You can stop it at any point and keep what is made.";
+        if (!await ConfirmSpend("Make a draft to watch?", plan, "Make it", draw ? estimate.Dollars ?? 0 : 0) || !CanMakeDraft)
             return;
 
         (List<string> Failures, string? Halted) drawn = ([], null);
-        var finished = await RunActivityAsync(draft ? "Making a draft of the episode" : "Making the whole episode", async ct =>
+        var finished = await RunActivityAsync("Making a draft of the episode", async ct =>
         {
             Phase(0, 0.15);
             await NarrateEveryClipAsync(ct);
             if (draw)
             {
-                Phase(0.15, draft ? 0.55 : 0.35);
+                Phase(0.15, 0.55);
                 (_, drawn.Failures, drawn.Halted) = await DrawAllAsync(estimate, ct);
             }
-            if (draft)
-            {
-                Phase(0.7, 0.3);
-                await BuildPreviewNowAsync(ct);
-                StatusMessage = "The draft is ready to watch. Change what needs changing, then render the master video.";
-            }
-            else
-            {
-                Phase(0.5, 0.5);
-                await RenderMasterAsync(preset, ct);
-            }
+            Phase(0.7, 0.3);
+            await BuildPreviewNowAsync(ct);
+            StatusMessage = "The draft is ready to watch. Change what needs changing, then render the master video.";
         });
-        if (finished && draft) Step = PreviewStep; // where the draft plays; a step change clears errors, so it comes before them
-        if (finished && !draft) Premiere();
+        if (finished) Step = PreviewStep; // where the draft plays; a step change clears errors, so it comes before them
         if (drawn.Halted is { } halted) StatusMessage = $"{StatusMessage} {halted}".Trim();
         ReportFailures(drawn.Failures);
     }
@@ -218,18 +203,19 @@ public partial class MainViewModel
 
     /// <summary>True while a clip or teaser is being got ready to watch. Renders wait meanwhile.</summary>
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(SuggestTeasersCommand), nameof(RenderTeasersCommand), nameof(BuildPreviewCommand), nameof(MakeAllCommand),
-        nameof(MakeDraftCommand), nameof(WatchClipCommand), nameof(WatchTeaserCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(SuggestTeasersCommand), nameof(RenderTeasersCommand), nameof(BuildPreviewCommand), nameof(MakeDraftCommand),
+        nameof(WatchClipCommand), nameof(WatchTeaserCommand))]
     public partial bool IsWatching { get; set; }
 
     /// <summary>
     /// Plays one clip on its own, small and with its sound. Drawn as the quick preview draws it, so after a preview it
-    /// plays at once. The voice is recorded first if this wording has not been, as Audition does.
+    /// plays at once. The voice is recorded first if this wording has not been.
     /// </summary>
-    /// <param name="card">The clip; the selected one when null, as from the inspector.</param>
+    /// <param name="card">The clip; the selected one when null, as from the inspector, whose words just typed are applied first.</param>
     [RelayCommand(CanExecute = nameof(CanRender))]
     private async Task WatchClipAsync(ClipViewModel? card)
     {
+        if (card is null) await ApplyDialogueAsync(CancellationToken.None); // Ctrl+P leaves the words' box with focus, so they are not applied yet
         if ((card ?? SelectedClip) is not { } clip || Episode is not { } episode) return;
         var index = episode.Clips.ToList().FindIndex(c => c.Id == clip.Id);
         if (index < 0) return; // taken out of the episode meanwhile
@@ -298,7 +284,6 @@ public partial class MainViewModel
     {
         if (!IsWorking) return; // a late report after the job ended
         ReportActivity(p.Activity, p.Fraction);
-        DrawingClips = p.Clips is not null;
         for (var i = 0; p.Clips is { } clips && i < Math.Min(clips.Count, Clips.Count); i++)
             Clips[i].Progress = clips[i] * 100;
     });

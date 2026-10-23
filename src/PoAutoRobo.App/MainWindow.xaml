@@ -93,13 +93,8 @@
                     </AppBarButton.KeyboardAccelerators>
                 </AppBarButton>
                 <AppBarButton x:Name="SettingsButton" Icon="Setting" Label="Settings" LabelPosition="Collapsed" Click="OnSettings"
-                              ToolTipService.ToolTip="Settings: sounds, picture quality, the monthly budget and what has been spent, effects, advanced controls, and which services are on. Changes are kept for next time." />
+                              ToolTipService.ToolTip="Settings: picture quality, the monthly budget and what has been spent, advanced controls, and which services are on. Changes are kept for next time." />
                 <CommandBar.SecondaryCommands>
-                    <AppBarButton x:Name="SeriesButton" Label="Series and look…" Click="OnSeries"
-                                  ToolTipService.ToolTip="The look new episodes start with; the host who presents every episode; and this episode's look and mix of pictures. The intro, the outro and its music have their own step." />
-                    <AppBarButton x:Name="ReviewItem" Label="Have an editor read the script" Command="{x:Bind ViewModel.ReviewScriptCommand}" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}"
-                                  ToolTipService.ToolTip="Reads the whole script for weak openings and clips that repeat one another, and marks the cards worth changing. Done once by itself when a script is written." />
-                    <AppBarSeparator />
                     <AppBarButton x:Name="RenameEpisodeItem" Label="Rename episode…" Command="{x:Bind ViewModel.RenameEpisodeCommand}"
                                   ToolTipService.ToolTip="Give the open episode a new title. It shows in the intro, the suggested titles and the list of saved episodes." />
                     <AppBarButton x:Name="CleanMediaItem" Label="Remove unused media…" Command="{x:Bind ViewModel.CleanMediaCommand}"
@@ -117,7 +112,7 @@
                 </Grid.ColumnDefinitions>
                 <controls:Segmented x:Name="StepSelector" SelectedIndex="{x:Bind ViewModel.Step, Mode=TwoWay}" VerticalAlignment="Center"
                                     AutomationProperties.Name="Step" ToolTipService.ToolTip="{x:Bind ViewModel.StepHint, Mode=OneWay}">
-                    <controls:SegmentedItem Content="1 · Intro" ToolTipService.ToolTip="Set up once: the intro and outro every episode opens and ends with. Come back when you want a new look. (Ctrl+1)" />
+                    <controls:SegmentedItem Content="1 · Intro" ToolTipService.ToolTip="Set up once: the intro and outro every episode opens and ends with, and the style new episodes' pictures are drawn in. Come back when you want a new look. (Ctrl+1)" />
                     <controls:SegmentedItem Content="2 · Lesson" ToolTipService.ToolTip="Start an episode: say what you taught the R1, add your films of it, and write the script. Or open one you saved. (Ctrl+2)" />
                     <controls:SegmentedItem Content="3 · Clips" IsEnabled="{x:Bind ViewModel.HasEpisode, Mode=OneWay}"
                                             ToolTipService.ToolTip="Shape the script: order the clips, edit and listen to their words, and give each its voice and picture. Opens once there is an episode. (Ctrl+3)" />
@@ -147,10 +142,11 @@
                     <Button x:Name="GuideButton" Content="{x:Bind ViewModel.GuideActionLabel, Mode=OneWay}" Command="{x:Bind ViewModel.RunGuideActionCommand}"
                             Visibility="{x:Bind ViewModel.HasGuideAction, Mode=OneWay}" Style="{x:Bind local:Ui.Primary(ViewModel.GuideActionIsNext), Mode=OneWay}"
                             ToolTipService.ToolTip="The next thing this step needs, or the next step once this one is done. Lit when it is what to do now. Anything that costs money asks first and shows the cost." />
-                    <!-- On the clips page: each job of making the episode on its own, and all of them in one go -->
+                    <!-- On the clips page, with advanced controls on: each job of making the episode on its own, and all of them in one go.
+                         The button beside it already offers the next one. -->
                     <DropDownButton x:Name="JobsButton" Visibility="{x:Bind ViewModel.ShowJobs, Mode=OneWay}" IsEnabled="{x:Bind local:Ui.Not(ViewModel.IsWorking), Mode=OneWay}"
                                     AutomationProperties.Name="Jobs"
-                                    ToolTipService.ToolTip="Jobs: every job that makes the episode, to start one yourself: the voices, the pictures, or all of it in one go. Each asks first and shows the cost.">
+                                    ToolTipService.ToolTip="Jobs: every job that makes the episode, to start one yourself out of turn: the voices, the pictures, or all of it in one go as a draft to watch. Each asks first and shows the cost.">
                         <FontIcon Glyph="&#xE8FD;" FontSize="16" />
                         <DropDownButton.Flyout>
                             <MenuFlyout Placement="BottomEdgeAlignedRight">
@@ -171,12 +167,6 @@
                                                 ToolTipService.ToolTip="Every voice and picture still wanted, then the quick preview on the Preview step, to watch through before anything is rendered at full size. Asked once, with the cost.">
                                     <MenuFlyoutItem.Icon>
                                         <SymbolIcon Symbol="View" />
-                                    </MenuFlyoutItem.Icon>
-                                </MenuFlyoutItem>
-                                <MenuFlyoutItem x:Name="MakeMasterItem" Text="All of it: the finished video" Command="{x:Bind ViewModel.MakeAllCommand}" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}"
-                                                ToolTipService.ToolTip="Every voice and picture still wanted, then the master video at the size chosen on the Publish step, with everything to upload beside it. It never spends more than the cost it shows.">
-                                    <MenuFlyoutItem.Icon>
-                                        <SymbolIcon Symbol="Video" />
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                             </MenuFlyout>
@@ -211,8 +201,6 @@
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <!-- A slow cloud of light behind the deck, with Effects on; the cards' frosted glass blurs it -->
-                    <views:NebulaBackdrop x:Name="DeckBackdrop" Grid.RowSpan="2" />
                     <GridView x:Name="ClipDeck" Padding="{StaticResource DeckPadding}" ItemsSource="{x:Bind ViewModel.Clips}"
                               SelectedItem="{x:Bind ViewModel.SelectedClip, Mode=TwoWay}" SelectionMode="Single" AutomationProperties.Name="Clips in running order"
                               ToolTipService.ToolTip="Your clips in running order. Click a card to edit its words and picture on the right; drag a card to move it; Delete takes out the one selected (Undo puts it back)."
@@ -260,7 +248,7 @@
                 <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="10">
                         <TextBlock Text="Captions" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                        <TextBlock Style="{StaticResource QuietText}" Text="Set on the preview itself: Aa, in its top corner. The words show the new style as you change it." />
+                        <TextBlock Style="{StaticResource QuietText}" Text="Set on the preview itself: Aa, in its top corner. The words show the new style as you change it, and new episodes start with the style picked last." />
 
                         <TextBlock Text="Outro music" Style="{StaticResource SectionHeading}" />
                         <Grid ColumnSpacing="{StaticResource GapSmall}">
@@ -308,7 +296,7 @@
                                 ToolTipService.ToolTip="Builds each kept teaser as a 1080 by 1920 video in the episode's export folder, from the clips already made. Nothing new is paid for." />
                     </Grid>
                     <TextBlock Grid.Row="1" Style="{StaticResource QuietText}"
-                               Text="Optional: three ten-second upright cuts of this episode for other video sites. Change a hook or a moment, untick the ones you do not want, then render the rest." />
+                               Text="Optional: three ten-second upright cuts of this episode for other video sites. Change a hook, untick the ones you do not want, then render the rest." />
                     <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled"
                                   VerticalAlignment="Top" Visibility="{x:Bind ViewModel.HasTeasers, Mode=OneWay}">
                             <ItemsControl x:Name="TeaserCardList" ItemsSource="{x:Bind ViewModel.TeaserCards}">
@@ -348,8 +336,9 @@
                                                 <StackPanel Grid.Column="1" Spacing="6">
                                                     <TextBox Text="{x:Bind Hook, Mode=TwoWay}" MaxLength="80" TextWrapping="Wrap" PlaceholderText="Hook" AutomationProperties.Name="Hook"
                                                              ToolTipService.ToolTip="Shown across the top of the teaser. Eight words at most; any more are left off." />
-                                                    <!-- Each moment: the clip it is cut from, and where in that clip, dragged along the clip's length -->
-                                                    <ItemsControl ItemsSource="{x:Bind Moments}">
+                                                    <!-- Each moment: the clip it is cut from, and where in that clip, dragged along the clip's length. Advanced:
+                                                         the suggested moments are what most teasers need. -->
+                                                    <ItemsControl ItemsSource="{x:Bind Moments}" Visibility="{x:Bind Advanced, Mode=OneWay}">
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate x:DataType="vm:MomentViewModel">
                                                                 <StackPanel Margin="0,0,0,4">
@@ -360,9 +349,9 @@
                                                                             <ColumnDefinition Width="*" />
                                                                             <ColumnDefinition Width="Auto" />
                                                                         </Grid.ColumnDefinitions>
-                                                                        <views:MomentStrip Maximum="{x:Bind LatestStart, Mode=OneWay}" Length="{x:Bind Length}" Value="{x:Bind Start, Mode=TwoWay}"
-                                                                                           AutomationProperties.Name="Starts at, in seconds"
-                                                                                           ToolTipService.ToolTip="The clip from start to end, and the part this moment uses. Drag it along, or use the arrows, to choose where it starts." />
+                                                                        <Slider Maximum="{x:Bind LatestStart, Mode=OneWay}" StepFrequency="0.5" SmallChange="0.5" LargeChange="2" Value="{x:Bind Start, Mode=TwoWay}" VerticalAlignment="Center"
+                                                                                AutomationProperties.Name="Starts at, in seconds"
+                                                                                ToolTipService.ToolTip="Where in its clip this moment starts, in seconds: left is the clip's start. Drag it, or use the arrows, then watch the teaser to check." />
                                                                         <TextBlock Grid.Column="1" Text="{x:Bind LengthText}" Style="{StaticResource QuietText}" VerticalAlignment="Center" />
                                                                     </Grid>
                                                                 </StackPanel>
@@ -370,7 +359,7 @@
                                                         </ItemsControl.ItemTemplate>
                                                     </ItemsControl>
                                                     <StackPanel Orientation="Horizontal" Spacing="{StaticResource GapSmall}">
-                                                        <CheckBox Content="Fill" MinWidth="0" IsChecked="{x:Bind Fill, Mode=TwoWay}"
+                                                        <CheckBox Content="Fill" MinWidth="0" IsChecked="{x:Bind Fill, Mode=TwoWay}" Visibility="{x:Bind Advanced, Mode=OneWay}"
                                                                   ToolTipService.ToolTip="Crop the picture to fill the upright frame, instead of showing it whole over a blurred copy of itself. Fuller, but the sides are lost: watch it to check the robot is still in shot." />
                                                         <CheckBox Content="Keep" MinWidth="0" IsChecked="{x:Bind Keep, Mode=TwoWay}" ToolTipService.ToolTip="Ticked teasers are rendered when you press Render teasers. Untick one to leave it out." />
                                                     </StackPanel>
@@ -392,9 +381,7 @@
                         <StackPanel Spacing="10">
                             <TextBlock Text="Finished video" Style="{ThemeResource BodyStrongTextBlockStyle}" />
                             <TextBlock Style="{StaticResource QuietText}"
-                                       Text="The whole episode at full size, wrapped in the intro and outro, with a chapter list, subtitles, a thumbnail and an upload description beside it." />
-                            <ComboBox x:Name="ExportPresetBox" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}" ToolTipService.ToolTip="Size and smoothness of the master video. 4K and 60 fps take much longer to render." HorizontalAlignment="Stretch" AutomationProperties.Name="Export quality"
-                                      ItemsSource="{x:Bind ViewModel.ExportChoices}" SelectedIndex="{x:Bind ViewModel.ExportPresetIndex, Mode=TwoWay}" />
+                                       Text="{x:Bind ViewModel.MasterSizeText, Mode=OneWay}" />
                         </StackPanel>
                     </ScrollViewer>
                     <StackPanel Grid.Row="1" Spacing="{StaticResource GapSmall}">
@@ -435,8 +422,6 @@
                     </Grid>
                     <TextBlock x:Name="ActivityDetailText" Text="{x:Bind ViewModel.ActivityDetail, Mode=OneWay}" ToolTipService.ToolTip="{x:Bind ViewModel.ActivityDetail, Mode=OneWay}"
                                Style="{StaticResource QuietText}" MaxLines="2" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite" />
-                    <!-- While clips are drawn, each develops here like a print in the tray -->
-                    <views:DarkroomStrip x:Name="Darkroom" Visibility="Collapsed" Margin="0,4,0,0" />
                 </StackPanel>
                 <Button x:Name="CancelActivityButton" Grid.Column="1" Content="Cancel" MinWidth="96" MinHeight="44" VerticalAlignment="Center" Command="{x:Bind ViewModel.CancelActivityCommand}"
                         ToolTipService.ToolTip="Stop this job. Narration and pictures already made are kept, so starting again picks up faster." />
@@ -484,8 +469,5 @@
             <TextBlock Grid.Column="1" Text="{x:Bind local:App.BuildVersion}" Style="{StaticResource QuietText}" Opacity="0.6" IsHitTestVisible="False"
                        HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="Build version" />
         </Grid>
-
-        <!-- Sparks, smoke, gathering light, the finished thumbnail and confetti, over everything and never in the way of a click -->
-        <views:FxLayer x:Name="Fx" Grid.RowSpan="3" />
     </Grid>
 </winex:WindowEx>

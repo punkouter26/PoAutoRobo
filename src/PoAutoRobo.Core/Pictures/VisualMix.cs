@@ -1,5 +1,5 @@
 
-namespace PoAutoRobo.Core.Library;
+namespace PoAutoRobo.Core.Pictures;
 
 public static class VisualMix
 {

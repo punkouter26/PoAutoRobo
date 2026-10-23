@@ -3,11 +3,11 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
-    xmlns:models="using:PoAutoRobo.Core.Library"
+    xmlns:script="using:PoAutoRobo.Core.Script"
     xmlns:vm="using:PoAutoRobo.App.ViewModels"
     xmlns:local="using:PoAutoRobo.App.Views"
     xmlns:app="using:PoAutoRobo.App"
-    Unloaded="OnUnloaded">
+>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Padding="{StaticResource PagePadding}" Spacing="{StaticResource Gap}" Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay}">
             <Grid ColumnSpacing="4">
@@ -64,25 +64,15 @@
                 <Button x:Name="ApplyNoteButton" HorizontalAlignment="Left" Content="Rewrite to answer the note" Command="{x:Bind ViewModel.ApplyNoteCommand}"
                         Visibility="{x:Bind app:Ui.ShowText(ViewModel.SelectedClip.Review), Mode=OneWay}"
                         ToolTipService.ToolTip="Has the script model rewrite this clip's words to answer the editor's note. One request; undo puts the old words back." />
-                <Grid ColumnSpacing="{StaticResource GapSmall}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Button x:Name="AuditionButton" MinHeight="44" ToolTipService.ToolTip="Hear this clip in the host&#39;s voice before building the video (Ctrl+P)." Content="Audition audio"
-                            HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.AuditionCommand}" />
-                    <Button x:Name="WatchClipButton" Grid.Column="1" MinHeight="44" Content="Watch clip" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.WatchClipCommand}"
-                            ToolTipService.ToolTip="See this clip on its own with its picture and sound, small and quick (Ctrl+Shift+P). Instant once the preview has been built; until then this clip alone is drawn first." />
-                </Grid>
-                <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.AuditionCommand.IsRunning, Mode=OneWay}" />
-                <!-- While a clip is auditioned, its voice as light, and its words lighting up as they are spoken -->
-                <local:NarrationScope x:Name="Scope" />
+                <Button x:Name="WatchClipButton" MinHeight="44" Content="Play clip" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.WatchClipCommand}"
+                        ToolTipService.ToolTip="Play this clip on its own, with its picture and sound, small and quick (Ctrl+P). Words just typed are applied first, and a line not yet recorded is recorded at the usual voice cost. Instant once the preview has been built." />
+                <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.WatchClipCommand.IsRunning, Mode=OneWay}" />
 
                 <!-- The passages this script was written from, beside the script they informed -->
                 <Expander x:Name="RepositoryInspector" ToolTipService.ToolTip="The passages from official Unitree, Isaac Lab and MuJoCo repositories that this script was written from." Header="{x:Bind ViewModel.SnippetsHeading, Mode=OneWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <ItemsControl ItemsSource="{x:Bind ViewModel.Snippets}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:GroundingSnippet">
+                            <DataTemplate x:DataType="script:GroundingSnippet">
                                 <StackPanel Spacing="4" Margin="0,0,0,12">
                                     <HyperlinkButton Padding="0" NavigateUri="{x:Bind Url}" ToolTipService.ToolTip="Open this passage where it is published, in your web browser, to read it in full or check a figure.">
                                         <TextBlock TextWrapping="Wrap">

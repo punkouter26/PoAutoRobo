@@ -29,7 +29,7 @@
                         <Flyout Placement="LeftEdgeAlignedTop">
                             <StackPanel Width="300" Spacing="10">
                                 <TextBlock Text="Captions" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                                <ComboBox x:Name="CaptionPresetBox" HorizontalAlignment="Stretch" AutomationProperties.Name="Caption style" ToolTipService.ToolTip="How the burned-in captions look: a word lit as it is spoken, a two-line block, plain subtitles or a comic banner. The preview shows each one as you pick it."
+                                <ComboBox x:Name="CaptionPresetBox" HorizontalAlignment="Stretch" AutomationProperties.Name="Caption style" ToolTipService.ToolTip="How the burned-in captions look: a word lit as it is spoken, a two-line block, plain subtitles or a comic banner. The preview shows each one as you pick it, and new episodes start with the one picked last."
                                           ItemsSource="{x:Bind ViewModel.CaptionChoices}" SelectedIndex="{x:Bind ViewModel.CaptionPresetIndex, Mode=TwoWay}" />
                                 <Slider Header="Font size" Visibility="{x:Bind app:Ui.ShowEither(ViewModel.Advanced, ViewModel.CaptionsTuned), Mode=OneWay}" Minimum="32" Maximum="96" StepFrequency="2" Value="{x:Bind ViewModel.CaptionFontSize, Mode=TwoWay}"
                                         ToolTipService.ToolTip="How big the caption words are. Drag it and watch the preview; bigger is easier to read on a phone." />

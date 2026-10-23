@@ -8,7 +8,7 @@ public enum IntroLayout { Side, Centre, Lower }
 
 /// <summary>
 /// What every episode of the series shares: the channel's name, its logo, sounds and mascot for the intro and outro,
-/// and the look new episodes start in. Set up once and kept beside the app's settings, never in an episode.
+/// and the look and shape new episodes start in. Set up once and kept beside the app's settings, never in an episode.
 /// </summary>
 /// <remarks>
 /// The files are the kit's own copies, named by what they are for ("logo.png"), so moving or deleting the file the
@@ -35,6 +35,9 @@ public sealed record SeriesKit
     public string? Mascot { get; init; }
 
     public Look Look { get; init; }
+
+    /// <summary>The shape every episode follows, so each lesson is told the same way.</summary>
+    public BeatStructure Structure { get; init; }
 
     public CaptionStyle Captions { get; init; } = new();
 
@@ -67,6 +70,7 @@ public sealed record SeriesKit
             Captions = kit.Captions is { } style && AssCaptions.IsHexColour(style.AccentColor) ? style : new CaptionStyle(),
             OutroSeconds = Math.Clamp(kit.OutroSeconds, MinOutroSeconds, MaxOutroSeconds),
             Layout = Enum.IsDefined(kit.Layout) ? kit.Layout : IntroLayout.Side,
+            Structure = Enum.IsDefined(kit.Structure) ? kit.Structure : BeatStructure.Story,
         };
 
         static string? Bare(string? name) => name is not null && name.Length > 0 && Path.GetFileName(name) == name ? name : null;

@@ -6,7 +6,8 @@ using CommunityToolkit.Mvvm.Input;
 namespace PoAutoRobo.App.ViewModels;
 
 /// <summary>
-/// The app's one view model. This file holds what it is connected to and the lesson page; the other parts are
+/// The app's one view model. This file holds what it is connected to, what it remembers between runs and the open
+/// episode with the line about it under the title; the other parts are
 /// beside it: Steps, Library, Footage, Edits, Pictures, Series, Export, Teasers and Activity.
 /// </summary>
 public partial class MainViewModel : ObservableObject
@@ -27,15 +28,11 @@ public partial class MainViewModel : ObservableObject
     {
         FfmpegAvailable = ffmpegAvailable;
         var prefs = Prefs.Load();
-        Effects = prefs.Effects;
         Advanced = prefs.Advanced;
         // The video size is an advanced choice: hidden, it stays at the standard one, so nothing out of sight changes what is made.
         ExportPresetIndex = Advanced ? Math.Clamp(prefs.ExportPresetIndex, 0, ExportChoices.Length - 1) : 0;
-        SoundsOn = prefs.SoundsOn;
-        SoundVolume = Math.Clamp(prefs.SoundVolume, 0, 1);
         DraftPictures = prefs.DraftPictures;
         MonthlyBudget = Math.Max(0, prefs.MonthlyBudget);
-        StructureIndex = Math.Clamp(prefs.StructureIndex, 0, StructureChoices.Length - 1);
         _reopen = prefs;
         _step = FirstStep;
         Clips.CollectionChanged += OnClipsChanged;
@@ -45,7 +42,7 @@ public partial class MainViewModel : ObservableObject
             one.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName != nameof(IAsyncRelayCommand.IsRunning)) return;
-                foreach (var command in new IRelayCommand[] { GenerateAllCommand, GeneratePictureCommand, AnotherTakeCommand, MakeAllCommand, MakeDraftCommand })
+                foreach (var command in new IRelayCommand[] { GenerateAllCommand, GeneratePictureCommand, AnotherTakeCommand, MakeDraftCommand })
                     command.NotifyCanExecuteChanged();
             };
         _ready = true;
@@ -57,7 +54,7 @@ public partial class MainViewModel : ObservableObject
     /// <summary>True once the app knows whether it is running on the live services or on stand-ins.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Notice), nameof(NoticeDetail), nameof(PicturesAvailable), nameof(HostCandidatesCost), nameof(LogoCandidatesCost))]
-    [NotifyCanExecuteChangedFor(nameof(CreateEpisodeCommand), nameof(GenerateAllCommand), nameof(GeneratePictureCommand), nameof(AnotherTakeCommand), nameof(MakeAllCommand), nameof(MakeDraftCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CreateEpisodeCommand), nameof(GenerateAllCommand), nameof(GeneratePictureCommand), nameof(AnotherTakeCommand), nameof(MakeDraftCommand))]
     public partial bool IsConnected { get; set; }
 
     /// <summary>Which services are simulated and why; null when everything is live.</summary>
@@ -88,7 +85,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             Open(ProjectStore.Load(folder), folder, ProjectStore.LoadSnippets(folder));
-            Step = last.Page < 0 ? ClipsStep : last.Page; // saved before there were five steps: the clips
+            Step = Math.Clamp(last.Page, IntroStep, PublishStep);
             // The tab is set once the clips page has been laid out: its tab control picks its first tab as it first appears.
             var tab = Math.Clamp(last.InspectorTab, 0, 1);
             if (Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread() is { } later)
@@ -136,9 +133,6 @@ public partial class MainViewModel : ObservableObject
     // What the view model asks of the window and its views. Each starts as "nothing happens" and "the answer is no",
     // so the view model is whole before any view exists and never has to ask whether one has been set.
 
-    /// <summary>Set by the view that owns the audio player: plays a clip's recorded voice, whose timed words it may show.</summary>
-    public Action<Narration> PlayAudio { get; set; } = _ => { };
-
     /// <summary>Set by the view that owns the preview player; it must let go of the file before a new preview is written.</summary>
     public Action ReleasePreview { get; set; } = () => { };
 
@@ -157,54 +151,46 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Set by the window: told the job's name and whether it finished, when a long job ends.</summary>
     public Action<string, bool> JobFinished { get; set; } = (_, _) => { };
 
-    /// <summary>Set by the window: one clip of a batch is done, which one, its place in the batch out of how many, and whether it came out.</summary>
-    public Action<Guid, int, int, bool> ClipDone { get; set; } = (_, _, _, _) => { };
-
-    /// <summary>Set by the window: the master video has just been finished.</summary>
-    public Action Premiere { get; set; } = () => { };
-
-    /// <summary>Set by the window: plays one of the app's own sounds.</summary>
-    public Action<Cue> PlayCue { get; set; } = _ => { };
-
     // ---- What the app remembers between runs ----
 
+    /// <summary>The master video's size, chosen in Settings with advanced controls on.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MasterSizeText))]
     public partial int ExportPresetIndex { get; set; }
 
-    [ObservableProperty]
-    public partial bool SoundsOn { get; set; }
-
-    /// <summary>How loud the app's sounds are, 0 to 1.</summary>
-    [ObservableProperty]
-    public partial double SoundVolume { get; set; }
+    /// <summary>What the Publish step's master video will be, its size included, so the size is never a surprise.</summary>
+    public string MasterSizeText =>
+        $"The whole episode at {ExportChoices[ExportPresetIndex].Value.Height}p, {ExportChoices[ExportPresetIndex].Value.Fps} fps, wrapped in the intro and outro, with a chapter list, subtitles, a thumbnail and an upload description beside it.";
 
     /// <summary>Pictures are drawn at low quality: quicker and cheaper while an episode is still taking shape.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HostCandidatesCost), nameof(LogoCandidatesCost))]
     public partial bool DraftPictures { get; set; }
 
-    /// <summary>The decorative light and motion: sparks, the backdrops, the darkroom strip, the voice as light. Off unless turned on.</summary>
-    [ObservableProperty]
-    public partial bool Effects { get; set; }
-
     /// <summary>
-    /// The controls most episodes never need: each clip's depth, host, picture type, takes and robot's-eye view, the host
-    /// and the picture mix, caption size and outline, other video sizes, the editor's read, and making the whole episode
-    /// in one go. Hidden unless turned on.
+    /// The controls most episodes never need: each clip's depth, host, picture type, takes and robot's-eye view, the jobs
+    /// menu, designing the host, the outro's length, caption size and outline, teasers' moments, other video sizes and
+    /// the services' model names. Hidden unless turned on.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowJobs))]
     public partial bool Advanced { get; set; }
 
     partial void OnAdvancedChanged(bool value)
     {
-        if (!value) ExportPresetIndex = 0; // as when the app starts with it hidden
+        foreach (var card in TeaserCards)
+            card.Advanced = value;
+        if (value) return;
+        // As when the app starts with them hidden: nothing out of sight may change what is made.
+        ExportPresetIndex = 0;
+        foreach (var card in TeaserCards)
+            card.Reset();
     }
 
     // Everything remembered is saved as it changes. Adding a choice to remember is one name here and one in SavePrefs.
     private static readonly HashSet<string> Remembered =
     [
-        nameof(ExportPresetIndex), nameof(SoundsOn), nameof(SoundVolume), nameof(DraftPictures),
-        nameof(Step), nameof(InspectorTab), nameof(MonthlyBudget), nameof(StructureIndex), nameof(Effects), nameof(Advanced),
+        nameof(ExportPresetIndex), nameof(DraftPictures), nameof(Step), nameof(InspectorTab), nameof(MonthlyBudget), nameof(Advanced),
     ];
 
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
@@ -216,7 +202,7 @@ public partial class MainViewModel : ObservableObject
 
     private void SavePrefs()
     {
-        if (_ready) new Prefs(ExportPresetIndex, SoundsOn, SoundVolume, DraftPictures, EpisodeFolder, Step, InspectorTab, MonthlyBudget, StructureIndex, Effects, Advanced).Save();
+        if (_ready) new Prefs(ExportPresetIndex, DraftPictures, EpisodeFolder, Step, InspectorTab, MonthlyBudget, Advanced).Save();
     }
 
     // ---- Episode ----
@@ -239,12 +225,8 @@ public partial class MainViewModel : ObservableObject
         new("Story", BeatStructure.Story), new("Tutorial", BeatStructure.Tutorial), new("Hook first", BeatStructure.HookFirst),
     ];
 
-    /// <summary>The shape of the next episode, as an index into <see cref="StructureChoices"/>.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StructureBeats))]
-    public partial int StructureIndex { get; set; }
-
-    private BeatStructure NextStructure => StructureChoices[Math.Clamp(StructureIndex, 0, StructureChoices.Length - 1)].Value;
+    /// <summary>The shape of the next episode: the series' own, set on the Intro step.</summary>
+    private BeatStructure NextStructure => _kit.Structure;
 
     /// <summary>The beats of the chosen structure in order, marking those where footage belongs.</summary>
     public string StructureBeats => string.Join(" → ", BeatPlan.Beats(NextStructure).Select(b => b.ForFootage ? $"{b.Name} 🎥" : b.Name));
@@ -256,9 +238,9 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EpisodeTitle), nameof(HasEpisode), nameof(Runtime), nameof(Captions),
-        nameof(CaptionPresetIndex), nameof(CaptionFontSize), nameof(CaptionStroke), nameof(CaptionsTuned), nameof(CaptionAccent), nameof(HasMusic), nameof(MusicLabel))]
+        nameof(CaptionPresetIndex), nameof(CaptionFontSize), nameof(CaptionStroke), nameof(CaptionsTuned), nameof(CaptionAccent), nameof(HasMusic), nameof(MusicLabel), nameof(EpisodeOffSeriesLook))]
     [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(SuggestTeasersCommand), nameof(RenderTeasersCommand), nameof(UseSeriesLookCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(NarrateAllCommand),
-        nameof(CleanMediaCommand), nameof(RenameEpisodeCommand), nameof(MakeAllCommand), nameof(MakeDraftCommand), nameof(ReviewScriptCommand), nameof(RemoveMusicCommand),
+        nameof(CleanMediaCommand), nameof(RenameEpisodeCommand), nameof(MakeDraftCommand), nameof(RemoveMusicCommand),
         nameof(WatchClipCommand), nameof(WatchTeaserCommand))]
     public partial Episode? Episode { get; set; }
 
@@ -268,49 +250,6 @@ public partial class MainViewModel : ObservableObject
     /// <summary>The outcome of the last action, shown on every step.</summary>
     [ObservableProperty]
     public partial string? StatusMessage { get; set; }
-
-    // ---- What has been said, kept to read back ----
-
-    private const int MessagesKept = 20;
-
-    /// <summary>The last things the app said, newest first, each with the time. The message bar shows only the latest.</summary>
-    public ObservableCollection<string> Messages { get; } = [];
-
-    partial void OnErrorMessageChanged(string? value) => Remember(value);
-
-    partial void OnStatusMessageChanged(string? value) => Remember(value);
-
-    private readonly Microsoft.UI.Dispatching.DispatcherQueue? _ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-    private string? _lastNote;
-
-    /// <summary>
-    /// Something out of the ordinary in how a script or a picture came to be made: a clip left for the user to
-    /// write, a picture made another way. Shown while the job runs and kept in the messages. Safe to call from any thread.
-    /// </summary>
-    public void Note(string message)
-    {
-        if (_ui is null || _ui.HasThreadAccess) Say();
-        else _ui.TryEnqueue(Say);
-
-        void Say()
-        {
-            Remember(message);
-            _lastNote = message;
-            if (IsWorking) ActivityDetail = message;
-        }
-    }
-
-    private void Remember(string? message)
-    {
-        if (string.IsNullOrEmpty(message)) return;
-        Messages.Insert(0, $"{DateTime.Now:HH:mm} · {message}");
-        while (Messages.Count > MessagesKept)
-            Messages.RemoveAt(Messages.Count - 1);
-        OnPropertyChanged(nameof(Notice));
-    }
-
-    /// <summary>The user closed the message bar. Clearing both means the same message, said again, shows again.</summary>
-    public void DismissMessages() => (ErrorMessage, StatusMessage) = (null, null);
 
     public bool HasEpisode => Episode is not null;
 
@@ -371,194 +310,5 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>True while a script is being written; the deck shows placeholder cards meanwhile.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowIntro), nameof(ShowTopic), nameof(ShowDeck))]
-    public partial bool IsCreating { get; set; }
-
-    /// <summary>One placeholder per clip the script being written may have: a clip's title once it is written, empty until then.</summary>
-    [ObservableProperty]
-    public partial IReadOnlyList<string> Skeletons { get; set; } = [];
-
-    // Not while a long job runs: it works on the current episode and must not have it swapped from under it.
-    private bool CanCreateEpisode => !string.IsNullOrWhiteSpace(TopicInput) && !IsWorking && IsConnected;
-
-    [RelayCommand(CanExecute = nameof(CanCreateEpisode))]
-    private Task CreateEpisodeAsync() => RunActivityAsync("Writing the script", async ct =>
-    {
-        var number = Math.Max(1, (int)Math.Round(double.IsNaN(EpisodeNumber) ? 1 : EpisodeNumber));
-        // The series so far, so the script can build on it; read off the window's thread, as it opens every episode.
-        var lesson = new Lesson(TopicInput, WentWrongInput, NextStructure, [.. Footage.Select(f => f.ToNote())])
-        {
-            Earlier = await Task.Run(() => ProjectStore.SeriesBefore(AppPaths.Episodes, number), ct),
-        };
-        var topic = lesson.Topic;
-        var length = EpisodeLength.Standard;
-        Skeletons = [.. Enumerable.Repeat("", length.MaxClips)];
-        _lastNote = null;
-        IsCreating = true;
-        try
-        {
-            // The films first: what happens in each, and what is said in those that keep their own sound, is what
-            // the script is written to. Each is kept by the film, so writing the episode again asks for neither.
-            if (lesson.Footage.Count > 0)
-            {
-                ReportActivity("Watching your films", 0.01);
-                lesson = lesson with { Footage = [.. await Task.WhenAll(lesson.Footage.Select(note => UnderstandAsync(note, ct)))] };
-            }
-            // Every episode is about the R1, so every script is grounded in its official repositories.
-            IReadOnlyList<GroundingSnippet> grounding = [];
-            if (_grounding is not null)
-            {
-                ReportActivity("Reading the official repositories", 0.02);
-                grounding = await _grounding.FindAsync(topic, ct);
-            }
-            ReportActivity("Writing the script", 0.1);
-            var of = length.MinClips == length.MaxClips ? $"{length.MaxClips}" : $"up to {length.MaxClips}";
-            // Each finished clip's title lands on its placeholder card while the rest are still being written.
-            var written = new Progress<IReadOnlyList<string>>(titles =>
-            {
-                if (!IsCreating) return;
-                ReportActivity($"Written {titles.Count} of {of} clips", 0.1 + 0.9 * Math.Min(1.0, (double)titles.Count / length.MaxClips));
-                Skeletons = [.. titles.Take(length.MaxClips), .. Enumerable.Repeat("", Math.Max(0, length.MaxClips - titles.Count))];
-            });
-            // The script chooses each clip's picture type; whatever cannot be made on this computer becomes a still.
-            Func<VisualKind, bool> canMake = CurrentVisuals is { } visuals ? visuals.CanMake : _ => false;
-            var episode = VisualMix.Settle(await _scriptWriter.WriteEpisodeAsync(lesson, grounding, length, ct, written), canMake) with { Number = number };
-            var folder = ProjectStore.NewFolder(AppPaths.Episodes, episode.Title, number); // never on top of an earlier episode
-            episode = await BringInFootageAsync(episode, lesson.Footage, folder, ct);
-            // Every episode starts in the series look, with its own copy of the series music.
-            var kit = SeriesKit.Load(AppPaths.Series);
-            var music = SeriesKit.PathOf(AppPaths.Series, kit.Music) is { } track ? await ImportAsync(track, folder, "music-" + Path.GetFileName(track), ct) : null;
-            episode = EpisodeEditor.UseSeriesLook(episode, kit, music);
-            ProjectStore.Save(episode, folder);
-            Footage.Clear(); // in the episode now; the next lesson starts with none
-            ProjectStore.SaveSnippets(grounding, folder);
-            lock (_usedBeforeFolder)
-            {
-                foreach (var (what, units, dollars) in _usedBeforeFolder)
-                    SpendLog.Add(folder, what, dollars, units);
-                _usedBeforeFolder.Clear();
-            }
-            Open(episode, folder, grounding);
-            // What was said along the way (a clip left for the user to write) is what to read first, on the page it concerns.
-            if (_lastNote is { } note) StatusMessage = note;
-            _ = ReviewAsync(quiet: true); // read by an editor while the user looks the clips over; nothing waits for it
-        }
-        finally
-        {
-            IsCreating = false;
-        }
-    });
-
-    /// <summary>Makes an episode the one being worked on, and lands on its clips.</summary>
-    private void Open(Episode episode, string folder, IReadOnlyList<GroundingSnippet> snippets)
-    {
-        Flush(); // a caption change to the episode being left may still be waiting to be saved
-        _syncingClips = true;
-        ReleasePreview();
-        Preview = null;
-        LastExport = null;
-        ShowTeasers(episode, []); // those were cut from the episode being left
-        ForgetHistory();
-        _notes.Clear();
-        EpisodeFolder = folder;
-        Snippets.Clear();
-        foreach (var snippet in snippets)
-            Snippets.Add(snippet);
-        OnPropertyChanged(nameof(SnippetsHeading));
-        Episode = episode;
-        Clips.Clear();
-        foreach (var clip in episode.Clips)
-            Clips.Add(NewCard(clip));
-        _syncingClips = false;
-        SyncCards();
-        SelectedClip = Clips.FirstOrDefault();
-        Step = ClipsStep;
-        SavePrefs(); // this is now the episode to come back to
-        _ = Guard(ShowFootageAsync);
-    }
-
-    // ---- The editor's notes ----
-
-    private readonly Dictionary<Guid, string> _notes = []; // ponytail: not saved with the episode; ask again after reopening
-
-    /// <summary>Has the whole script read as an editor would, and marks the clips worth changing.</summary>
-    [RelayCommand(CanExecute = nameof(HasEpisode))]
-    private Task ReviewScriptAsync() => ReviewAsync(quiet: false);
-
-    /// <param name="quiet">Asked for by the app and not the user: nothing is said when it finds nothing or cannot be done.</param>
-    private async Task ReviewAsync(bool quiet)
-    {
-        if (Episode is not { } episode || EpisodeFolder is not { } folder) return;
-        try
-        {
-            var notes = await _scriptWriter.ReviewAsync(episode, CancellationToken.None);
-            if (EpisodeFolder != folder) return; // another episode was opened meanwhile
-            _notes.Clear();
-            foreach (var note in notes)
-                _notes[episode.Clips[note.Clip - 1].Id] = note.Note;
-            SyncCards();
-            if (notes.Count > 0)
-                StatusMessage = $"An editor's read of the script has a note on {(notes.Count == 1 ? "1 clip" : $"{notes.Count} clips")}. Point at a card's warning mark to read it.";
-            else if (!quiet)
-                StatusMessage = "An editor's read of the script found nothing to change.";
-        }
-        catch (Exception e) when (quiet && e is not OperationCanceledException)
-        {
-            // A help nobody asked for: when it cannot be had, the episode is no worse off.
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            ErrorMessage = Plain(e);
-        }
-    }
-
-    /// <summary>Footage added before cards showed a frame of it has none saved; take one now so those cards are not blank.</summary>
-    private async Task ShowFootageAsync()
-    {
-        if (!FfmpegAvailable) return;
-        foreach (var card in Clips.Where(c => c.HasUserVideo && c.ThumbnailPath.Length == 0).ToList())
-        {
-            if (card.Clip.Visual.UserVideoPath is not { } video || !File.Exists(video)) continue;
-            await _builder.PosterAsync(video, CancellationToken.None);
-            card.PictureChanged();
-        }
-    }
-
     private ClipViewModel NewCard(Clip clip) => new(clip, Edit, PickTier, Watch);
-
-    [RelayCommand(CanExecute = nameof(HasEpisode))]
-    private async Task RenameEpisodeAsync()
-    {
-        if (Episode is { } episode && await Ask("Rename episode", episode.Title) is { } title)
-            Edit(e => EpisodeEditor.Rename(e, title));
-    }
-
-    // ---- Housekeeping ----
-
-    /// <summary>Opens File Explorer on a folder, or on the folder holding a file with that file picked out.</summary>
-    public static void ShowInExplorer(string path) =>
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", Directory.Exists(path) ? $"\"{path}\"" : $"/select,\"{path}\""))?.Dispose();
-
-    /// <summary>Removes recordings of earlier wording and replaced pictures from the episode folder, after asking.</summary>
-    [RelayCommand(CanExecute = nameof(CanStartJob))]
-    private Task CleanMediaAsync() => Guard(async () =>
-    {
-        var unused = _builder.UnusedMedia(Episode!, EpisodeFolder!);
-        if (unused.Count == 0)
-        {
-            StatusMessage = "Nothing to remove: every saved file is in use.";
-            return;
-        }
-        var megabytes = unused.Sum(file => new FileInfo(file).Length) / 1048576.0;
-        var message = $"{unused.Count} files ({megabytes:0.0} MB) are no longer used by any clip: recordings of earlier wording and replaced pictures. " +
-            "They are deleted for good, and a removed picture would be charged again if you went back to it. Undo history is cleared.";
-        if (!await Confirm("Remove unused media?", message, "Remove") || IsWorking)
-            return;
-        ForgetHistory(); // an undone edit could point at a file that is about to go
-        foreach (var file in unused)
-            File.Delete(file);
-        StatusMessage = $"Removed {unused.Count} unused files ({megabytes:0.0} MB).";
-    });
 }

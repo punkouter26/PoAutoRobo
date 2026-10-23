@@ -78,3 +78,26 @@ public static class BeatPlan
     private static string Title(FootageNote note) =>
         note.Note.Trim() is { Length: > 0 } words ? words.Length > 40 ? words[..40].TrimEnd() + "…" : words : "Your footage";
 }
+
+/// <summary>
+/// How many clips an episode should have, besides any the owner's footage needs. Standard aims at the series' three
+/// to five minutes.
+/// </summary>
+public sealed record EpisodeLength
+{
+    public static readonly EpisodeLength Standard = new(6, 10);
+
+    public EpisodeLength(int minClips, int maxClips)
+    {
+        if (minClips < 1 || maxClips > 20 || minClips > maxClips)
+            throw new ArgumentOutOfRangeException(nameof(minClips), "An episode has between 1 and 20 clips.");
+        (MinClips, MaxClips) = (minClips, maxClips);
+    }
+
+    public int MinClips { get; }
+
+    public int MaxClips { get; }
+
+    /// <summary>The count in words, for prompts: "exactly 1 clip", "between 15 and 20 clips".</summary>
+    public string InWords => MinClips == MaxClips ? $"exactly {MinClips} {(MinClips == 1 ? "clip" : "clips")}" : $"between {MinClips} and {MaxClips} clips";
+}

@@ -50,12 +50,6 @@ public static class Ui
     /// <summary>Windows' own switch for showing animation, read once. Every movement in the app follows it.</summary>
     public static bool Animated { get; } = new Windows.UI.ViewManagement.UISettings().AnimationsEnabled;
 
-    /// <summary>The Effects switch in Settings, kept here by the window so every drawing can ask it.</summary>
-    public static bool EffectsWanted { get; set; }
-
-    /// <summary>The decorative light is drawn: wanted in Settings, and Windows shows animation.</summary>
-    public static bool Effects => Animated && EffectsWanted;
-
     /// <summary>Something that has just appeared grows the last little way to its size and settles with a slight bounce.</summary>
     public static void PopIn(UIElement element)
     {

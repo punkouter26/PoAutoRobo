@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace PoAutoRobo.App;
 
-// The questions the view model asks the user, and the two dialogs opened from the header.
+// The questions the view model asks the user, and Settings, opened from the header.
 public sealed partial class MainWindow
 {
     private async Task<bool> ConfirmAsync(string title, string message, string action)
@@ -48,8 +48,6 @@ public sealed partial class MainWindow
         dialog.Opened += (opened, _) => Ui.PopIn(opened.Content as UIElement ?? opened);
         return await dialog.ShowAsync() == ContentDialogResult.Primary && box.Text.Trim() is { Length: > 0 } text ? text : null;
     }
-
-    private async void OnSeries(object sender, RoutedEventArgs e) => await ShowAsync(new Views.SeriesDialog(ViewModel));
 
     private async void OnSettings(object sender, RoutedEventArgs e) => await ShowAsync(new Views.SettingsDialog(ViewModel));
 

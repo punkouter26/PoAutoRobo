@@ -15,8 +15,8 @@ using WinUIEx;
 namespace PoAutoRobo.App;
 
 /// <summary>
-/// The one window. This file holds what it shows and how it answers the view model; beside it are its moments of
-/// light and sound (.Moments), the questions it asks (.Dialogs) and its progress on the taskbar (.Taskbar).
+/// The one window. This file holds what it shows and how it answers the view model; beside it are the questions it
+/// asks (.Dialogs) and its progress on the taskbar (.Taskbar).
 /// </summary>
 public sealed partial class MainWindow : WindowEx
 {
@@ -32,26 +32,15 @@ public sealed partial class MainWindow : WindowEx
     public MainWindow(MainViewModel viewModel)
     {
         ViewModel = viewModel;
-        Ui.EffectsWanted = viewModel.Effects; // before anything is drawn
         InitializeComponent();
         ViewModel.Confirm = ConfirmAsync;
         ViewModel.ConfirmSpend = ConfirmSpendAsync;
         ViewModel.Ask = AskAsync;
         ViewModel.JobFinished = OnJobFinished;
-        ViewModel.ClipDone = OnClipDone;
-        ViewModel.Premiere = OnPremiere;
-        ViewModel.PlayCue = cue => Sounds.Play(cue);
-        Darkroom.ViewModel = ViewModel;
         ViewModel.PlayVideo = PlayVideo;
         ViewModel.PropertyChanged += OnViewModelChanged;
         _roll.Tick += (_, _) => Roll();
-        Activated += (_, e) =>
-        {
-            _inFront = e.WindowActivationState != WindowActivationState.Deactivated;
-            Lesson.SetInFront(_inFront);
-            DeckBackdrop.SetInFront(_inFront);
-        };
-        DeckBackdrop.Wanted = ViewModel.ShowDeck;
+        Activated += (_, e) => _inFront = e.WindowActivationState != WindowActivationState.Deactivated;
         // An outcome goes by itself once there has been time to read it; an error stays until it is closed.
         _messageTimer.Tick += (_, _) =>
         {
@@ -69,7 +58,6 @@ public sealed partial class MainWindow : WindowEx
             ViewModel.Flush();
             if (_toastsReady) AppNotificationManager.Default.Unregister();
         };
-        ApplySounds();
     }
 
     public MainViewModel ViewModel { get; }
@@ -78,29 +66,12 @@ public sealed partial class MainWindow : WindowEx
     {
         switch (e.PropertyName)
         {
-            case nameof(MainViewModel.SoundsOn) or nameof(MainViewModel.SoundVolume):
-                ApplySounds();
-                break;
-            case nameof(MainViewModel.Effects):
-                Ui.EffectsWanted = ViewModel.Effects;
-                DeckBackdrop.Wanted = ViewModel.ShowDeck; // looks afresh at the switch; the lesson page's backdrop does the same
-                break;
             case nameof(MainViewModel.IsCreating):
                 Ui.Shimmer(ViewModel.IsCreating); // light crosses the placeholder cards while the script is written
                 _skeletons = [];
-                if (ViewModel.IsCreating)
-                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => Fx.Drift(Area(Skeleton) is { Width: > 0 } deck ? deck : new Windows.Foundation.Rect(0, 0, Root.ActualWidth, Root.ActualHeight), Accent));
-                else
-                    Fx.StopDrifting();
                 break;
             case nameof(MainViewModel.Skeletons):
                 DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Landed); // once the placeholders have been laid out
-                break;
-            case nameof(MainViewModel.ShowDeck):
-                DeckBackdrop.Wanted = ViewModel.ShowDeck;
-                break;
-            case nameof(MainViewModel.DrawingClips):
-                Darkroom.Run(ViewModel.DrawingClips);
                 break;
             case nameof(MainViewModel.IsWorking) when ViewModel.IsWorking:
                 _shownPercent = 0;
@@ -119,15 +90,6 @@ public sealed partial class MainWindow : WindowEx
         }
     }
 
-    // The controls' own built-in sounds, placed left to right by where the control is on screen, and the app's own.
-    private void ApplySounds()
-    {
-        ElementSoundPlayer.State = ViewModel.SoundsOn ? ElementSoundPlayerState.On : ElementSoundPlayerState.Off;
-        ElementSoundPlayer.SpatialAudioMode = ElementSpatialAudioMode.On;
-        ElementSoundPlayer.Volume = ViewModel.SoundVolume;
-        (Sounds.On, Sounds.Volume) = (ViewModel.SoundsOn, ViewModel.SoundVolume);
-    }
-
     // The figures the app shows that change in steps (how far a job has got, the running time, what has been
     // spent) count up to their new value over a few frames instead of jumping.
     private void Roll()
@@ -144,11 +106,10 @@ public sealed partial class MainWindow : WindowEx
             Math.Abs(target - shown) < near ? target : shown + (target - shown) * 0.25;
     }
 
-    /// <summary>A long job has ended: clear the taskbar bar, chime, and say so with a notification when the window is not in front.</summary>
+    /// <summary>A long job has ended: clear the taskbar bar, and say so with a notification when the window is not in front.</summary>
     private void OnJobFinished(string job, bool finished)
     {
         ShowTaskbarProgress(null);
-        Sounds.Play(finished ? Cue.Finished : ViewModel.ErrorMessage is null ? Cue.Stopped : Cue.Error); // silent when sounds are off
         if (_inFront) return;
         try
         {
@@ -183,8 +144,7 @@ public sealed partial class MainWindow : WindowEx
             VirtualKey.Enter when ViewModel.ShowTopic => ViewModel.CreateEpisodeCommand,
             VirtualKey.G when ViewModel.Step == MainViewModel.ClipsStep => ViewModel.GeneratePictureCommand,
             VirtualKey.D when ViewModel.Step == MainViewModel.ClipsStep => ViewModel.DuplicateClipCommand,
-            VirtualKey.P when ViewModel.Step == MainViewModel.ClipsStep && sender.Modifiers.HasFlag(VirtualKeyModifiers.Shift) => ViewModel.WatchClipCommand,
-            VirtualKey.P when ViewModel.Step == MainViewModel.ClipsStep => ViewModel.AuditionCommand,
+            VirtualKey.P when ViewModel.Step == MainViewModel.ClipsStep => ViewModel.WatchClipCommand,
             _ => null,
         };
         if (command?.CanExecute(null) != true) return;
@@ -221,14 +181,27 @@ public sealed partial class MainWindow : WindowEx
         MessageBar.IsOpen = !string.IsNullOrEmpty(error ?? status);
         _messageTimer.Stop();
         if (error is null && MessageBar.IsOpen) _messageTimer.Start();
-        // A job that fails says so with its own sound as it ends; anything else that goes wrong is heard here.
-        if (error is not null && !ViewModel.IsWorking) Sounds.Play(Cue.Error);
     }
 
     // Closed with its own button, the bar forgets what it said, so the same message said again shows again.
     private void OnMessageClosed(InfoBar sender, InfoBarClosedEventArgs args)
     {
         if (args.Reason == InfoBarCloseReason.CloseButton) ViewModel.DismissMessages();
+    }
+
+    // ---- While a script is written, each placeholder pops as its clip's title arrives ----
+
+    private IReadOnlyList<string> _skeletons = []; // the placeholders' titles as last seen, to tell which have just arrived
+
+    private void Landed()
+    {
+        var now = ViewModel.Skeletons;
+        for (var i = 0; i < now.Count && Ui.Animated; i++)
+        {
+            if (now[i].Length > 0 && (i >= _skeletons.Count || _skeletons[i].Length == 0) && Skeleton.ContainerFromIndex(i) is FrameworkElement { ActualWidth: > 0 } box)
+                Ui.PopIn(box);
+        }
+        _skeletons = now;
     }
 
     // ---- The deck: cards glide to a new place, and a selected card's picture grows into the inspector ----

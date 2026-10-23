@@ -39,7 +39,7 @@ Warnings are errors, analyzer and style rules included, and so is a package with
   - `Render`: FFmpeg command lines, captions, the intro and outro, teasers, the builder that turns an episode into a video,
     the intro's swarm of light (`Swarm`), the video's made-up sounds (`Synth`) and the series' made-up logo and
     mascot (`Emblem`), so every brand-kit choice left unset still has a default.
-- `src/PoAutoRobo.App`: the window (`MainWindow`, with `.Moments`, `.Dialogs` and `.Taskbar` beside it). One view
+- `src/PoAutoRobo.App`: the window (`MainWindow`, with `.Dialogs` and `.Taskbar` beside it). One view
   model, `MainViewModel`, in partial files by concern (`.Steps`, `.Library`, `.Footage`, `.Edits`, `.Pictures`,
   `.Export`, `.Series`, `.Teasers`, `.Activity`); views in `Views/`. Five steps, Intro, Lesson, Clips, Preview and
   Publish, each with a checklist under the header (`MainViewModel.Guide`); name a step by its constant
@@ -73,18 +73,17 @@ Warnings are errors, analyzer and style rules included, and so is a package with
   and each picture runs exactly its slot on the timeline. Every slot has a sound file: narration, a film's own sound
   (`FfmpegArgs.FootageSound`), the sting, or silence.
 
-- **Anything drawn over other content uses a plain `CanvasControl` on a `FrameClock`**, never Win2D's
-  `CanvasAnimatedControl`: that one hides whatever lies beneath it, so it is only for the backdrop (`NebulaBackdrop`).
-- **Light is drawn with Win2D's own effects and plain drawing**, never a custom shader: no shader package, no unsafe
-  code. A chain of effects that hands on values below 0 or above 1 needs `BufferPrecision` set to a float on every
-  step, or Direct2D's 8-bit working buffers clip them.
-- **Effects are off unless asked for.** Decorative light and motion is drawn only when `Ui.Effects` is true: *Effects*
-  on in Settings and Windows showing animation. Ordinary movement (a card gliding, a panel sliding up) asks `Ui.Animated`.
+- **Win2D draws only what has to be drawn**, the clips' strips and the timeline, with plain `CanvasControl`s and its
+  own drawing: no shader package, no unsafe code, and no decorative light or sounds of the app's own. Movement (a card
+  gliding, a panel sliding up) asks `Ui.Animated`, Windows' own switch for showing animation.
 - **The simplest app is the default.** A control most episodes never need binds its visibility to
   `MainViewModel.Advanced` (*Advanced controls* in Settings, off by default); a hidden choice must not change what is
-  made, so its value goes back to the standard one when advanced controls are turned off.
+  made, so its value goes back to the standard one when advanced controls are turned off. Where that would undo the
+  user's own setting (a caption size, the outro's length, a model's name), its control stays in view while it is set
+  away from the standard instead (`Ui.ShowEither`).
 - **Choices remembered between runs live in Settings** (`Views/SettingsDialog`, saved in `Prefs`), not in a flyout of
-  their own.
+  their own. What every episode of the series shares (its look, its shape, its intro and outro) is the brand kit's,
+  set on the Intro step.
 
 ## Conventions
 
@@ -98,7 +97,7 @@ Warnings are errors, analyzer and style rules included, and so is a package with
 - A deliberate shortcut is marked `// ponytail:` with its ceiling and how to lift it.
 - Prompt text and FFmpeg arguments are snapshot-tested with Verify. A changed `.received.` file is the new truth
   only once you have read the difference; then replace the `.verified.` file with it.
-- Unit tests are capped at 100. One test may cover several cases of one behaviour; tests that run FFmpeg or Edge are
+- Unit tests are capped at 100 and integration tests at 50. One test may cover several cases of one behaviour; tests that run FFmpeg or Edge are
   tagged `Integration`, tests that call real services `Live` (they pass by doing nothing without a sign-in).
 
 ## Configuration

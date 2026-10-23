@@ -5,9 +5,7 @@
     xmlns:local="using:PoAutoRobo.App.Views"
     xmlns:app="using:PoAutoRobo.App"
     xmlns:vm="using:PoAutoRobo.App.ViewModels"
-    xmlns:controls="using:CommunityToolkit.WinUI.Controls"
-    xmlns:library="using:PoAutoRobo.Core.Library"
-    Loaded="OnLoaded">
+    xmlns:library="using:PoAutoRobo.Core.Library">
     <!-- Left: start something new. Right: carry on with something saved. -->
     <Grid>
         <!-- In a small window the form gives some of its width to the saved episodes. -->
@@ -52,18 +50,6 @@
                              ToolTipService.ToolTip="What went wrong along the way, in a sentence or two. It goes to the script writer with what you taught, so the episode can tell that part of the story. Leave it empty if nothing did."
                              Text="{x:Bind ViewModel.WentWrongInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" MaxHeight="140" MaxLength="2000" ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Told as" />
-                        <controls:Segmented x:Name="StructureSelector" SelectedIndex="{x:Bind ViewModel.StructureIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="Structure"
-                                            ToolTipService.ToolTip="The shape every episode of the series follows. Story: goal, try, fail, fix, result, recap. Tutorial: concept, setup, demo, recap. Hook first: the best moment, then how it works.">
-                            <controls:SegmentedItem Content="Story" />
-                            <controls:SegmentedItem Content="Tutorial" />
-                            <controls:SegmentedItem Content="Hook first" />
-                        </controls:Segmented>
-                        <TextBlock x:Name="BeatsText" Text="{x:Bind ViewModel.StructureBeats, Mode=OneWay}" Style="{StaticResource QuietText}" TextWrapping="Wrap"
-                                   ToolTipService.ToolTip="The beats in order. Your footage goes in the ones marked with a camera." />
-                    </StackPanel>
-
                     <Grid>
                         <TextBlock Text="My footage" VerticalAlignment="Center" />
                         <Button x:Name="AddFootageButton" HorizontalAlignment="Right" Click="OnAddFootage" AllowDrop="True" DragOver="OnFootageDragOver" Drop="OnFootageDrop"
@@ -115,9 +101,6 @@
             <Button x:Name="CreateEpisodeButton" Grid.Row="1" MinHeight="44" ToolTipService.ToolTip="Write the script for this lesson (Ctrl+Enter). Progress is shown at the top, with a Cancel button." Content="Write the script" Style="{x:Bind app:Ui.Primary(ViewModel.WriteIsNext), Mode=OneWay}"
                     HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.CreateEpisodeCommand}" />
         </Grid>
-
-        <!-- A slow cloud of light in the accent colour, worked out on the graphics card behind the saved episodes -->
-        <local:NebulaBackdrop x:Name="Backdrop" Grid.Column="1" FadeLeft="True" />
 
         <!-- The saved episodes -->
         <Grid Grid.Column="1" Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource Gap}">

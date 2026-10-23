@@ -30,7 +30,7 @@ public partial class MainViewModel
     [
         "The intro every episode opens with: the channel's name, logo, mascot and sting. Set it up once; every episode then starts the same way.",
         "Say what you taught the R1 this time, add your films of it, and write the script; or open an episode you saved earlier.",
-        "Shape the clips: drag them into order, edit and audition each one's words, then give each its voice and its picture.",
+        "Shape the clips: drag them into order, edit and play each one, then give each its voice and its picture.",
         "Watch the whole episode as it will play, with its captions and music, and change what needs changing.",
         "Render the master video and everything to upload with it, and the short upright teasers for other sites.",
     ];
@@ -198,10 +198,10 @@ public partial class MainViewModel
     public bool ShowIntroIsNext => IntroPreviewPath is null;
 
     /// <summary>
-    /// The menu beside the bar's button on the clips page: each job on its own, and all of them as one, ending on a
-    /// draft to watch or (an advanced choice) the finished video.
+    /// The menu beside the bar's button on the clips page, with advanced controls on: each job on its own, and all of
+    /// them as one, ending on a draft to watch. The bar's button already offers the next job, so most never need it.
     /// </summary>
-    public bool ShowJobs => Step == ClipsStep && HasEpisode;
+    public bool ShowJobs => Step == ClipsStep && HasEpisode && Advanced;
 
     [RelayCommand]
     private void Continue() => Step = Math.Min(Step + 1, PublishStep);
