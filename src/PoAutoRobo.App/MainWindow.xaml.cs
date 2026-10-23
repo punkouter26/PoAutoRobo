@@ -14,37 +14,58 @@ using WinUIEx;
 
 namespace PoAutoRobo.App;
 
+/// <summary>
+/// The one window. This file holds what it shows and how it answers the view model; beside it are its moments of
+/// light and sound (.Moments), the questions it asks (.Dialogs) and its progress on the taskbar (.Taskbar).
+/// </summary>
 public sealed partial class MainWindow : WindowEx
 {
     private readonly DispatcherTimer _roll = new() { Interval = TimeSpan.FromMilliseconds(30) };
-    private readonly ITaskbarList3? _taskbar = NewTaskbar();
     private double _shownPercent;
     private double _shownRuntime;
     private double _shownSpent;
     private bool _inFront = true;
     private bool _toastsReady;
+    private readonly DispatcherTimer _messageTimer = new() { Interval = TimeSpan.FromSeconds(10) };
+    private bool _messageHeld; // the pointer is on the message, so it stays to be read
 
     public MainWindow(MainViewModel viewModel)
     {
         ViewModel = viewModel;
+        Ui.EffectsWanted = viewModel.Effects; // before anything is drawn
         InitializeComponent();
         ViewModel.Confirm = ConfirmAsync;
+        ViewModel.ConfirmSpend = ConfirmSpendAsync;
         ViewModel.Ask = AskAsync;
         ViewModel.JobFinished = OnJobFinished;
-        ViewModel.ClipDone = place => Sounds.Play(Cue.Tick, place * 2 - 1); // the ticks travel left to right across the batch
+        ViewModel.ClipDone = OnClipDone;
+        ViewModel.Premiere = OnPremiere;
         ViewModel.PlayCue = cue => Sounds.Play(cue);
+        Darkroom.ViewModel = ViewModel;
+        ViewModel.PlayVideo = PlayVideo;
         ViewModel.PropertyChanged += OnViewModelChanged;
         _roll.Tick += (_, _) => Roll();
         Activated += (_, e) =>
         {
             _inFront = e.WindowActivationState != WindowActivationState.Deactivated;
             Lesson.SetInFront(_inFront);
+            DeckBackdrop.SetInFront(_inFront);
         };
+        DeckBackdrop.Wanted = ViewModel.ShowDeck;
+        // An outcome goes by itself once there has been time to read it; an error stays until it is closed.
+        _messageTimer.Tick += (_, _) =>
+        {
+            _messageTimer.Stop();
+            if (!_messageHeld && ViewModel.ErrorMessage is null) MessageBar.IsOpen = false;
+        };
+        SlideUp(ActivityPanel);
         Closed += (_, _) =>
         {
             // A job still running is stopped here and now: FFmpeg and the browser it started would otherwise carry on
             // working after the window, with nobody to hand the result to.
             if (ViewModel.IsWorking) ViewModel.CancelActivityCommand.Execute(null);
+            ViewModel.StopWatching();
+            Intro.Release();
             ViewModel.Flush();
             if (_toastsReady) AppNotificationManager.Default.Unregister();
         };
@@ -60,8 +81,26 @@ public sealed partial class MainWindow : WindowEx
             case nameof(MainViewModel.SoundsOn) or nameof(MainViewModel.SoundVolume):
                 ApplySounds();
                 break;
+            case nameof(MainViewModel.Effects):
+                Ui.EffectsWanted = ViewModel.Effects;
+                DeckBackdrop.Wanted = ViewModel.ShowDeck; // looks afresh at the switch; the lesson page's backdrop does the same
+                break;
             case nameof(MainViewModel.IsCreating):
                 Ui.Shimmer(ViewModel.IsCreating); // light crosses the placeholder cards while the script is written
+                _skeletons = [];
+                if (ViewModel.IsCreating)
+                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => Fx.Drift(Area(Skeleton) is { Width: > 0 } deck ? deck : new Windows.Foundation.Rect(0, 0, Root.ActualWidth, Root.ActualHeight), Accent));
+                else
+                    Fx.StopDrifting();
+                break;
+            case nameof(MainViewModel.Skeletons):
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Landed); // once the placeholders have been laid out
+                break;
+            case nameof(MainViewModel.ShowDeck):
+                DeckBackdrop.Wanted = ViewModel.ShowDeck;
+                break;
+            case nameof(MainViewModel.DrawingClips):
+                Darkroom.Run(ViewModel.DrawingClips);
                 break;
             case nameof(MainViewModel.IsWorking) when ViewModel.IsWorking:
                 _shownPercent = 0;
@@ -142,9 +181,10 @@ public sealed partial class MainWindow : WindowEx
         System.Windows.Input.ICommand? command = sender.Key switch
         {
             VirtualKey.Enter when ViewModel.ShowTopic => ViewModel.CreateEpisodeCommand,
-            VirtualKey.G when ViewModel.Step == 1 => ViewModel.GeneratePictureCommand,
-            VirtualKey.D when ViewModel.Step == 1 => ViewModel.DuplicateClipCommand,
-            VirtualKey.P when ViewModel.Step == 1 => ViewModel.AuditionCommand,
+            VirtualKey.G when ViewModel.Step == MainViewModel.ClipsStep => ViewModel.GeneratePictureCommand,
+            VirtualKey.D when ViewModel.Step == MainViewModel.ClipsStep => ViewModel.DuplicateClipCommand,
+            VirtualKey.P when ViewModel.Step == MainViewModel.ClipsStep && sender.Modifiers.HasFlag(VirtualKeyModifiers.Shift) => ViewModel.WatchClipCommand,
+            VirtualKey.P when ViewModel.Step == MainViewModel.ClipsStep => ViewModel.AuditionCommand,
             _ => null,
         };
         if (command?.CanExecute(null) != true) return;
@@ -159,8 +199,6 @@ public sealed partial class MainWindow : WindowEx
         ViewModel.RemoveClipCommand.Execute(null);
         e.Handled = true;
     }
-
-    private void OnSettingsOpening(object? sender, object e) => ViewModel.RefreshSpendDetail();
 
     private async void OnPickMusic(object sender, RoutedEventArgs e)
     {
@@ -181,6 +219,8 @@ public sealed partial class MainWindow : WindowEx
         MessageBar.Title = error is null ? "" : "Something went wrong";
         MessageBar.Message = error ?? status ?? "";
         MessageBar.IsOpen = !string.IsNullOrEmpty(error ?? status);
+        _messageTimer.Stop();
+        if (error is null && MessageBar.IsOpen) _messageTimer.Start();
         // A job that fails says so with its own sound as it ends; anything else that goes wrong is heard here.
         if (error is not null && !ViewModel.IsWorking) Sounds.Play(Cue.Error);
     }
@@ -195,14 +235,15 @@ public sealed partial class MainWindow : WindowEx
 
     private void OnCardShown(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
-        if (args.InRecycleQueue) return;
-        // Whenever the layout gives this card a new position (a reorder, an undo, a card added before it), it travels
-        // there on a spring and settles with a slight overshoot, the way a card lifts under the pointer.
+        if (args.InRecycleQueue || !Ui.Animated) return;
+        // Whenever the layout gives this card a new position (a reorder, an undo, a card added before it, a wider
+        // window), it travels there and settles with a slight overshoot, the way a card lifts under the pointer. It must
+        // end on the place the layout gave it: an animation that names no end of its own leaves the card where it was.
         var visual = ElementCompositionPreview.GetElementVisual(args.ItemContainer);
-        var glide = Compositor.CreateSpringVector3Animation();
+        var glide = Compositor.CreateVector3KeyFrameAnimation();
         glide.Target = "Offset";
-        glide.DampingRatio = 0.75f;
-        glide.Period = TimeSpan.FromMilliseconds(70);
+        glide.InsertExpressionKeyFrame(1, "this.FinalValue", Compositor.CreateCubicBezierEasingFunction(new System.Numerics.Vector2(0.3f, 1.3f), new System.Numerics.Vector2(0.4f, 1f)));
+        glide.Duration = TimeSpan.FromMilliseconds(320);
         var moves = Compositor.CreateImplicitAnimationCollection();
         moves["Offset"] = glide;
         visual.ImplicitAnimations = moves;
@@ -222,117 +263,73 @@ public sealed partial class MainWindow : WindowEx
         }
     }
 
-    // ---- Questions the view model asks the user ----
+    // ---- Watching one clip or one teaser, in a player that opens beside its card ----
 
-    private async Task<bool> ConfirmAsync(string title, string message, string action)
+    private void PlayVideo(object card, string path)
     {
-        var dialog = new ContentDialog
+        // Beside the card when it is on screen; a clip's card scrolled out of sight is not, and the inspector stands in.
+        var anchor = card switch
         {
-            XamlRoot = Content.XamlRoot,
-            Title = title,
-            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
-            PrimaryButtonText = action,
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close,
+            ClipViewModel clip => ClipDeck.ContainerFromItem(clip) as FrameworkElement ?? Inspector,
+            TeaserViewModel teaser => TeaserCardList.ContainerFromItem(teaser) as FrameworkElement,
+            _ => null,
         };
-        dialog.Opened += (opened, _) => Ui.PopIn(opened.Content as UIElement ?? opened);
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+        if (anchor is null || anchor.XamlRoot is null) return; // the page was left while it was being made
+        var upright = card is TeaserViewModel;
+        var player = new Windows.Media.Playback.MediaPlayer { Source = Windows.Media.Core.MediaSource.CreateFromUri(new Uri(path)), AutoPlay = true };
+        var screen = new MediaPlayerElement { AreTransportControlsEnabled = true, Width = upright ? 270 : 480, Height = upright ? 480 : 270 };
+        screen.TransportControls.IsCompact = true;
+        screen.SetMediaPlayer(player);
+        // The usual flyout is narrower than a 16:9 player, and its padding would frame the picture in grey.
+        var presenter = new Style(typeof(FlyoutPresenter));
+        presenter.Setters.Add(new Setter(FrameworkElement.MaxWidthProperty, 800d));
+        presenter.Setters.Add(new Setter(FrameworkElement.MaxHeightProperty, 800d));
+        presenter.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
+        var flyout = new Flyout { Content = screen, FlyoutPresenterStyle = presenter };
+        flyout.Closed += (_, _) => player.Dispose(); // lets go of the file, which a later render may replace
+        flyout.ShowAt(anchor);
     }
 
-    private async Task<string?> AskAsync(string title, string current)
+    // ---- The header's Make button ----
+
+    private void OnMakeNext(SplitButton sender, SplitButtonClickEventArgs args) => ViewModel.MakeNext();
+
+    // ---- The floating bar ----
+
+    /// <summary>The job panel rises into place as it appears and sinks away as it goes, unless Windows is set to show no animation.</summary>
+    private static void SlideUp(UIElement element)
     {
-        var box = new TextBox { Text = current, SelectionStart = 0, SelectionLength = current.Length };
-        var dialog = new ContentDialog
-        {
-            XamlRoot = Content.XamlRoot,
-            Title = title,
-            Content = box,
-            PrimaryButtonText = "Save",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Primary,
-        };
-        // Nothing to save while the box is blank, and the button says so by being unavailable.
-        box.TextChanged += (_, _) => dialog.IsPrimaryButtonEnabled = box.Text.Trim().Length > 0;
-        dialog.IsPrimaryButtonEnabled = current.Trim().Length > 0;
-        dialog.Opened += (opened, _) => Ui.PopIn(opened.Content as UIElement ?? opened);
-        return await dialog.ShowAsync() == ContentDialogResult.Primary && box.Text.Trim() is { Length: > 0 } text ? text : null;
+        if (!Ui.Animated) return;
+        // Moved by the composition layer alone, never by the element's own Translation, which may not be used alongside.
+        ElementCompositionPreview.SetIsTranslationEnabled(element, true);
+        var visual = ElementCompositionPreview.GetElementVisual(element);
+        var compositor = visual.Compositor;
+        var rise = compositor.CreateVector3KeyFrameAnimation();
+        rise.Target = "Translation";
+        rise.InsertKeyFrame(0, new System.Numerics.Vector3(0, 40, 0));
+        rise.InsertKeyFrame(1, System.Numerics.Vector3.Zero);
+        rise.Duration = TimeSpan.FromMilliseconds(260);
+        var appear = compositor.CreateScalarKeyFrameAnimation();
+        appear.Target = "Opacity";
+        appear.InsertKeyFrame(0, 0);
+        appear.InsertKeyFrame(1, 1);
+        appear.Duration = rise.Duration;
+        var show = compositor.CreateAnimationGroup();
+        show.Add(rise);
+        show.Add(appear);
+        ElementCompositionPreview.SetImplicitShowAnimation(element, show);
+        var fade = compositor.CreateScalarKeyFrameAnimation();
+        fade.Target = "Opacity";
+        fade.InsertKeyFrame(1, 0);
+        fade.Duration = TimeSpan.FromMilliseconds(180);
+        ElementCompositionPreview.SetImplicitHideAnimation(element, fade);
     }
 
-    private async void OnVisualMix(object sender, RoutedEventArgs e)
+    private void OnMessageHeld(object sender, PointerRoutedEventArgs e) => _messageHeld = true;
+
+    private void OnMessageLetGo(object sender, PointerRoutedEventArgs e)
     {
-        var (mix, host) = (ViewModel.Mix, ViewModel.HostMostlyVisible);
-        var dialog = new Views.MixDialog(mix, ViewModel.Look, host) { XamlRoot = Content.XamlRoot };
-        dialog.Opened += (opened, _) => Ui.PopIn(opened.Content as UIElement ?? opened);
-        switch (await dialog.ShowAsync())
-        {
-            case ContentDialogResult.Primary:
-                // Only what was changed is applied: dealing the mix again would undo the script's choice of picture types.
-                ViewModel.ApplyLook(dialog.Look);
-                if (dialog.HostVisible != host) ViewModel.ShowHostEverywhere(dialog.HostVisible);
-                if (dialog.Mix != mix) ViewModel.ApplyMix(dialog.Mix);
-                break;
-            case ContentDialogResult.Secondary: ViewModel.RerollMix(); break;
-        }
+        _messageHeld = false;
+        if (MessageBar.IsOpen && ViewModel.ErrorMessage is null) _messageTimer.Start();
     }
-
-    private async void OnSeries(object sender, RoutedEventArgs e)
-    {
-        var dialog = new Views.SeriesDialog(ViewModel) { XamlRoot = Content.XamlRoot };
-        dialog.Opened += (opened, _) => Ui.PopIn(opened.Content as UIElement ?? opened);
-        await dialog.ShowAsync();
-    }
-
-    private async void OnHostSetup(object sender, RoutedEventArgs e)
-    {
-        var dialog = new Views.HostSetupDialog(ViewModel) { XamlRoot = Content.XamlRoot };
-        dialog.Opened += (opened, _) => Ui.PopIn(opened.Content as UIElement ?? opened);
-        await dialog.ShowAsync();
-    }
-
-    // ---- Progress on the taskbar button, so a long job can be watched with the window hidden ----
-
-    private void ShowTaskbarProgress(double? percent)
-    {
-        try
-        {
-            _taskbar?.SetProgressState(App.WindowHandle, percent is null ? 0 : 2); // 0 clears the bar, 2 shows a normal one
-            if (percent is { } value)
-                _taskbar?.SetProgressValue(App.WindowHandle, (ulong)value, 100);
-        }
-        catch (COMException)
-        {
-            // The taskbar bar is a nicety; the panel in the window is the real progress display.
-        }
-    }
-
-    private static ITaskbarList3? NewTaskbar()
-    {
-        try
-        {
-            var taskbar = (ITaskbarList3)new TaskbarList();
-            taskbar.HrInit();
-            return taskbar;
-        }
-        catch (COMException)
-        {
-            return null;
-        }
-    }
-
-    // The Windows taskbar's own interface. Methods must stay in this order: it is how the system finds them.
-    [ComImport, Guid("ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface ITaskbarList3
-    {
-        void HrInit();
-        void AddTab(nint window);
-        void DeleteTab(nint window);
-        void ActivateTab(nint window);
-        void SetActiveAlt(nint window);
-        void MarkFullscreenWindow(nint window, [MarshalAs(UnmanagedType.Bool)] bool fullscreen);
-        void SetProgressValue(nint window, ulong completed, ulong total);
-        void SetProgressState(nint window, int state);
-    }
-
-    [ComImport, Guid("56FDF344-FD6D-11d0-958A-006097C9A090"), ClassInterface(ClassInterfaceType.None)]
-    private class TaskbarList;
 }

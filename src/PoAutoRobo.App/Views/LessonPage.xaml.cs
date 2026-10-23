@@ -1,26 +1,16 @@
 using System.ComponentModel;
-using ComputeSharp.D2D1.WinUI;
-using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using PoAutoRobo.App.ViewModels;
 using Windows.ApplicationModel.DataTransfer;
-using Windows.Foundation;
 using Windows.Storage.Pickers;
-using Windows.UI;
-using Windows.UI.ViewManagement;
 
 namespace PoAutoRobo.App.Views;
 
-/// <summary>Step 1: the lesson form, with the owner's films, and the saved episodes.</summary>
+/// <summary>Step 2: the lesson form, with the owner's films, and the saved episodes.</summary>
 public sealed partial class LessonPage : UserControl
 {
     private MainViewModel? _viewModel;
-    private bool _inFront = true;
-    private PixelShaderEffect<Nebula>? _nebula; // made and used on the drawing thread only
-
-    // Read by the drawing thread, set by the page.
-    private Color _accent;
 
     public LessonPage() => InitializeComponent();
 
@@ -37,49 +27,19 @@ public sealed partial class LessonPage : UserControl
     }
 
     /// <summary>Told by the window: false while another app is in front, when there is nobody to draw for.</summary>
-    public void SetInFront(bool inFront)
-    {
-        _inFront = inFront;
-        PaceBackdrop();
-    }
+    public void SetInFront(bool inFront) => Backdrop.SetInFront(inFront);
 
     // ---- The moving backdrop ----
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        _accent = (Color)Application.Current.Resources["SystemAccentColor"];
-        // Windows has a switch for people who want no animation; with it off there is no backdrop at all.
-        if (!new UISettings().AnimationsEnabled) Backdrop.Visibility = Visibility.Collapsed;
-        Backdrop.TargetElapsedTime = TimeSpan.FromMilliseconds(33); // thirty frames a second is plenty for something this slow
-        PaceBackdrop();
-    }
-
-    private void OnThemeChanged(FrameworkElement sender, object args) => _accent = (Color)Application.Current.Resources["SystemAccentColor"];
+    private void OnLoaded(object sender, RoutedEventArgs e) => PaceBackdrop();
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.ShowTopic)) PaceBackdrop();
+        if (e.PropertyName is nameof(MainViewModel.ShowTopic) or nameof(MainViewModel.Effects)) PaceBackdrop();
     }
 
-    // Drawn only while it can be seen: this page showing, and the app in front.
-    private void PaceBackdrop() => Backdrop.Paused = !(_inFront && ViewModel?.ShowTopic == true);
-
-    private void OnDrawBackdrop(ICanvasAnimatedControl sender, CanvasAnimatedDrawEventArgs args)
-    {
-        var (accent, size) = (_accent, sender.Size);
-        _nebula ??= new PixelShaderEffect<Nebula>();
-        _nebula.ConstantBuffer = new Nebula(
-            (float)args.Timing.TotalTime.TotalSeconds, new float2((float)size.Width, (float)size.Height),
-            new float3(accent.R / 255f, accent.G / 255f, accent.B / 255f));
-        // The cloud has no edges of its own, so it is told which part of it to draw: the backdrop's own area.
-        args.DrawingSession.DrawImage(_nebula, 0, 0, new Rect(0, 0, size.Width, size.Height));
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        Backdrop.RemoveFromVisualTree(); // Win2D controls must be detached explicitly or they leak
-        _nebula?.Dispose();
-    }
+    // Drawn only while it can be seen: this page showing, and the app in front; and only with Effects on.
+    private void PaceBackdrop() => Backdrop.Wanted = ViewModel?.ShowTopic == true;
 
     // ---- Saved episodes ----
 
@@ -139,6 +99,12 @@ public sealed partial class LessonPage : UserControl
         var items = await e.DataView.GetStorageItemsAsync();
         var videos = items.Select(i => i.Path).Where(p => EpisodeBuilder.VideoExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)).ToList();
         if (videos.Count > 0) await ViewModel.AddFootageAsync(videos);
+    }
+
+    private void OnSuggestNote(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: FootageRow row } && ViewModel?.SuggestNoteCommand.CanExecute(row) == true)
+            ViewModel.SuggestNoteCommand.Execute(row);
     }
 
     private void OnRemoveFootage(object sender, RoutedEventArgs e)

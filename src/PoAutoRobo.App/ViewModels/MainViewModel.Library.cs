@@ -93,7 +93,7 @@ public partial class MainViewModel
             Episode = null;
             EpisodeFolder = null;
             ForgetHistory();
-            Step = 0;
+            Step = LessonStep;
             SavePrefs(); // there is no longer an episode to come back to
         }
         Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(summary.Folder,

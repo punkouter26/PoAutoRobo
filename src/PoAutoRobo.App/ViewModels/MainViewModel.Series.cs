@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace PoAutoRobo.App.ViewModels;
 
-/// <summary>The series brand kit: what every episode shares, set up once in the Series dialog.</summary>
+/// <summary>The series brand kit: what every episode shares, set up once on the Intro step and in the Series dialog.</summary>
 public partial class MainViewModel
 {
     // Each look with the words shown for it, kept together so the list cannot drift out of step with the looks there are.
@@ -17,7 +17,7 @@ public partial class MainViewModel
     /// <summary>The kit and where its files are, for the intro, the outro and new episodes.</summary>
     public Brand SeriesBrand => new(_kit, AppPaths.Series);
 
-    // The dialog's fields. Each change is saved at once: there is nothing to lose by closing the dialog.
+    // The intro page's and the dialog's fields. Each change is saved at once: there is nothing to lose by leaving.
 
     public string SeriesChannel
     {
@@ -74,7 +74,7 @@ public partial class MainViewModel
 
     public string SeriesMascotLabel => _kit.Mascot ?? "None";
 
-    /// <summary>The draft intro last made for the dialog's preview; null until one is asked for.</summary>
+    /// <summary>The intro last drawn for the Intro step; null until one is asked for.</summary>
     [ObservableProperty]
     public partial string? IntroPreviewPath { get; set; }
 

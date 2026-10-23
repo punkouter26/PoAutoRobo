@@ -6,8 +6,8 @@ using CommunityToolkit.Mvvm.Input;
 namespace PoAutoRobo.App.ViewModels;
 
 /// <summary>
-/// The app's one view model. This file holds what it is connected to, the steps and the topic page; the other
-/// parts are beside it: Library, Edits, Pictures, Export and Activity.
+/// The app's one view model. This file holds what it is connected to and the lesson page; the other parts are
+/// beside it: Steps, Library, Footage, Edits, Pictures, Series, Export, Teasers and Activity.
 /// </summary>
 public partial class MainViewModel : ObservableObject
 {
@@ -18,6 +18,7 @@ public partial class MainViewModel : ObservableObject
     private EpisodeBuilder _builder = new(new MockNarrator(), new FfmpegRunner("ffmpeg.exe"));
     private Grounding? _grounding;
     private Func<string, Quality, Visuals>? _visualsFor; // null when there is no Azure connection
+    private Hear? _hear; // null when nothing can listen to a film
     private string _imageModel = "";
     private bool _syncingClips;
     private Prefs? _reopen; // where the user was last time, until the services are connected and it can be gone back to
@@ -26,21 +27,25 @@ public partial class MainViewModel : ObservableObject
     {
         FfmpegAvailable = ffmpegAvailable;
         var prefs = Prefs.Load();
-        LengthIndex = Math.Max(0, Array.FindIndex(LengthChoices, c => c.Label == prefs.Length));
-        ExportPresetIndex = Math.Clamp(prefs.ExportPresetIndex, 0, ExportChoices.Length - 1);
+        Effects = prefs.Effects;
+        Advanced = prefs.Advanced;
+        // The video size is an advanced choice: hidden, it stays at the standard one, so nothing out of sight changes what is made.
+        ExportPresetIndex = Advanced ? Math.Clamp(prefs.ExportPresetIndex, 0, ExportChoices.Length - 1) : 0;
         SoundsOn = prefs.SoundsOn;
         SoundVolume = Math.Clamp(prefs.SoundVolume, 0, 1);
         DraftPictures = prefs.DraftPictures;
         MonthlyBudget = Math.Max(0, prefs.MonthlyBudget);
         StructureIndex = Math.Clamp(prefs.StructureIndex, 0, StructureChoices.Length - 1);
         _reopen = prefs;
+        _step = FirstStep;
         Clips.CollectionChanged += OnClipsChanged;
+        Footage.CollectionChanged += (_, _) => RefreshGuide();
         // A batch must not start while a single picture is being drawn: it could ask for, and pay for, the same one.
         foreach (var one in new IAsyncRelayCommand[] { GeneratePictureCommand, AnotherTakeCommand })
             one.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName != nameof(IAsyncRelayCommand.IsRunning)) return;
-                foreach (var command in new IRelayCommand[] { GenerateAllCommand, GeneratePictureCommand, AnotherTakeCommand, MakeAllCommand })
+                foreach (var command in new IRelayCommand[] { GenerateAllCommand, GeneratePictureCommand, AnotherTakeCommand, MakeAllCommand, MakeDraftCommand })
                     command.NotifyCanExecuteChanged();
             };
         _ready = true;
@@ -51,8 +56,8 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>True once the app knows whether it is running on the live services or on stand-ins.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Notice), nameof(NoticeDetail), nameof(PicturesAvailable), nameof(HostCandidatesCost))]
-    [NotifyCanExecuteChangedFor(nameof(CreateEpisodeCommand), nameof(GenerateAllCommand), nameof(GeneratePictureCommand), nameof(AnotherTakeCommand), nameof(MakeAllCommand))]
+    [NotifyPropertyChangedFor(nameof(Notice), nameof(NoticeDetail), nameof(PicturesAvailable), nameof(HostCandidatesCost), nameof(MakeNextLabel))]
+    [NotifyCanExecuteChangedFor(nameof(CreateEpisodeCommand), nameof(GenerateAllCommand), nameof(GeneratePictureCommand), nameof(AnotherTakeCommand), nameof(MakeAllCommand), nameof(MakeDraftCommand))]
     public partial bool IsConnected { get; set; }
 
     /// <summary>Which services are simulated and why; null when everything is live.</summary>
@@ -61,9 +66,10 @@ public partial class MainViewModel : ObservableObject
     public bool FfmpegAvailable { get; }
 
     /// <param name="visualsFor">Makes the picture service for an episode folder and a quality; null when pictures are not available.</param>
-    public void Connect(IScriptWriter writer, EpisodeBuilder builder, Grounding grounding, Func<string, Quality, Visuals>? visualsFor, string imageModel, string? offlineMessage)
+    /// <param name="hear">Listens to what is said in a film; null when that is not set up.</param>
+    public void Connect(IScriptWriter writer, EpisodeBuilder builder, Grounding grounding, Func<string, Quality, Visuals>? visualsFor, string imageModel, string? offlineMessage, Hear? hear = null)
     {
-        (_scriptWriter, _builder, _grounding, _visualsFor, _imageModel, OfflineMessage) = (writer, builder, grounding, visualsFor, imageModel, offlineMessage);
+        (_scriptWriter, _builder, _grounding, _visualsFor, _imageModel, OfflineMessage, _hear) = (writer, builder, grounding, visualsFor, imageModel, offlineMessage, hear);
         IsConnected = true;
         Reopen();
     }
@@ -81,7 +87,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             Open(ProjectStore.Load(folder), folder, ProjectStore.LoadSnippets(folder));
-            Step = last.Step;
+            Step = last.Page < 0 ? ClipsStep : last.Page; // saved before there were five steps: the clips
             // The tab is set once the clips page has been laid out: its tab control picks its first tab as it first appears.
             var tab = Math.Clamp(last.InspectorTab, 0, 1);
             if (Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread() is { } later)
@@ -105,13 +111,6 @@ public partial class MainViewModel : ObservableObject
     }.OfType<string>());
 
     // The lists behind the drop-downs. Each entry carries its own label, so adding a choice is one line here.
-    public Choice<EpisodeLength>[] LengthChoices { get; } =
-    [
-        // The one last used is remembered by its label, so the list can change without a saved choice meaning another.
-        new("Standard (3–5 minutes)", EpisodeLength.Standard),
-        new("Quick test (1)", EpisodeLength.QuickTest),
-    ];
-
     public Choice<ExportPreset>[] ExportChoices { get; } =
     [
         new("1080p · 30 fps", ExportPreset.Hd30), new("1080p · 60 fps", ExportPreset.Hd60),
@@ -136,8 +135,8 @@ public partial class MainViewModel : ObservableObject
     // What the view model asks of the window and its views. Each starts as "nothing happens" and "the answer is no",
     // so the view model is whole before any view exists and never has to ask whether one has been set.
 
-    /// <summary>Set by the view that owns the audio player.</summary>
-    public Action<string> PlayAudio { get; set; } = _ => { };
+    /// <summary>Set by the view that owns the audio player: plays a clip's recorded voice, whose timed words it may show.</summary>
+    public Action<Narration> PlayAudio { get; set; } = _ => { };
 
     /// <summary>Set by the view that owns the preview player; it must let go of the file before a new preview is written.</summary>
     public Action ReleasePreview { get; set; } = () => { };
@@ -145,23 +144,28 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Set by the window: asks the user to approve something that costs money or cannot be undone. True means go ahead.</summary>
     public Func<string, string, string, Task<bool>> Confirm { get; set; } = (_, _, _) => Task.FromResult(false);
 
+    /// <summary>
+    /// Set by the window: as <see cref="Confirm"/>, for a job that costs about the dollars given, so it can be shown
+    /// against the month's budget. Until set, the plain question is asked.
+    /// </summary>
+    public Func<string, string, string, decimal, Task<bool>> ConfirmSpend { get; set; } = (_, _, _, _) => Task.FromResult(false);
+
     /// <summary>Set by the window: asks for a line of text, given a title and what is there now. Null means the user backed out.</summary>
     public Func<string, string, Task<string?>> Ask { get; set; } = (_, _) => Task.FromResult<string?>(null);
 
     /// <summary>Set by the window: told the job's name and whether it finished, when a long job ends.</summary>
     public Action<string, bool> JobFinished { get; set; } = (_, _) => { };
 
-    /// <summary>Set by the window: one clip of a batch is done, and whereabouts in the batch it is (0 first, 1 last).</summary>
-    public Action<double> ClipDone { get; set; } = _ => { };
+    /// <summary>Set by the window: one clip of a batch is done, which one, its place in the batch out of how many, and whether it came out.</summary>
+    public Action<Guid, int, int, bool> ClipDone { get; set; } = (_, _, _, _) => { };
+
+    /// <summary>Set by the window: the master video has just been finished.</summary>
+    public Action Premiere { get; set; } = () => { };
 
     /// <summary>Set by the window: plays one of the app's own sounds.</summary>
     public Action<Cue> PlayCue { get; set; } = _ => { };
 
     // ---- What the app remembers between runs ----
-
-    /// <summary>Length of the next episode, as an index into <see cref="LengthChoices"/>.</summary>
-    [ObservableProperty]
-    public partial int LengthIndex { get; set; }
 
     [ObservableProperty]
     public partial int ExportPresetIndex { get; set; }
@@ -178,73 +182,40 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HostCandidatesCost))]
     public partial bool DraftPictures { get; set; }
 
+    /// <summary>The decorative light and motion: sparks, the backdrops, the darkroom strip, the voice as light. Off unless turned on.</summary>
+    [ObservableProperty]
+    public partial bool Effects { get; set; }
+
+    /// <summary>
+    /// The controls most episodes never need: each clip's picture type, takes and robot's-eye view, the picture mix,
+    /// other video sizes, the editor's read, and making the whole episode in one go. Hidden unless turned on.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool Advanced { get; set; }
+
+    partial void OnAdvancedChanged(bool value)
+    {
+        if (!value) ExportPresetIndex = 0; // as when the app starts with it hidden
+    }
+
     // Everything remembered is saved as it changes. Adding a choice to remember is one name here and one in SavePrefs.
     private static readonly HashSet<string> Remembered =
     [
-        nameof(LengthIndex), nameof(ExportPresetIndex), nameof(SoundsOn), nameof(SoundVolume), nameof(DraftPictures),
-        nameof(Step), nameof(InspectorTab), nameof(MonthlyBudget), nameof(StructureIndex),
+        nameof(ExportPresetIndex), nameof(SoundsOn), nameof(SoundVolume), nameof(DraftPictures),
+        nameof(Step), nameof(InspectorTab), nameof(MonthlyBudget), nameof(StructureIndex), nameof(Effects), nameof(Advanced),
     ];
 
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
         if (Remembered.Contains(e.PropertyName ?? "")) SavePrefs();
+        RefreshGuide(e);
     }
 
     private void SavePrefs()
     {
-        if (_ready) new Prefs(LengthChoices[Math.Clamp(LengthIndex, 0, LengthChoices.Length - 1)].Label, ExportPresetIndex, SoundsOn, SoundVolume, DraftPictures, EpisodeFolder, Step, InspectorTab, MonthlyBudget, StructureIndex).Save();
+        if (_ready) new Prefs(ExportPresetIndex, SoundsOn, SoundVolume, DraftPictures, EpisodeFolder, Step, InspectorTab, MonthlyBudget, StructureIndex, Effects, Advanced).Save();
     }
-
-    // ---- Steps ----
-
-    private static readonly string[] StepHints =
-    [
-        "Say what you taught the R1 this time, add your films of it, and write the script; or open an episode you saved earlier.",
-        "Shape the clips: drag them into order, edit and audition each one's words, then give each its picture.",
-        "Finish: choose the caption style, watch a preview, then render the master video.",
-    ];
-
-    private int _step;
-
-    /// <summary>
-    /// Which page is showing: 0 Topic, 1 Clips, 2 Export. The later pages have nothing to show until there is an
-    /// episode, so asking for one then gives the first; the asker is told, and shows the page really on.
-    /// </summary>
-    public int Step
-    {
-        get => _step;
-        set
-        {
-            var wanted = value is 1 or 2 && HasEpisode ? value : 0;
-            if (wanted == _step)
-            {
-                if (wanted != value) OnPropertyChanged(nameof(Step));
-                return;
-            }
-            _step = wanted;
-            OnPropertyChanged(nameof(Step));
-            OnPropertyChanged(nameof(ShowTopic));
-            OnPropertyChanged(nameof(ShowDeck));
-            OnPropertyChanged(nameof(StepHint));
-            if (wanted == 0) _ = Guard(RefreshLibraryAsync);
-            ErrorMessage = null; // an error belongs to the page it happened on
-        }
-    }
-
-    // While a script is being written the deck page shows in place of the topic page, with placeholder cards.
-    public bool ShowTopic => Step == 0 && !IsCreating;
-
-    public bool ShowDeck => Step == 1 || IsCreating;
-
-    public string StepHint => StepHints[Math.Clamp(Step, 0, StepHints.Length - 1)];
-
-    /// <summary>Which half of the inspector is showing: 0 the clip's words, 1 its picture.</summary>
-    [ObservableProperty]
-    public partial int InspectorTab { get; set; }
-
-    /// <summary>For the keyboard shortcuts.</summary>
-    public void GoTo(int step) => Step = step;
 
     // ---- Episode ----
 
@@ -276,40 +247,6 @@ public partial class MainViewModel : ObservableObject
     /// <summary>The beats of the chosen structure in order, marking those where footage belongs.</summary>
     public string StructureBeats => string.Join(" → ", BeatPlan.Beats(NextStructure).Select(b => b.ForFootage ? $"{b.Name} 🎥" : b.Name));
 
-    /// <summary>The owner's films for the next episode. The script places each in one clip.</summary>
-    public ObservableCollection<FootageRow> Footage { get; } = [];
-
-    /// <summary>Measures each film and lists it. Films that cannot be read, or run under 2 seconds or over 2 minutes, are left out with a word why.</summary>
-    public Task AddFootageAsync(IReadOnlyList<string> paths) => RunActivityAsync("Reading your footage", async ct =>
-    {
-        if (!FfmpegAvailable)
-            throw new InvalidOperationException("FFmpeg is needed to read your footage. Install it, then restart the app.");
-        var refused = new List<string>();
-        foreach (var path in paths.Where(p => !Footage.Any(f => string.Equals(f.Path, p, StringComparison.OrdinalIgnoreCase))))
-        {
-            TimeSpan length;
-            try
-            {
-                length = await _builder.ProbeDurationAsync(path, ct);
-            }
-            catch (Exception e) when (e is FfmpegException or IOException)
-            {
-                refused.Add($"{Path.GetFileName(path)} could not be read");
-                continue;
-            }
-            if (length < MinFootage || length > Conformance.MaxFootage)
-                refused.Add($"{Path.GetFileName(path)} runs {length:m\\:ss}; films must be 2 seconds to 2 minutes");
-            else
-                Footage.Add(new FootageRow(path, length));
-        }
-        if (refused.Count > 0) ErrorMessage = string.Join(". ", refused) + ".";
-    });
-
-    private static readonly TimeSpan MinFootage = TimeSpan.FromSeconds(2);
-
-    [RelayCommand]
-    private void RemoveFootage(FootageRow row) => Footage.Remove(row);
-
     /// <summary>How much of the room for a topic is used, said beside the box so a long paste is not cut short unnoticed.</summary>
     public string TopicCount => TopicInput.Length >= IScriptWriter.MaxTopicLength
         ? $"{TopicInput.Length:N0} of {IScriptWriter.MaxTopicLength:N0} characters · full: anything pasted beyond this is left out"
@@ -317,9 +254,10 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EpisodeTitle), nameof(HasEpisode), nameof(Runtime), nameof(Captions),
-        nameof(CaptionPresetIndex), nameof(CaptionFontSize), nameof(CaptionStroke), nameof(CaptionAccent), nameof(HasMusic), nameof(MusicLabel))]
+        nameof(CaptionPresetIndex), nameof(CaptionFontSize), nameof(CaptionStroke), nameof(CaptionAccent), nameof(HasMusic), nameof(MusicLabel), nameof(MakeNextLabel))]
     [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(SuggestTeasersCommand), nameof(RenderTeasersCommand), nameof(UseSeriesLookCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(NarrateAllCommand),
-        nameof(CleanMediaCommand), nameof(ShowEpisodeFolderCommand), nameof(RenameEpisodeCommand), nameof(MakeAllCommand), nameof(ReviewScriptCommand), nameof(RemoveMusicCommand))]
+        nameof(CleanMediaCommand), nameof(RenameEpisodeCommand), nameof(MakeAllCommand), nameof(MakeDraftCommand), nameof(ReviewScriptCommand), nameof(RemoveMusicCommand),
+        nameof(WatchClipCommand), nameof(WatchTeaserCommand))]
     public partial Episode? Episode { get; set; }
 
     [ObservableProperty]
@@ -411,6 +349,7 @@ public partial class MainViewModel : ObservableObject
             _usage = string.Join(" · ", new[] { tokens > 0 ? $"{tokens:N0} script tokens" : "", characters > 0 ? $"{characters:N0} voice characters" : "" }.Where(part => part.Length > 0));
         }
         OnPropertyChanged(nameof(Runtime));
+        OnPropertyChanged(nameof(MakeNextLabel)); // a voice or a picture may just have been made
     }
 
     private readonly List<(string What, int Units, decimal Dollars)> _usedBeforeFolder = []; // a script is written before its episode has a folder
@@ -432,7 +371,7 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>True while a script is being written; the deck shows placeholder cards meanwhile.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowTopic), nameof(ShowDeck))]
+    [NotifyPropertyChangedFor(nameof(ShowIntro), nameof(ShowTopic), nameof(ShowDeck))]
     public partial bool IsCreating { get; set; }
 
     /// <summary>One placeholder per clip the script being written may have: a clip's title once it is written, empty until then.</summary>
@@ -445,15 +384,26 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanCreateEpisode))]
     private Task CreateEpisodeAsync() => RunActivityAsync("Writing the script", async ct =>
     {
-        var lesson = new Lesson(TopicInput, WentWrongInput, NextStructure, [.. Footage.Select(f => f.ToNote())]);
-        var topic = lesson.Topic;
         var number = Math.Max(1, (int)Math.Round(double.IsNaN(EpisodeNumber) ? 1 : EpisodeNumber));
-        var length = LengthChoices[LengthIndex].Value;
+        // The series so far, so the script can build on it; read off the window's thread, as it opens every episode.
+        var lesson = new Lesson(TopicInput, WentWrongInput, NextStructure, [.. Footage.Select(f => f.ToNote())])
+        {
+            Earlier = await Task.Run(() => ProjectStore.SeriesBefore(AppPaths.Episodes, number), ct),
+        };
+        var topic = lesson.Topic;
+        var length = EpisodeLength.Standard;
         Skeletons = [.. Enumerable.Repeat("", length.MaxClips)];
         _lastNote = null;
         IsCreating = true;
         try
         {
+            // The films first: what happens in each, and what is said in those that keep their own sound, is what
+            // the script is written to. Each is kept by the film, so writing the episode again asks for neither.
+            if (lesson.Footage.Count > 0)
+            {
+                ReportActivity("Watching your films", 0.01);
+                lesson = lesson with { Footage = [.. await Task.WhenAll(lesson.Footage.Select(note => UnderstandAsync(note, ct)))] };
+            }
             // Every episode is about the R1, so every script is grounded in its official repositories.
             IReadOnlyList<GroundingSnippet> grounding = [];
             if (_grounding is not null)
@@ -522,7 +472,7 @@ public partial class MainViewModel : ObservableObject
         _syncingClips = false;
         SyncCards();
         SelectedClip = Clips.FirstOrDefault();
-        Step = 1;
+        Step = ClipsStep;
         SavePrefs(); // this is now the episode to come back to
         _ = Guard(ShowFootageAsync);
     }
@@ -574,7 +524,7 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private ClipViewModel NewCard(Clip clip) => new(clip, Edit, PickTier);
+    private ClipViewModel NewCard(Clip clip) => new(clip, Edit, PickTier, Watch);
 
     [RelayCommand(CanExecute = nameof(HasEpisode))]
     private async Task RenameEpisodeAsync()
@@ -584,9 +534,6 @@ public partial class MainViewModel : ObservableObject
     }
 
     // ---- Housekeeping ----
-
-    [RelayCommand(CanExecute = nameof(HasEpisode))]
-    private void ShowEpisodeFolder() => ShowInExplorer(EpisodeFolder!);
 
     /// <summary>Opens File Explorer on a folder, or on the folder holding a file with that file picked out.</summary>
     public static void ShowInExplorer(string path) =>

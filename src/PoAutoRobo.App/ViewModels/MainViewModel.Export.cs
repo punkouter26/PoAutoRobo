@@ -4,7 +4,7 @@ using Windows.UI;
 
 namespace PoAutoRobo.App.ViewModels;
 
-// The last step: how the captions look, the music, the quick preview, and the finished videos.
+// The last two steps: how the captions look, the music and the quick preview; then the finished videos.
 public partial class MainViewModel
 {
     // ---- Captions ----
@@ -82,23 +82,28 @@ public partial class MainViewModel
     [RelayCommand(CanExecute = nameof(HasExport))]
     private void ShowExport() => ShowInExplorer(LastExport!);
 
-    private bool CanRender => HasEpisode && FfmpegAvailable && !IsWorking;
+    // Not while a clip or teaser is being got ready to watch either: it draws into the same store of finished clips.
+    private bool CanRender => HasEpisode && FfmpegAvailable && !IsWorking && !IsWatching;
 
     [RelayCommand(CanExecute = nameof(CanRender))]
-    private Task BuildPreviewAsync() => RunActivityAsync("Building the preview", async ct =>
+    private Task BuildPreviewAsync() => RunActivityAsync("Building the preview", BuildPreviewNowAsync, "Preview ready.");
+
+    /// <summary>Builds the quick preview for the player on the Preview step. Part of a job already under way.</summary>
+    private async Task BuildPreviewNowAsync(CancellationToken ct)
     {
         ReleasePreview();
         Preview = null;
         var (episode, folder, progress) = (Episode!, EpisodeFolder!, RenderProgress());
         Preview = await Task.Run(() => _builder.PreviewAsync(episode, folder, SeriesBrand, progress, ct), ct);
         SyncCards(); // every clip has now been recorded
-    }, "Preview ready.");
+    }
 
     [RelayCommand(CanExecute = nameof(CanRender))]
-    private Task RenderAsync()
+    private async Task RenderAsync()
     {
         var preset = ExportChoices[ExportPresetIndex].Value;
-        return RunActivityAsync($"Rendering the master video ({preset.Height}p, {preset.Fps} fps)", ct => RenderMasterAsync(preset, ct));
+        if (await RunActivityAsync($"Rendering the master video ({preset.Height}p, {preset.Fps} fps)", ct => RenderMasterAsync(preset, ct)))
+            Premiere();
     }
 
     /// <summary>Renders the master video and writes everything that is uploaded with it. Part of a job already under way.</summary>
@@ -134,7 +139,16 @@ public partial class MainViewModel
     /// the master video. Asked about once, with the cost, and then left to run.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanMakeAll))]
-    private async Task MakeAllAsync()
+    private Task MakeAllAsync() => MakeEpisodeAsync(draft: false);
+
+    /// <summary>
+    /// The same, ending on the quick preview instead of the master: a draft to watch, to find what to change before
+    /// anything is rendered at full size.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanMakeAll))]
+    private Task MakeDraftAsync() => MakeEpisodeAsync(draft: true);
+
+    private async Task MakeEpisodeAsync(bool draft)
     {
         var estimate = CostEstimate.For(Episode!, _imageModel, Quality);
         var preset = ExportChoices[ExportPresetIndex].Value;
@@ -146,31 +160,146 @@ public partial class MainViewModel
             return;
         }
         var pictures = draw ? $"draws {char.ToLowerInvariant(estimate.Summary[0])}{estimate.Summary[1..]}" : PicturesAvailable ? "draws nothing new, as every clip has its picture." : "draws no pictures, as the picture service is not connected.";
-        var plan = $"Records every clip's voice, {pictures} Then renders the master video at {preset.Height}p, {preset.Fps} fps. You can stop it at any point and keep what is made.";
-        if (!await Confirm("Make the whole episode?", plan, "Make it") || !CanMakeAll)
+        var held = draw && estimate.Dollars is { } agreed ? $" It stops drawing rather than spend more than {SpendLog.Money(agreed)}." : "";
+        var end = draft ? "Then builds the quick preview to watch on the Preview step; nothing is rendered at full size." : $"Then renders the master video at {preset.Height}p, {preset.Fps} fps.";
+        var plan = $"Records every clip's voice, {pictures}{held} {end} You can stop it at any point and keep what is made.";
+        if (!await ConfirmSpend(draft ? "Make a draft to watch?" : "Make the whole episode?", plan, "Make it", draw ? estimate.Dollars ?? 0 : 0) || !CanMakeAll)
             return;
 
-        List<string> failures = [];
-        await RunActivityAsync("Making the whole episode", async ct =>
+        (List<string> Failures, string? Halted) drawn = ([], null);
+        var finished = await RunActivityAsync(draft ? "Making a draft of the episode" : "Making the whole episode", async ct =>
         {
             Phase(0, 0.15);
             await NarrateEveryClipAsync(ct);
             if (draw)
             {
-                Phase(0.15, 0.35);
-                failures = (await DrawAllAsync(estimate, ct)).Failures;
+                Phase(0.15, draft ? 0.55 : 0.35);
+                (_, drawn.Failures, drawn.Halted) = await DrawAllAsync(estimate, ct);
             }
-            Phase(0.5, 0.5);
-            await RenderMasterAsync(preset, ct);
+            if (draft)
+            {
+                Phase(0.7, 0.3);
+                await BuildPreviewNowAsync(ct);
+                StatusMessage = "The draft is ready to watch. Change what needs changing, then render the master video.";
+            }
+            else
+            {
+                Phase(0.5, 0.5);
+                await RenderMasterAsync(preset, ct);
+            }
         });
-        ReportFailures(failures);
+        if (finished && draft) Step = PreviewStep; // where the draft plays; a step change clears errors, so it comes before them
+        if (finished && !draft) Premiere();
+        if (drawn.Halted is { } halted) StatusMessage = $"{StatusMessage} {halted}".Trim();
+        ReportFailures(drawn.Failures);
     }
+
+    // ---- The one Make button in the header ----
+
+    /// <summary>What the Make button does when clicked: the next part of the episode still to be made.</summary>
+    public string MakeNextLabel => NextJob().Label;
+
+    // Voices first, as they fix every clip's length; then the pictures still wanted; then a draft to watch it all in.
+    private (string Label, System.Windows.Input.ICommand Command) NextJob()
+    {
+        if (Clips.Any(c => c.Measured is null && !c.OwnSound)) return ("Record voices", NarrateAllCommand);
+        if (Episode is { } episode && PicturesAvailable && !CostEstimate.For(episode, _imageModel, Quality).NothingToDo) return ("Generate pictures", GenerateAllCommand);
+        return ("Make a draft", MakeDraftCommand);
+    }
+
+    /// <summary>The Make button's own click: starts the next part, when it can start now. Each asks first, as it does from the menu.</summary>
+    public void MakeNext()
+    {
+        var (_, command) = NextJob();
+        if (command.CanExecute(null)) command.Execute(null);
+    }
+
+    // ---- Watching one clip or one teaser on its own ----
+
+    /// <summary>Set by the window: plays a short video beside the card it was made for, a clip's or a teaser's.</summary>
+    public Action<object, string> PlayVideo { get; set; } = (_, _) => { };
+
+    private CancellationTokenSource? _watching;
+
+    /// <summary>True while a clip or teaser is being got ready to watch. Renders wait meanwhile.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(SuggestTeasersCommand), nameof(RenderTeasersCommand), nameof(BuildPreviewCommand), nameof(MakeAllCommand),
+        nameof(MakeDraftCommand), nameof(WatchClipCommand), nameof(WatchTeaserCommand))]
+    public partial bool IsWatching { get; set; }
+
+    /// <summary>
+    /// Plays one clip on its own, small and with its sound. Drawn as the quick preview draws it, so after a preview it
+    /// plays at once. The voice is recorded first if this wording has not been, as Audition does.
+    /// </summary>
+    /// <param name="card">The clip; the selected one when null, as from the inspector.</param>
+    [RelayCommand(CanExecute = nameof(CanRender))]
+    private async Task WatchClipAsync(ClipViewModel? card)
+    {
+        if ((card ?? SelectedClip) is not { } clip || Episode is not { } episode) return;
+        var index = episode.Clips.ToList().FindIndex(c => c.Id == clip.Id);
+        if (index < 0) return; // taken out of the episode meanwhile
+        clip.IsBusy = true;
+        try
+        {
+            await WatchAsync(clip, (folder, ct) => _builder.ClipPreviewAsync(episode, folder, index, SeriesBrand, ct));
+        }
+        finally
+        {
+            clip.IsBusy = false;
+        }
+        SyncCards(); // its voice may have been recorded just now
+    }
+
+    /// <summary>
+    /// A card's own play button, which is there whatever else is going on: plays when it can, and says why when not.
+    /// </summary>
+    private void Watch(object card)
+    {
+        IRelayCommand command = card is TeaserViewModel ? WatchTeaserCommand : WatchClipCommand;
+        if (command.CanExecute(card))
+            command.Execute(card);
+        else if (IsWorking || IsWatching)
+            StatusMessage = "Wait for the job under way to finish, then press play again.";
+        else if (!FfmpegAvailable)
+            ErrorMessage = "FFmpeg is needed to play a clip. Install it, then restart the app.";
+    }
+
+    /// <summary>Makes a video to watch and plays it beside its card. Stopped when the window closes, so FFmpeg goes with it.</summary>
+    private async Task WatchAsync(object card, Func<string, CancellationToken, Task<string>> make)
+    {
+        if (EpisodeFolder is not { } folder) return;
+        using var watching = _watching = new CancellationTokenSource();
+        IsWatching = true;
+        ErrorMessage = null;
+        try
+        {
+            var video = await Task.Run(() => make(folder, watching.Token), watching.Token);
+            if (EpisodeFolder == folder) PlayVideo(card, video); // not when another episode was opened meanwhile
+        }
+        catch (OperationCanceledException)
+        {
+            // The window is closing.
+        }
+        catch (Exception e)
+        {
+            ErrorMessage = Plain(e);
+        }
+        finally
+        {
+            _watching = null;
+            IsWatching = false;
+        }
+    }
+
+    /// <summary>Stops a clip or teaser being got ready to watch. The window calls this as it closes.</summary>
+    public void StopWatching() => _watching?.Cancel();
 
     // Progress<T> hops back to the UI thread, so it must be made on it.
     private Progress<RenderProgress> RenderProgress() => new(p =>
     {
         if (!IsWorking) return; // a late report after the job ended
         ReportActivity(p.Activity, p.Fraction);
+        DrawingClips = p.Clips is not null;
         for (var i = 0; p.Clips is { } clips && i < Math.Min(clips.Count, Clips.Count); i++)
             Clips[i].Progress = clips[i] * 100;
     });

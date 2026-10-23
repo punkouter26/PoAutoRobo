@@ -1,10 +1,15 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # PoAutoRobo
 
 A Windows desktop app for one YouTube series: its owner teaching a Unitree R1 one skill per episode. From the lesson
 and the owner's own films it writes a script in fixed beats, records the voice (or keeps a film's own sound), makes a
 picture for each other clip, wraps the episode in the series' intro and outro, and renders it with FFmpeg, plus
 ten-second upright teasers. `SPEC.md` says what it does and why. **WinUI 3, unpackaged, .NET 10. Not Blazor and not a
-web app:** there are no routes, components or browser APIs here.
+web app:** there are no routes, components or browser APIs here. `AGENTS.md` is the working agreement for agents
+(branching, commit wording, checking the app starts, how replies are summarised); read it too.
 
 ## Commands
 
@@ -13,7 +18,10 @@ dotnet build PoAutoRobo.slnx
 dotnet test PoAutoRobo.slnx --filter "Category!=Integration&Category!=Live"   # unit tests, about a second
 dotnet test PoAutoRobo.slnx --filter "Category=Integration"                   # run FFmpeg and Edge for real
 dotnet format PoAutoRobo.slnx --verify-no-changes                             # CI runs this first
+dotnet test PoAutoRobo.slnx --filter "FullyQualifiedName~FfmpegArgsTests"     # one class, or one test by its name
 ```
+
+To run the app, start the built exe; its path is in `AGENTS.md`.
 
 Warnings are errors, analyzer and style rules included, and so is a package with a known weakness. Rules are tuned in
 `.editorconfig`; package versions live only in `Directory.Packages.props`.
@@ -27,9 +35,13 @@ Warnings are errors, analyzer and style rules included, and so is a package with
   - `Script`: the script writer and its prompts, grounding in the official repositories.
   - `Voice`: narration and word timings.
   - `Pictures`: whatever a clip shows: generated pictures, AI video, stock photos, code-drawn scenes.
-  - `Render`: FFmpeg command lines, captions, the intro and outro, teasers, the builder that turns an episode into a video.
-- `src/PoAutoRobo.App`: the window. One view model, `MainViewModel`, in partial files by concern (`.Library`,
-  `.Edits`, `.Pictures`, `.Export`, `.Series`, `.Teasers`, `.Activity`); views in `Views/`.
+  - `Render`: FFmpeg command lines, captions, the intro and outro, teasers, the builder that turns an episode into a video,
+    the intro's swarm of light (`Swarm`) and the video's made-up sounds (`Synth`).
+- `src/PoAutoRobo.App`: the window (`MainWindow`, with `.Moments`, `.Dialogs` and `.Taskbar` beside it). One view
+  model, `MainViewModel`, in partial files by concern (`.Steps`, `.Library`, `.Footage`, `.Edits`, `.Pictures`,
+  `.Export`, `.Series`, `.Teasers`, `.Activity`); views in `Views/`. Five steps, Intro, Lesson, Clips, Preview and
+  Publish, each with a checklist under the header (`MainViewModel.Guide`); name a step by its constant
+  (`MainViewModel.ClipsStep`), never its number.
 - `tests/PoAutoRobo.Core.Tests`: tests of the core. The app project has none.
 
 ## Rules that are easy to break
@@ -51,16 +63,33 @@ Warnings are errors, analyzer and style rules included, and so is a package with
   frame. Do not loosen its flags or its page policy.
 - **Working files go under `Files.ScratchRoot`**, never the episode folder (it is usually cloud-synced) and never
   loose in the temp folder. The app sweeps that folder at launch.
+- **A script is planned, then written a clip at a time, side by side** (`AzureScriptWriter.WriteClipsAsync`). Every
+  clip's request opens with the plan's request word for word, so keep anything that varies by clip after it.
 - **Programs the app starts die with the job**: register `FfmpegRunner.Kill` on the cancellation token, as
   `FfmpegRunner` and `SceneRenderer` do, so closing the window leaves nothing running.
 - **Clips are joined by copying**, so the intro, the outro and every clip are encoded exactly alike (`FfmpegArgs.Encode`)
   and each picture runs exactly its slot on the timeline. Every slot has a sound file: narration, a film's own sound
   (`FfmpegArgs.FootageSound`), the sting, or silence.
 
+- **Anything drawn over other content uses a plain `CanvasControl` on a `FrameClock`**, never Win2D's
+  `CanvasAnimatedControl`: that one hides whatever lies beneath it, so it is only for the backdrop (`NebulaBackdrop`).
+- **Shader values cross to the graphics card as plain numbers.** ComputeSharp's `float2`/`float3`/`float4` do their
+  arithmetic and swizzles only inside a shader; on the CPU they quietly give zeros, so work colours and positions out
+  with `System.Numerics` and build the shader's vectors from the parts. A chain of shader steps that hands on values
+  below 0 or above 1 needs `BufferPrecision` set to a float on every step, or Direct2D's 8-bit working buffers clip them.
+- **Effects are off unless asked for.** Decorative light and motion is drawn only when `Ui.Effects` is true: *Effects*
+  on in Settings and Windows showing animation. Ordinary movement (a card gliding, a panel sliding up) asks `Ui.Animated`.
+- **The simplest app is the default.** A control most episodes never need binds its visibility to
+  `MainViewModel.Advanced` (*Advanced controls* in Settings, off by default); a hidden choice must not change what is
+  made, so its value goes back to the standard one when advanced controls are turned off.
+- **Choices remembered between runs live in Settings** (`Views/SettingsDialog`, saved in `Prefs`), not in a flyout of
+  their own.
+
 ## Conventions
 
 - Comments and messages are written in plain words for the person using the app, and say *why*. Match that voice.
-- Seams for tests are delegates (`JsonChat`, `ImageMaker`, `RepoSource`, `Embed`, `FetchText`), not interfaces, unless
+- Seams for tests are delegates (`JsonChat`, `SeeingChat`, `Hear`, `ImageMaker`, `RepoSource`, `Embed`, `FetchText`,
+  `SecretSource`), not interfaces, unless
   there are two real implementations (`IScriptWriter`, `INarrator`).
 - Sizes and spacing used on more than one page are named in `App.xaml`; use the name, not the number.
 - A deliberate shortcut is marked `// ponytail:` with its ceiling and how to lift it.
@@ -72,7 +101,9 @@ Warnings are errors, analyzer and style rules included, and so is a package with
 ## Configuration
 
 Secrets come from Azure Key Vault as the signed-in `az login` user; nothing is stored on disk. Without a vault or a
-connection the app runs on stand-ins. Each of these environment variables overrides a default:
+connection the app runs on stand-ins. AI video, stock photos, the local model and passages by meaning are switched
+in Settings (`ServiceChoices`, saved in `%LOCALAPPDATA%\PoAutoRobo\services.json`, read as the app starts). Each of
+these environment variables overrides a default, and a service's variable wins over its switch:
 
 | Variable | What it sets |
 | --- | --- |
@@ -81,6 +112,8 @@ connection the app runs on stand-ins. Each of these environment variables overri
 | `POAUTOROBO_IMAGE_MODEL` | Picture model deployment |
 | `POAUTOROBO_VIDEO_MODEL` | Video model deployment; unset means AI video is not offered |
 | `POAUTOROBO_EMBEDDING_MODEL` | Embedding deployment; unset means passages are found by matching words alone |
+| `POAUTOROBO_LOCAL_MODEL` | A model on this computer (for example `qwen3:8b` in Ollama) for the small jobs; unset means the fast model does them |
+| `POAUTOROBO_LOCAL_URL` | Where that model answers in the OpenAI style; `http://localhost:11434/v1/` (Ollama) when unset |
 | `POAUTOROBO_VOICE` | Narration voice |
 | `POAUTOROBO_PEXELS_KEY` | Stock photo key, when not in the vault |
 | `POAUTOROBO_CHAT_RATES`, `POAUTOROBO_FAST_CHAT_RATES` | Dollars per million tokens as `input,cached,output`; unset means script use is shown unpriced |

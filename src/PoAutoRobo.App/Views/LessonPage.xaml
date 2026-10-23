@@ -7,8 +7,7 @@
     xmlns:vm="using:PoAutoRobo.App.ViewModels"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:library="using:PoAutoRobo.Core.Library"
-    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
-    Loaded="OnLoaded" Unloaded="OnUnloaded" ActualThemeChanged="OnThemeChanged">
+    Loaded="OnLoaded">
     <!-- Left: start something new. Right: carry on with something saved. -->
     <Grid>
         <!-- In a small window the form gives some of its width to the saved episodes. -->
@@ -42,22 +41,8 @@
             </Grid.RowDefinitions>
             <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,-12,0" Padding="0,0,12,0">
                 <StackPanel Spacing="{StaticResource Gap}">
-                    <Grid ColumnSpacing="{StaticResource GapSmall}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <NumberBox x:Name="NumberBox" Header="Episode" Minimum="1" Maximum="999" SpinButtonPlacementMode="Compact" MinWidth="110"
-                                   Value="{x:Bind ViewModel.EpisodeNumber, Mode=TwoWay}" ToolTipService.ToolTip="Where this episode comes in the series. The next number is filled in; change it to redo or skip one." />
-                        <StackPanel Grid.Column="1" Spacing="4">
-                            <TextBlock Text="Length" />
-                            <controls:Segmented x:Name="LengthSelector" SelectedIndex="{x:Bind ViewModel.LengthIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="Length"
-                                                ToolTipService.ToolTip="Standard aims at three to five minutes. Quick test is one clip of about 30 seconds, to try every step and render in a minute or two.">
-                                <controls:SegmentedItem Content="Standard" />
-                                <controls:SegmentedItem Content="Quick test" />
-                            </controls:Segmented>
-                        </StackPanel>
-                    </Grid>
+                    <NumberBox x:Name="NumberBox" Header="Episode" Minimum="1" Maximum="999" SpinButtonPlacementMode="Compact" MinWidth="110" HorizontalAlignment="Left"
+                               Value="{x:Bind ViewModel.EpisodeNumber, Mode=TwoWay}" ToolTipService.ToolTip="Where this episode comes in the series. The next number is filled in; change it to redo or skip one." />
                     <TextBox x:Name="TaughtBox" Header="What I taught it" PlaceholderText="Walking up three stairs without the handrail"
                              ToolTipService.ToolTip="What the R1 learned in this episode. A sentence is enough; notes or code also work. Ctrl+Enter writes the script."
                              Text="{x:Bind ViewModel.TopicInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -102,6 +87,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Path}">
                                         <Run Text="{x:Bind Name}" FontWeight="SemiBold" /><Run Text="  " /><Run Text="{x:Bind LengthText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -109,10 +95,14 @@
                                     <ToggleSwitch Grid.Column="1" IsOn="{x:Bind OwnSound, Mode=TwoWay}" OnContent="My sound" OffContent="Narrate" MinWidth="0" VerticalAlignment="Center"
                                                   ToolTipService.ToolTip="My sound: the film plays with its own sound. Narrate: the narrator speaks over it, fitted to its length." />
                                     <Button Grid.Column="2" Style="{StaticResource IconButton}"
+                                            AutomationProperties.Name="Suggest a note" ToolTipService.ToolTip="Suggest a note: a model watches a few frames of the film and says what it shows. A cent or two, once per film." Tag="{x:Bind}" Click="OnSuggestNote">
+                                        <SymbolIcon Symbol="View" />
+                                    </Button>
+                                    <Button Grid.Column="3" Style="{StaticResource IconButton}"
                                             AutomationProperties.Name="Remove film" ToolTipService.ToolTip="Leave this film out" Tag="{x:Bind}" Click="OnRemoveFootage">
                                         <SymbolIcon Symbol="Cancel" />
                                     </Button>
-                                    <TextBox Grid.Row="1" Grid.ColumnSpan="3" PlaceholderText="What it shows: first try, falls over" Text="{x:Bind Note, Mode=TwoWay}" MaxLength="200"
+                                    <TextBox Grid.Row="1" Grid.ColumnSpan="4" PlaceholderText="What it shows: first try, falls over" Text="{x:Bind Note, Mode=TwoWay}" MaxLength="200"
                                              AutomationProperties.Name="What the film shows" />
                                 </Grid>
                             </DataTemplate>
@@ -120,53 +110,55 @@
                     </ItemsControl>
                 </StackPanel>
             </ScrollViewer>
-            <Button x:Name="CreateEpisodeButton" Grid.Row="1" MinHeight="44" ToolTipService.ToolTip="Write the script for this lesson (Ctrl+Enter). Progress is shown at the top, with a Cancel button." Content="Write the script" Style="{ThemeResource AccentButtonStyle}"
+            <Button x:Name="CreateEpisodeButton" Grid.Row="1" MinHeight="44" ToolTipService.ToolTip="Write the script for this lesson (Ctrl+Enter). Progress is shown at the top, with a Cancel button." Content="Write the script" Style="{x:Bind app:Ui.Primary(ViewModel.WriteIsNext), Mode=OneWay}"
                     HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.CreateEpisodeCommand}" />
         </Grid>
 
         <!-- A slow cloud of light in the accent colour, worked out on the graphics card behind the saved episodes -->
-        <canvas:CanvasAnimatedControl x:Name="Backdrop" Grid.Column="1" Draw="OnDrawBackdrop" ClearColor="Transparent" IsHitTestVisible="False" IsTabStop="False"
-                                      AutomationProperties.AccessibilityView="Raw" />
+        <local:NebulaBackdrop x:Name="Backdrop" Grid.Column="1" FadeLeft="True" />
 
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel Padding="{StaticResource PagePadding}" Spacing="{StaticResource Gap}">
-                <TextBlock Text="Saved episodes" Style="{ThemeResource BodyStrongTextBlockStyle}" Visibility="{x:Bind ViewModel.HasLibrary, Mode=OneWay}" />
-                <!-- Scrolls by itself within a few rows, so only the episodes in view are built however many are saved -->
-                <GridView x:Name="Library" ItemsSource="{x:Bind ViewModel.Library}" SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnOpenEpisode"
-                          MaxHeight="232" AutomationProperties.Name="Saved episodes"
-                          Visibility="{x:Bind ViewModel.HasLibrary, Mode=OneWay}">
-                    <GridView.ItemTemplate>
-                        <DataTemplate x:DataType="library:EpisodeSummary">
-                            <Grid Width="{StaticResource LibraryItemWidth}" Height="{StaticResource LibraryItemHeight}" ColumnSpacing="10" Padding="4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="96" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <Border CornerRadius="4" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
-                                    <Image Source="{x:Bind local:ClipCard.ToImage(Thumbnail)}" Stretch="UniformToFill" AutomationProperties.AccessibilityView="Raw" />
-                                </Border>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Tip}">
-                                    <TextBlock Text="{x:Bind Title}" Style="{ThemeResource BodyStrongTextBlockStyle}" MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{x:Bind Details}" Style="{StaticResource QuietText}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                                <Button Grid.Column="2" Style="{StaticResource IconButton}" VerticalAlignment="Center" AutomationProperties.Name="Episode actions" ToolTipService.ToolTip="Copy, find or delete this episode">
-                                    <SymbolIcon Symbol="More" />
-                                    <Button.Flyout>
-                                        <MenuFlyout>
-                                            <MenuFlyoutItem Text="Open" Tag="{x:Bind}" Click="OnOpenFromMenu" />
-                                            <MenuFlyoutItem Text="Make a copy" Tag="{x:Bind}" Click="OnDuplicateEpisode" />
-                                            <MenuFlyoutItem Text="Show in File Explorer" Tag="{x:Bind}" Click="OnShowEpisode" />
-                                            <MenuFlyoutSeparator />
-                                            <MenuFlyoutItem Text="Delete…" Tag="{x:Bind}" Click="OnDeleteEpisode" />
-                                        </MenuFlyout>
-                                    </Button.Flyout>
-                                </Button>
-                            </Grid>
-                        </DataTemplate>
-                    </GridView.ItemTemplate>
-                </GridView>
-            </StackPanel>
-        </ScrollViewer>
+        <!-- The saved episodes -->
+        <Grid Grid.Column="1" Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource Gap}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBlock Text="Saved episodes" Style="{ThemeResource BodyStrongTextBlockStyle}" Visibility="{x:Bind ViewModel.HasLibrary, Mode=OneWay}" />
+            <!-- Scrolls by itself, so only the episodes in view are built however many are saved -->
+            <GridView x:Name="Library" Grid.Row="1" ItemsSource="{x:Bind ViewModel.Library}" SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnOpenEpisode"
+                      AutomationProperties.Name="Saved episodes"
+                      Visibility="{x:Bind ViewModel.HasLibrary, Mode=OneWay}">
+                <GridView.ItemTemplate>
+                    <DataTemplate x:DataType="library:EpisodeSummary">
+                        <Grid Width="{StaticResource LibraryItemWidth}" Height="{StaticResource LibraryItemHeight}" ColumnSpacing="10" Padding="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border CornerRadius="4" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
+                                <Image Source="{x:Bind local:ClipCard.ToImage(Thumbnail)}" Stretch="UniformToFill" AutomationProperties.AccessibilityView="Raw" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Tip}">
+                                <TextBlock Text="{x:Bind Title}" Style="{ThemeResource BodyStrongTextBlockStyle}" MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{x:Bind Details}" Style="{StaticResource QuietText}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Style="{StaticResource IconButton}" VerticalAlignment="Center" AutomationProperties.Name="Episode actions" ToolTipService.ToolTip="Copy, find or delete this episode">
+                                <SymbolIcon Symbol="More" />
+                                <Button.Flyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="Open" Tag="{x:Bind}" Click="OnOpenFromMenu" />
+                                        <MenuFlyoutItem Text="Make a copy" Tag="{x:Bind}" Click="OnDuplicateEpisode" />
+                                        <MenuFlyoutItem Text="Show in File Explorer" Tag="{x:Bind}" Click="OnShowEpisode" />
+                                        <MenuFlyoutSeparator />
+                                        <MenuFlyoutItem Text="Delete…" Tag="{x:Bind}" Click="OnDeleteEpisode" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+                        </Grid>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
+        </Grid>
     </Grid>
 </UserControl>
