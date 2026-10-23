@@ -89,13 +89,15 @@ public partial class MainViewModel
     }
 
     // With nothing chosen, the app makes its own of each, so none of them is ever simply missing.
-    public string SeriesLogoLabel => _kit.Logo ?? "Made for you";
+    public const string MadeForYou = "Made for you";
 
-    public string SeriesStingLabel => _kit.Sting ?? "Made for you";
+    public string SeriesLogoLabel => _kit.Logo ?? MadeForYou;
 
-    public string SeriesMusicLabel => _kit.Music ?? "Made for you";
+    public string SeriesStingLabel => _kit.Sting ?? MadeForYou;
 
-    public string SeriesMascotLabel => _kit.Mascot ?? "Made for you";
+    public string SeriesMusicLabel => _kit.Music ?? MadeForYou;
+
+    public string SeriesMascotLabel => _kit.Mascot ?? MadeForYou;
 
     /// <summary>The intro last drawn for the Intro step; null until one is asked for.</summary>
     [ObservableProperty]
@@ -294,6 +296,19 @@ public partial class MainViewModel
         _stillOfOutro = true;
         OutroPreviewPath = await _builder.PreviewOutroAsync(SeriesBrand, ct);
     });
+
+    /// <summary>The intro's sting or the outro's music as it will play, to listen to on the Intro step; null when it cannot be made. Free.</summary>
+    public async Task<string?> BookendSoundAsync(bool intro)
+    {
+        string? path = null;
+        await Guard(async () =>
+        {
+            if (!FfmpegAvailable)
+                throw new InvalidOperationException("FFmpeg is needed to play the music. Install it, then restart the app.");
+            path = await _builder.BookendSoundAsync(intro, SeriesBrand, CancellationToken.None);
+        });
+        return path;
+    }
 
     /// <summary>
     /// Gives the open episode the series look again (picture style, captions, music), as one step Undo reverses: the

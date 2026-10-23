@@ -16,6 +16,18 @@ public sealed partial class EpisodeBuilder
     /// <summary>A draft of the series outro, as <see cref="PreviewIntroAsync"/>: its full length, with the series' music or the app's own.</summary>
     public Task<string> PreviewOutroAsync(Brand brand, CancellationToken ct) => PreviewBookendAsync(false, brand, 0, ct);
 
+    /// <summary>
+    /// The intro's sting or the outro's music on its own, exactly as it will play: the series' own cut to the intro's
+    /// length or repeated to fill the outro, or the app's made-up one. For the Intro step to listen to; free.
+    /// </summary>
+    /// <returns>The sound file's path, in the clip cache.</returns>
+    public async Task<string> BookendSoundAsync(bool intro, Brand brand, CancellationToken ct)
+    {
+        var work = Files.NewScratchFolder(intro ? "sting" : "outro-music");
+        var sound = await BookendSoundAsync(intro, brand, SeriesKit.PathOf(brand.Folder, brand.Kit.Music), work, new MediaCache(ClipCacheFolder), ct);
+        return sound.AudioPath;
+    }
+
     private async Task<string> PreviewBookendAsync(bool intro, Brand brand, int number, CancellationToken ct)
     {
         var name = intro ? "intro" : "outro";

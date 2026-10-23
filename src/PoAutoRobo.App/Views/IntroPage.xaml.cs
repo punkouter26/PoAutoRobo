@@ -14,12 +14,15 @@ namespace PoAutoRobo.App.Views;
 public sealed partial class IntroPage : UserControl
 {
     private readonly MediaPlayer _player = new();
+    private readonly MediaPlayer _listen = new(); // the sting or the outro music on its own
+    private string? _listening;                   // which of them is playing: "sting", "music", or null
     private MainViewModel? _viewModel;
 
     public IntroPage()
     {
         InitializeComponent();
         IntroPlayer.SetMediaPlayer(_player);
+        _listen.MediaEnded += (_, _) => DispatcherQueue.TryEnqueue(StopListening); // told off the window's thread
     }
 
     public MainViewModel? ViewModel
@@ -35,12 +38,19 @@ public sealed partial class IntroPage : UserControl
     }
 
     /// <summary>Lets go of the video being shown, so the scratch sweep can remove it. The window calls this as it closes.</summary>
-    public void Release() => _player.Dispose();
+    public void Release()
+    {
+        _player.Dispose();
+        _listen.Dispose();
+    }
 
     // A new still takes the screen as soon as it is drawn, as the last change asked for it; a new intro or outro plays
     // over it as soon as it is made; leaving the page stops it.
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(MainViewModel.IntroPreviewPath) or nameof(MainViewModel.OutroPreviewPath)
+            || (e.PropertyName == nameof(MainViewModel.ShowIntro) && ViewModel?.ShowIntro == false))
+            StopListening(); // one sound at a time, and none once the page is left
         if (e.PropertyName == nameof(MainViewModel.StillPath) && ViewModel?.StillPath is { } still)
         {
             _player.Pause();
@@ -112,6 +122,30 @@ public sealed partial class IntroPage : UserControl
         if (sender is FrameworkElement { Tag: string role })
             ViewModel?.ClearSeriesFile(role);
     }
+
+    // The play buttons carry "sting" or "music" in Tag. Pressed while their sound plays, they stop it.
+    private async void OnListen(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string role } || ViewModel is null) return;
+        var again = _listening == role;
+        StopListening();
+        if (again || await ViewModel.BookendSoundAsync(role == "sting") is not { } sound) return;
+        _player.Pause(); // the intro or outro video, if one is playing
+        _listen.Source = MediaSource.CreateFromUri(new Uri(sound));
+        _listen.Play();
+        _listening = role;
+        (role == "sting" ? StingPlayIcon : MusicPlayIcon).Symbol = Symbol.Stop;
+    }
+
+    private void StopListening()
+    {
+        _listen.Pause();
+        _listening = null;
+        StingPlayIcon.Symbol = MusicPlayIcon.Symbol = Symbol.Play;
+    }
+
+    /// <summary>A file's clear button is there only once a file is picked: with none, the app's own is already in use.</summary>
+    public static Visibility Picked(string label) => Ui.Show(label != MainViewModel.MadeForYou);
 
     // ---- The small sketch of each ready-made look: where the mascot and the words sit, as FfmpegArgs draws them ----
 
