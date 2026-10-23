@@ -49,6 +49,7 @@
                              AcceptsReturn="True" TextWrapping="Wrap" MinHeight="96" MaxHeight="220" MaxLength="8000" ScrollViewer.VerticalScrollBarVisibility="Auto" />
                     <TextBlock x:Name="TopicCountText" Text="{x:Bind ViewModel.TopicCount, Mode=OneWay}" Style="{StaticResource QuietText}" Margin="0,-6,0,0" AutomationProperties.LiveSetting="Polite" />
                     <TextBox x:Name="WentWrongBox" Header="What went wrong (optional)" PlaceholderText="It leaned back and sat down on the second step"
+                             ToolTipService.ToolTip="What went wrong along the way, in a sentence or two. It goes to the script writer with what you taught, so the episode can tell that part of the story. Leave it empty if nothing did."
                              Text="{x:Bind ViewModel.WentWrongInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" MaxHeight="140" MaxLength="2000" ScrollViewer.VerticalScrollBarVisibility="Auto" />
                     <StackPanel Spacing="4">
@@ -99,11 +100,12 @@
                                         <SymbolIcon Symbol="View" />
                                     </Button>
                                     <Button Grid.Column="3" Style="{StaticResource IconButton}"
-                                            AutomationProperties.Name="Remove film" ToolTipService.ToolTip="Leave this film out" Tag="{x:Bind}" Click="OnRemoveFootage">
+                                            AutomationProperties.Name="Remove film" ToolTipService.ToolTip="Leave this film out of the lesson. Your file is not deleted; add it again with Add films." Tag="{x:Bind}" Click="OnRemoveFootage">
                                         <SymbolIcon Symbol="Cancel" />
                                     </Button>
                                     <TextBox Grid.Row="1" Grid.ColumnSpan="4" PlaceholderText="What it shows: first try, falls over" Text="{x:Bind Note, Mode=TwoWay}" MaxLength="200"
-                                             AutomationProperties.Name="What the film shows" />
+                                             AutomationProperties.Name="What the film shows"
+                                             ToolTipService.ToolTip="A few words on what this film shows. The script uses them to place the film in the beat it fits. The eye button beside it can suggest some." />
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -136,22 +138,25 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Border CornerRadius="4" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
+                            <Border CornerRadius="4" Background="{ThemeResource ControlAltFillColorSecondaryBrush}" ToolTipService.ToolTip="Click to open this episode and carry on with it.">
                                 <Image Source="{x:Bind local:ClipCard.ToImage(Thumbnail)}" Stretch="UniformToFill" AutomationProperties.AccessibilityView="Raw" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Tip}">
                                 <TextBlock Text="{x:Bind Title}" Style="{ThemeResource BodyStrongTextBlockStyle}" MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
                                 <TextBlock Text="{x:Bind Details}" Style="{StaticResource QuietText}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
-                            <Button Grid.Column="2" Style="{StaticResource IconButton}" VerticalAlignment="Center" AutomationProperties.Name="Episode actions" ToolTipService.ToolTip="Copy, find or delete this episode">
+                            <Button Grid.Column="2" Style="{StaticResource IconButton}" VerticalAlignment="Center" AutomationProperties.Name="Episode actions" ToolTipService.ToolTip="Open, copy, find or delete this episode. Clicking the episode itself opens it.">
                                 <SymbolIcon Symbol="More" />
                                 <Button.Flyout>
                                     <MenuFlyout>
-                                        <MenuFlyoutItem Text="Open" Tag="{x:Bind}" Click="OnOpenFromMenu" />
-                                        <MenuFlyoutItem Text="Make a copy" Tag="{x:Bind}" Click="OnDuplicateEpisode" />
-                                        <MenuFlyoutItem Text="Show in File Explorer" Tag="{x:Bind}" Click="OnShowEpisode" />
+                                        <MenuFlyoutItem Text="Open" Tag="{x:Bind}" Click="OnOpenFromMenu" ToolTipService.ToolTip="Open this episode to carry on with it." />
+                                        <MenuFlyoutItem Text="Make a copy" Tag="{x:Bind}" Click="OnDuplicateEpisode"
+                                                        ToolTipService.ToolTip="Save a second copy of this episode, with every picture and recording, to try something different without touching the first. Nothing is paid for again." />
+                                        <MenuFlyoutItem Text="Show in File Explorer" Tag="{x:Bind}" Click="OnShowEpisode"
+                                                        ToolTipService.ToolTip="Open this episode's folder, with its script, voices, pictures and finished videos, in File Explorer." />
                                         <MenuFlyoutSeparator />
-                                        <MenuFlyoutItem Text="Delete…" Tag="{x:Bind}" Click="OnDeleteEpisode" />
+                                        <MenuFlyoutItem Text="Delete…" Tag="{x:Bind}" Click="OnDeleteEpisode"
+                                                        ToolTipService.ToolTip="Move this episode's folder, with everything made for it, to the Recycle Bin. You are asked first." />
                                     </MenuFlyout>
                                 </Button.Flyout>
                             </Button>

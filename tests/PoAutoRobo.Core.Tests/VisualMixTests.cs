@@ -5,12 +5,16 @@ public sealed class VisualMixTests
 {
     private static IEnumerable<VisualKind> Kinds(Episode e) => e.Clips.Select(c => c.Visual.Kind);
 
+    /// <summary>The mix of plain picture types: how it is counted, checked, dealt, and what it leaves alone.</summary>
     [Fact]
-    public void Counts_use_largest_remainder_and_assignment_deals_exactly_those_counts()
+    public void A_mix_is_counted_by_largest_remainder_must_add_up_deals_the_same_for_a_seed_and_leaves_chosen_clips_alone()
     {
         // still, panels, title, clips → expected counts
         Counts_use_largest_remainder_and_assignment_deals_exactly_those_countsCase(40, 40, 20, 4, 2, 1, 1); // 1.6, 1.6, 0.8: two spare seats, the largest remainder first and then the earlier of the tied pair
         Counts_use_largest_remainder_and_assignment_deals_exactly_those_countsCase(34, 33, 33, 16, 6, 5, 5); // 5.44, 5.28, 5.28: the one spare seat goes to the largest remainder
+        Percentages_must_be_non_negative_and_sum_to_100();
+        Same_seed_gives_the_same_assignment_and_a_different_seed_reshuffles();
+        User_video_hand_picked_clips_and_the_kinds_the_script_chose_are_left_alone_and_excluded_from_the_counts();
     }
 
     private void Counts_use_largest_remainder_and_assignment_deals_exactly_those_countsCase(int still, int panels, int title, int clips, int eStill, int ePanels, int eTitle)
@@ -26,12 +30,6 @@ public sealed class VisualMixTests
         Assert.Equal(episode.Clips.Select(c => c.Id), assigned.Clips.Select(c => c.Id)); // clips stay where they are
     }
 
-    [Fact]
-    public void A_mix_must_add_up_and_the_same_seed_always_deals_it_the_same_way()
-    {
-        Percentages_must_be_non_negative_and_sum_to_100();
-        Same_seed_gives_the_same_assignment_and_a_different_seed_reshuffles();
-    }
 
     private void Percentages_must_be_non_negative_and_sum_to_100()
     {
@@ -48,8 +46,7 @@ public sealed class VisualMixTests
         Assert.NotEqual(Kinds(VisualMix.Assign(episode, mix)), Kinds(VisualMix.Assign(episode with { MixSeed = 7 }, mix)));
     }
 
-    [Fact]
-    public void User_video_hand_picked_clips_and_the_kinds_the_script_chose_are_left_alone_and_excluded_from_the_counts()
+    private void User_video_hand_picked_clips_and_the_kinds_the_script_chose_are_left_alone_and_excluded_from_the_counts()
     {
         var episode = ProjectStoreTests.NewEpisode(13);
         var clips = episode.Clips.ToList();

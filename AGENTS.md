@@ -13,7 +13,7 @@ what it does and why. Read both first. Where this file and `CLAUDE.md` disagree 
 
 - **Check it starts.** After any code change, close the running app, build, start it again and make sure the window
   opens without an error:
-  `dotnet build PoAutoRobo.slnx` then `src\PoAutoRobo.App\bin\Debug\net10.0-windows10.0.22621.0\<rid>\PoAutoRobo.App.exe`.
+  `dotnet build PoAutoRobo.slnx` then `src\PoAutoRobo.App\bin\Debug\net10.0-windows10.0.19041.0\<rid>\PoAutoRobo.App.exe`.
 - **Test only what changed.** Do not run the whole suite. Run the tests for the part you touched with
   `dotnet test PoAutoRobo.slnx --filter "FullyQualifiedName~<Name>"`, or none for a small edit such as wording.
 - **No warnings.** Warnings already stop the build (see `Directory.Build.props`); fix each one when it appears,
@@ -30,7 +30,8 @@ what it does and why. Read both first. Where this file and `CLAUDE.md` disagree 
 ## 4. UI changes and reporting
 
 - **Before and after.** For a change to what the window shows, capture the old and the new state, mark what changed,
-  save it as `SCREENSHOTS/YYMMDD-feature-name.html` and give its full path.
+  save it as `SCREENSHOTS/YYMMDD-feature-name.html` and give its full path. The folder stays on this computer and out
+  of the repository (`.gitignore`): its pictures are large and only matter on the day.
 - **Build version.** The window shows the build version, `YYMMDD commit` (a `+` after the commit means changes not
   yet committed), in its bottom-right corner. It is stamped at build time from the last commit (today's date alone
   when git is not available); see `StampBuildVersion` in

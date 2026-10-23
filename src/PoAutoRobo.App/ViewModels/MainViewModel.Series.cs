@@ -3,6 +3,13 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace PoAutoRobo.App.ViewModels;
 
+/// <summary>A ready-made look for the intro: its name, its accent colour as #RRGGBB, and its layout.</summary>
+public sealed record IntroStart(string Name, string Accent, IntroLayout Layout)
+{
+    /// <summary>The colour, for the small sketch of the look on its tile.</summary>
+    public Windows.UI.Color Colour => Windows.UI.Color.FromArgb(255, Convert.ToByte(Accent[1..3], 16), Convert.ToByte(Accent[3..5], 16), Convert.ToByte(Accent[5..7], 16));
+}
+
 /// <summary>The series brand kit: what every episode shares, set up once on the Intro step and in the Series dialog.</summary>
 public partial class MainViewModel
 {
@@ -78,6 +85,35 @@ public partial class MainViewModel
     [ObservableProperty]
     public partial string? IntroPreviewPath { get; set; }
 
+    /// <summary>The outro last drawn for the Intro step; null until one is asked for.</summary>
+    [ObservableProperty]
+    public partial string? OutroPreviewPath { get; set; }
+
+    public static Choice<IntroLayout>[] LayoutChoices { get; } =
+    [
+        new("Side", IntroLayout.Side), new("Centre", IntroLayout.Centre), new("Lower band", IntroLayout.Lower),
+    ];
+
+    public int SeriesLayoutIndex
+    {
+        get => Math.Max(0, Array.FindIndex(LayoutChoices, c => c.Value == _kit.Layout));
+        set
+        {
+            if (value >= 0 && value < LayoutChoices.Length) Store(_kit with { Layout = LayoutChoices[value].Value });
+        }
+    }
+
+    /// <summary>Ready-made looks for the intro to start from. Each sets the colour and the layout, and both can be changed after.</summary>
+    public static IntroStart[] IntroStarts { get; } =
+    [
+        new("Workshop", "#22CC88", IntroLayout.Side), new("Blueprint", "#2F80ED", IntroLayout.Centre),
+        new("Safety amber", "#FFB020", IntroLayout.Lower), new("Night shift", "#8B5CF6", IntroLayout.Centre),
+    ];
+
+    /// <summary>Gives the intro one of the ready-made looks: its colour, which the captions and straps share, and its layout.</summary>
+    public void UseIntroStart(IntroStart start) =>
+        Store(_kit with { Layout = start.Layout, Captions = _kit.Captions with { AccentColor = start.Accent } });
+
     private void Store(SeriesKit kit)
     {
         if (kit == _kit) return;
@@ -96,7 +132,7 @@ public partial class MainViewModel
 
     private static readonly string[] SeriesFields =
     [
-        nameof(SeriesChannel), nameof(SeriesTagline), nameof(SeriesOutro), nameof(SeriesLookIndex), nameof(SeriesCaptionIndex), nameof(SeriesAccent),
+        nameof(SeriesChannel), nameof(SeriesTagline), nameof(SeriesOutro), nameof(SeriesLookIndex), nameof(SeriesCaptionIndex), nameof(SeriesAccent), nameof(SeriesLayoutIndex),
         nameof(SeriesLogoLabel), nameof(SeriesStingLabel), nameof(SeriesMusicLabel), nameof(SeriesMascotLabel), nameof(SeriesBrand),
     ];
 
@@ -141,6 +177,15 @@ public partial class MainViewModel
             throw new InvalidOperationException("FFmpeg is needed to draw the intro. Install it, then restart the app.");
         var number = Episode?.Number is > 0 and var n ? n : Math.Max(1, (int)EpisodeNumber);
         IntroPreviewPath = await _builder.PreviewIntroAsync(SeriesBrand, number, ct);
+    });
+
+    /// <summary>Makes a draft of the outro as it will end every episode, at its full length. Built here: it costs nothing.</summary>
+    [RelayCommand]
+    private Task PreviewOutroAsync(CancellationToken ct) => Guard(async () =>
+    {
+        if (!FfmpegAvailable)
+            throw new InvalidOperationException("FFmpeg is needed to draw the outro. Install it, then restart the app.");
+        OutroPreviewPath = await _builder.PreviewOutroAsync(SeriesBrand, ct);
     });
 
     /// <summary>Gives the open episode the series look again (picture style, captions, music), as one step Undo reverses.</summary>

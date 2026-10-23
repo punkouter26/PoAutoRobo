@@ -178,22 +178,10 @@ public partial class MainViewModel
         Edit(episode => EpisodeEditor.Reorder(episode, [.. Clips.Select(c => c.Id)]));
     }
 
-    // Reordering without a drag: for keyboard and screen-reader use, and as a dependable alternative to dragging.
-    // Moving the card raises the same collection change a drag does, so the one reorder path handles both.
-    [RelayCommand]
-    private void MoveEarlier() => MoveSelected(-1);
-
-    [RelayCommand]
-    private void MoveLater() => MoveSelected(1);
-
-    private void MoveSelected(int by)
-    {
-        if (SelectedClip is not { } card) return;
-        var from = Clips.IndexOf(card);
-        MoveClip(from, from + by);
-    }
-
-    /// <summary>Moves the clip at one place to another, as a drag along the clip strip does, and keeps it picked.</summary>
+    /// <summary>
+    /// Moves the clip at one place to another, as a drag along the clip strip does, or Ctrl and an arrow on it, and keeps
+    /// it picked. Moving the card raises the same collection change a drag in the deck does, so one reorder path serves both.
+    /// </summary>
     public void MoveClip(int from, int to)
     {
         if (from < 0 || to < 0 || from >= Clips.Count || to >= Clips.Count || from == to) return;

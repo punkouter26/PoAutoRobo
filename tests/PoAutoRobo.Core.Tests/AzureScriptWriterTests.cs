@@ -41,7 +41,7 @@ public sealed class AzureScriptWriterTests
         Plan(8);
         var written = new List<IReadOnlyList<string>>();
 
-        var episode = await Writer.WriteEpisodeAsync(Lesson.Of("Whole-body balance"), [], EpisodeLength.Standard, Ct, new SynchronousProgress(written.Add));
+        var episode = await Writer.WriteEpisodeAsync(Lesson.Of("Whole-body balance"), [], EpisodeLength.Standard, Ct, new Relay<IReadOnlyList<string>>(written.Add));
 
         Assert.Equal("Balancing the R1", episode.Title);
         Assert.Equal("Whole-body balance", episode.Topic);
@@ -256,14 +256,15 @@ public sealed class AzureScriptWriterTests
     /// <summary>Opt-in: one real call. Reports how well the model keeps to the rules instead of asserting on style.</summary>
     [Fact]
     [Trait("Category", "Live")]
-    public async Task Live_episode_has_15_to_20_clips_at_depth_b()
+    public async Task Live_episode_has_as_many_clips_as_its_length_asks_at_depth_b()
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
         var settings = await AppSettings.LoadAsync(KeyVault.Default(), Ct);
 
-        var episode = await AzureScriptWriter.Create(settings).WriteEpisodeAsync(Lesson.Of("Training whole-body dynamic balancing on the Unitree R1 EDU"), [], EpisodeLength.Standard, Ct);
+        var length = EpisodeLength.Standard;
+        var episode = await AzureScriptWriter.Create(settings).WriteEpisodeAsync(Lesson.Of("Training whole-body dynamic balancing on the Unitree R1 EDU"), [], length, Ct);
 
-        Assert.InRange(episode.Clips.Count, 15, 20);
+        Assert.InRange(episode.Clips.Count, length.MinClips, length.MaxClips);
         Assert.All(episode.Clips, c => Assert.Equal(Tier.B, Assert.Single(c.Scripts).Key));
         var outOfRange = episode.Clips.Count(c => Durations.Warning(c) is not null);
         Assert.True(outOfRange <= episode.Clips.Count / 5, $"{outOfRange} of {episode.Clips.Count} clips fall outside 15–60s");
@@ -404,7 +405,7 @@ public sealed class AzureScriptWriterTests
         { Note = notes.Add };
         var written = new List<int>();
 
-        var episode = await writer.WriteEpisodeAsync(Lesson.Of("how beef is made"), [], new EpisodeLength(3, 3), Ct, new SynchronousProgress(titles => written.Add(titles.Count)));
+        var episode = await writer.WriteEpisodeAsync(Lesson.Of("how beef is made"), [], new EpisodeLength(3, 3), Ct, new Relay<IReadOnlyList<string>>(titles => written.Add(titles.Count)));
 
         Assert.Equal(["outline", "tier", "tier", "tier"], asked);
         Assert.Equal("From Pasture to Plate", episode.Title);
@@ -426,11 +427,5 @@ public sealed class AzureScriptWriterTests
         var refused = await Assert.ThrowsAsync<ScriptDeclinedException>(() => blocked.WriteEpisodeAsync(Lesson.Of("x"), [], new EpisodeLength(1, 1), Ct));
         Assert.Equal((DeclinedBy.RequestFilter, "violence: medium"), (refused.By, refused.Flagged));
         Assert.Equal(["outline"], asked);
-    }
-
-    /// <summary>Reports on the calling thread, so a test sees each report before the next thing happens.</summary>
-    private sealed class SynchronousProgress(Action<IReadOnlyList<string>> report) : IProgress<IReadOnlyList<string>>
-    {
-        public void Report(IReadOnlyList<string> value) => report(value);
     }
 }

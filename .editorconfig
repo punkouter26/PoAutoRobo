@@ -27,7 +27,6 @@ dotnet_diagnostic.IDE0161.severity = warning   # file-scoped namespace
 dotnet_diagnostic.CA1305.severity = none       # text shown to the one user follows their own regional settings on purpose
 dotnet_diagnostic.CA1848.severity = none       # the app has no logging
 dotnet_diagnostic.CA1001.severity = none       # the app's long-lived objects live until the process ends
-dotnet_diagnostic.CA1720.severity = none       # names like "Short" (an episode length) are the domain's own words
 dotnet_diagnostic.CA1826.severity = none       # FirstOrDefault on a list reads better than index checks; these lists hold a handful of items
 dotnet_diagnostic.CA1861.severity = none       # inline arrays in one-off calls are clearer than a named static field
 dotnet_diagnostic.CA1859.severity = none       # command methods must return plain Task whatever they hand back inside

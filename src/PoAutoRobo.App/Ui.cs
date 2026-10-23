@@ -20,6 +20,9 @@ public static class Ui
     /// <summary>Shown only when both are so: a control that is advanced and also needs something else, such as a film.</summary>
     public static Visibility ShowBoth(bool first, bool second) => Show(first && second);
 
+    /// <summary>Shown when either is so: an advanced control, shown too while what it sets is not the standard value, so nothing hidden changes what is made.</summary>
+    public static Visibility ShowEither(bool first, bool second) => Show(first || second);
+
     /// <summary>The opposite, for a control that may be used only while something is not so.</summary>
     public static bool Not(bool on) => !on;
 

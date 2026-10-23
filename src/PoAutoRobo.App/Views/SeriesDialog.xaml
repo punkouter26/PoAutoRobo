@@ -16,9 +16,9 @@
          who presents them, and this episode's pictures. Each tab is saved or applied as it says, and Done closes. -->
     <StackPanel Spacing="{StaticResource GapLarge}">
         <controls:Segmented x:Name="Tabs" HorizontalAlignment="Left" SelectionChanged="OnTab" AutomationProperties.Name="Part">
-            <controls:SegmentedItem Content="New episodes" />
-            <controls:SegmentedItem Content="Host" />
-            <controls:SegmentedItem Content="This episode" />
+            <controls:SegmentedItem Content="New episodes" ToolTipService.ToolTip="The music, picture style and captions every new episode starts with. Saved as you change them." />
+            <controls:SegmentedItem Content="Host" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}" ToolTipService.ToolTip="The cartoon robot that presents every episode: make candidates and pick one, or use your own image." />
+            <controls:SegmentedItem Content="This episode" ToolTipService.ToolTip="The open episode's look; with advanced controls on, also whether the host is on screen and its mix of picture types." />
         </controls:Segmented>
 
         <!-- What every new episode starts with, saved as it is changed. The intro and outro have their own step. -->
@@ -34,11 +34,14 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="Music" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.SeriesMusicLabel, Mode=OneWay}" Style="{StaticResource QuietText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                <Button Grid.Column="2" Content="Pick…" Tag="music" Click="OnPick" ToolTipService.ToolTip="Played quietly under every new episode, dipping whenever someone speaks." />
-                <Button Grid.Column="3" Style="{StaticResource IconButton}" Tag="music" Click="OnClear" AutomationProperties.Name="No music"><SymbolIcon Symbol="Cancel" /></Button>
+                <Button Grid.Column="2" Content="Pick…" Tag="music" Click="OnPick" ToolTipService.ToolTip="Choose a music file to play quietly under every new episode, dipping whenever someone speaks. The app keeps its own copy, so the original can be moved. Use music you have the right to publish." />
+                <Button Grid.Column="3" Style="{StaticResource IconButton}" Tag="music" Click="OnClear" AutomationProperties.Name="No music"
+                        ToolTipService.ToolTip="No music under new episodes. Episodes already made keep theirs."><SymbolIcon Symbol="Cancel" /></Button>
             </Grid>
-            <ComboBox x:Name="LookBox" Header="Pictures" HorizontalAlignment="Stretch" ItemsSource="{x:Bind vm:MainViewModel.LookChoices}" SelectedIndex="{x:Bind ViewModel.SeriesLookIndex, Mode=TwoWay}" />
-            <ComboBox x:Name="CaptionBox" Header="Captions" HorizontalAlignment="Stretch" ItemsSource="{x:Bind ViewModel.CaptionChoices}" SelectedIndex="{x:Bind ViewModel.SeriesCaptionIndex, Mode=TwoWay}" />
+            <ComboBox x:Name="LookBox" Header="Pictures" HorizontalAlignment="Stretch" ItemsSource="{x:Bind vm:MainViewModel.LookChoices}" SelectedIndex="{x:Bind ViewModel.SeriesLookIndex, Mode=TwoWay}"
+                      ToolTipService.ToolTip="The art style new episodes' pictures are drawn in: comic book, photograph, flat vector or cinematic. Episodes already made keep theirs." />
+            <ComboBox x:Name="CaptionBox" Header="Captions" HorizontalAlignment="Stretch" ItemsSource="{x:Bind ViewModel.CaptionChoices}" SelectedIndex="{x:Bind ViewModel.SeriesCaptionIndex, Mode=TwoWay}"
+                      ToolTipService.ToolTip="The caption style new episodes start with. Each episode can still change its own on the Preview step." />
             <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" TextWrapping="Wrap" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
         </StackPanel>
 
@@ -47,14 +50,19 @@
             <TextBlock TextWrapping="Wrap"
                        Text="The host is the cartoon robot that presents every episode. Pick one design and it is kept for all future pictures, so the character always looks the same." />
             <StackPanel Orientation="Horizontal" Spacing="{StaticResource GapSmall}">
-                <Button x:Name="MakeCandidatesButton" Content="Make 3 candidates" Command="{x:Bind ViewModel.MakeHostCandidatesCommand}" IsEnabled="{x:Bind ViewModel.PicturesAvailable, Mode=OneWay}" />
-                <Button Content="Cancel" Command="{x:Bind ViewModel.MakeHostCandidatesCancelCommand}" Visibility="{x:Bind ViewModel.MakeHostCandidatesCommand.IsRunning, Mode=OneWay}" />
-                <Button Content="Use my own image…" Click="OnPickOwnHost" />
-                <Button x:Name="UseHostButton" Content="Use selected" Style="{ThemeResource AccentButtonStyle}" IsEnabled="False" Click="OnUseHost" />
+                <Button x:Name="MakeCandidatesButton" Content="Make 3 candidates" Command="{x:Bind ViewModel.MakeHostCandidatesCommand}" IsEnabled="{x:Bind ViewModel.PicturesAvailable, Mode=OneWay}"
+                        ToolTipService.ToolTip="Draws three possible designs for the host to choose from. It costs three pictures; the price is shown just below. Needs the picture service." />
+                <Button Content="Cancel" Command="{x:Bind ViewModel.MakeHostCandidatesCancelCommand}" Visibility="{x:Bind ViewModel.MakeHostCandidatesCommand.IsRunning, Mode=OneWay}"
+                        ToolTipService.ToolTip="Stop making the candidates." />
+                <Button Content="Use my own image…" Click="OnPickOwnHost"
+                        ToolTipService.ToolTip="Choose a PNG of your own design to be the host. It is kept straight away for every new picture. Free." />
+                <Button x:Name="UseHostButton" Content="Use selected" Style="{ThemeResource AccentButtonStyle}" IsEnabled="False" Click="OnUseHost"
+                        ToolTipService.ToolTip="Keep the candidate you clicked below as the host, so every new picture shows the same character. Pictures already made are not changed." />
             </StackPanel>
             <TextBlock Text="{x:Bind ViewModel.HostCandidatesCost, Mode=OneWay}" Style="{StaticResource QuietText}" />
             <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.MakeHostCandidatesCommand.IsRunning, Mode=OneWay}" />
-            <GridView x:Name="Candidates" ItemsSource="{x:Bind ViewModel.HostCandidates}" SelectionMode="Single" SelectionChanged="OnCandidatePicked" MaxHeight="300">
+            <GridView x:Name="Candidates" ItemsSource="{x:Bind ViewModel.HostCandidates}" SelectionMode="Single" SelectionChanged="OnCandidatePicked" MaxHeight="300"
+                      ToolTipService.ToolTip="The designs just made. Click the one you like, then Use selected.">
                 <GridView.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
                         <Image Width="290" Height="193" Stretch="UniformToFill" Source="{x:Bind local:ClipCard.ToImage((x:String))}" AutomationProperties.Name="Host candidate" />
@@ -69,21 +77,25 @@
             <TextBlock x:Name="NoEpisodeText" Style="{StaticResource QuietText}" Visibility="Collapsed" Text="Open or write an episode to set its look." />
             <StackPanel x:Name="EpisodeControls" Spacing="{StaticResource Gap}">
                 <Button x:Name="SeriesLookButton" Content="Use the series look" HorizontalAlignment="Stretch" Command="{x:Bind ViewModel.UseSeriesLookCommand}"
-                        ToolTipService.ToolTip="Gives this episode the series' picture style, captions and music, as set on the Channel tab. Undo puts it back." />
-                <ComboBox x:Name="EpisodeLookBox" Header="Look of every picture and animation" HorizontalAlignment="Stretch"
-                          ToolTipService.ToolTip="The art direction for the whole episode. Changing it marks the pictures you already have as out of date." />
-                <ToggleSwitch x:Name="HostSwitch" Header="Host in every clip" OnContent="On screen" OffContent="Voiceover only"
-                              ToolTipService.ToolTip="Shows or hides the host in every clip at once. Each clip still has its own switch." />
+                        ToolTipService.ToolTip="Gives this episode the series' picture style, captions and music, as set on the New episodes tab. Useful for an episode made before you changed them. Undo puts it back." />
+                <ComboBox x:Name="EpisodeLookBox" Header="Look of every picture and animation" HorizontalAlignment="Stretch" SelectionChanged="OnLookPicked"
+                          ToolTipService.ToolTip="The art direction for this episode's pictures, given as soon as you pick one. Pictures you already have are marked out of date, to draw again when you choose. Undo puts it back." />
+                <ToggleSwitch x:Name="HostSwitch" Header="Host in every clip" OnContent="On screen" OffContent="Voiceover only" Toggled="OnHostToggled" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}"
+                              ToolTipService.ToolTip="Shows or hides the host in every clip at once, as soon as you flip it. Each clip still has its own switch on its Picture tab. Undo puts it back." />
                 <!-- The mix of picture types is an advanced control -->
                 <StackPanel Spacing="{StaticResource Gap}" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}">
                     <TextBlock TextWrapping="Wrap" Style="{StaticResource QuietText}"
                                Text="The script chose a picture type for each clip. These sliders deal the plain ones (stills, panel sequences and title cards) afresh by share. Everything else is left as it is: animations, charts, photographs and footage, your own video, and any clip whose picture type you set by hand." />
-                    <Slider x:Name="StillSlider" Header="Still panel: one picture with a slow pan and zoom" Maximum="100" StepFrequency="5" ValueChanged="OnMixChanged" />
-                    <Slider x:Name="PanelsSlider" Header="Panel sequence: three pictures cut to the voice" Maximum="100" StepFrequency="5" ValueChanged="OnMixChanged" />
-                    <Slider x:Name="TitleSlider" Header="Title card: text only, no cost" Maximum="100" StepFrequency="5" ValueChanged="OnMixChanged" />
-                    <TextBlock x:Name="TotalText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <Slider x:Name="StillSlider" Header="Still panel: one picture with a slow pan and zoom" Maximum="100" StepFrequency="5" ValueChanged="OnMixChanged"
+                            ToolTipService.ToolTip="The share of plain clips shown as one still picture. Drag to set it; the three shares must add up to 100 before Apply." />
+                    <Slider x:Name="PanelsSlider" Header="Panel sequence: three pictures cut to the voice" Maximum="100" StepFrequency="5" ValueChanged="OnMixChanged"
+                            ToolTipService.ToolTip="The share of plain clips shown as three pictures in turn: livelier, but three pictures to pay for instead of one. The three shares must add up to 100." />
+                    <Slider x:Name="TitleSlider" Header="Title card: text only, no cost" Maximum="100" StepFrequency="5" ValueChanged="OnMixChanged"
+                            ToolTipService.ToolTip="The share of plain clips shown as words on a card, which costs nothing to make. The three shares must add up to 100." />
+                    <TextBlock x:Name="TotalText" Style="{ThemeResource BodyStrongTextBlockStyle}" ToolTipService.ToolTip="The three shares added together. Apply can be clicked once they make 100." />
                     <StackPanel Orientation="Horizontal" Spacing="{StaticResource GapSmall}">
-                        <Button x:Name="ApplyMixButton" Content="Apply" Style="{ThemeResource AccentButtonStyle}" Click="OnApplyMix" />
+                        <Button x:Name="ApplyMixButton" Content="Apply" Style="{ThemeResource AccentButtonStyle}" Click="OnApplyMix"
+                                ToolTipService.ToolTip="Gives this episode the look, host setting and shares chosen above. A clip that changes picture type starts without a picture, made again when you ask and at the usual price. Undo puts it all back." />
                         <Button x:Name="RerollButton" Content="Re-roll" Click="OnReroll"
                                 ToolTipService.ToolTip="Keeps the shares last applied and deals them to different clips. A clip that changes type starts without a picture; Undo puts it back." />
                     </StackPanel>

@@ -14,46 +14,35 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                <!-- No move buttons here: cards are moved by dragging them, or along the strip under the deck (Ctrl and the arrows there) -->
                 <TextBox x:Name="TitleBox" Text="{x:Bind ViewModel.SelectedClip.Title, Mode=OneWay}" LostFocus="OnTitleLostFocus" KeyDown="OnTitleKey" VerticalAlignment="Center" AutomationProperties.Name="Clip title"
                          ToolTipService.ToolTip="This clip's title. It is shown on a title card and in the chapter list. Enter saves it." />
-                <Button x:Name="MoveEarlierButton" Grid.Column="1" Style="{StaticResource IconButton}" Command="{x:Bind ViewModel.MoveEarlierCommand}" AutomationProperties.Name="Move earlier"
-                        ToolTipService.ToolTip="Move this clip one place towards the start (Alt+Left). You can also drag the cards.">
-                    <Button.KeyboardAccelerators>
-                        <KeyboardAccelerator Modifiers="Menu" Key="Left" />
-                    </Button.KeyboardAccelerators>
-                    <SymbolIcon Symbol="Back" />
-                </Button>
-                <Button x:Name="MoveLaterButton" Grid.Column="2" Style="{StaticResource IconButton}" Command="{x:Bind ViewModel.MoveLaterCommand}" AutomationProperties.Name="Move later"
-                        ToolTipService.ToolTip="Move this clip one place towards the end (Alt+Right). You can also drag the cards.">
-                    <Button.KeyboardAccelerators>
-                        <KeyboardAccelerator Modifiers="Menu" Key="Right" />
-                    </Button.KeyboardAccelerators>
-                    <SymbolIcon Symbol="Forward" />
-                </Button>
-                <Button x:Name="ClipMoreButton" Grid.Column="3" Style="{StaticResource IconButton}" AutomationProperties.Name="More actions for this clip" ToolTipService.ToolTip="Add, copy or delete a clip">
+                <Button x:Name="ClipMoreButton" Grid.Column="1" Style="{StaticResource IconButton}" AutomationProperties.Name="More actions for this clip" ToolTipService.ToolTip="Add a new clip after this one, make a copy of it, or delete it. Undo (Ctrl+Z) puts any of these back.">
                     <SymbolIcon Symbol="More" />
                     <Button.Flyout>
                         <MenuFlyout Placement="Bottom">
-                            <MenuFlyoutItem Text="Add a clip after this one" Command="{x:Bind ViewModel.AddClipCommand}" />
-                            <MenuFlyoutItem Text="Make a copy" Command="{x:Bind ViewModel.DuplicateClipCommand}" KeyboardAcceleratorTextOverride="Ctrl+D" />
+                            <MenuFlyoutItem Text="Add a clip after this one" Command="{x:Bind ViewModel.AddClipCommand}"
+                                            ToolTipService.ToolTip="Puts a blank clip straight after this one, as a title card with placeholder words for you to replace." />
+                            <MenuFlyoutItem Text="Make a copy" Command="{x:Bind ViewModel.DuplicateClipCommand}" KeyboardAcceleratorTextOverride="Ctrl+D"
+                                            ToolTipService.ToolTip="Puts a second copy of this clip straight after it, with its words and pictures, so you can try a variation. Its voice is recorded afresh." />
                             <MenuFlyoutSeparator />
-                            <MenuFlyoutItem Text="Delete this clip" Command="{x:Bind ViewModel.RemoveClipCommand}" KeyboardAcceleratorTextOverride="Delete" />
+                            <MenuFlyoutItem Text="Delete this clip" Command="{x:Bind ViewModel.RemoveClipCommand}" KeyboardAcceleratorTextOverride="Delete"
+                                            ToolTipService.ToolTip="Takes this clip out of the episode without asking; Undo (Ctrl+Z) brings it back. An episode keeps at least one clip." />
                         </MenuFlyout>
                     </Button.Flyout>
                 </Button>
             </Grid>
 
             <controls:Segmented x:Name="TabSelector" SelectedIndex="{x:Bind ViewModel.InspectorTab, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="What to edit">
-                <controls:SegmentedItem Content="Words" />
-                <controls:SegmentedItem Content="Picture" />
+                <controls:SegmentedItem Content="Words" ToolTipService.ToolTip="Edit what this clip says, and listen to how it sounds." />
+                <controls:SegmentedItem Content="Picture" ToolTipService.ToolTip="Edit what this clip shows: its picture, or a film of your own in its place." />
             </controls:Segmented>
 
-            <!-- Words: the depth, the dialogue and the voice -->
+            <!-- Words: the dialogue and the voice; the depth is an advanced control, shown too for a clip not on the standard B -->
             <StackPanel Spacing="{StaticResource Gap}" Visibility="{x:Bind app:Ui.ShowIf(ViewModel.InspectorTab, 0), Mode=OneWay}">
                 <controls:Segmented x:Name="TierSelector" SelectedIndex="{x:Bind ViewModel.SelectedClip.TierIndex, Mode=TwoWay}" HorizontalAlignment="Stretch"
+                                    Visibility="{x:Bind app:Ui.ShowEither(ViewModel.Advanced, ViewModel.SelectedClip.OffStandardTier), Mode=OneWay}"
                                     AutomationProperties.Name="Depth of explanation"
                                     ToolTipService.ToolTip="How deep this clip goes. Every clip starts on B; A and C are written the first time you pick them, which takes a few seconds.">
                     <controls:SegmentedItem Content="A · Accessible" />
@@ -64,7 +53,8 @@
                          AcceptsReturn="True" TextWrapping="Wrap" MinHeight="180" MaxHeight="360" ScrollViewer.VerticalScrollBarVisibility="Auto"
                          Text="{x:Bind ViewModel.DraftDialogue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          LostFocus="OnDialogueLostFocus" />
-                <TextBlock x:Name="DraftStatsText" Text="{x:Bind ViewModel.DraftStats, Mode=OneWay}" Style="{StaticResource QuietText}" Margin="0,-6,0,0" />
+                <TextBlock x:Name="DraftStatsText" Text="{x:Bind ViewModel.DraftStats, Mode=OneWay}" Style="{StaticResource QuietText}" Margin="0,-6,0,0"
+                           ToolTipService.ToolTip="How long the words above are, and roughly how long they take to say, updated as you type. The real length is measured once the voice is recorded." />
                 <!-- Said here, as you type, and not in the message bar after you click away -->
                 <TextBlock x:Name="DraftProblemText" Text="{x:Bind ViewModel.DraftProblem, Mode=OneWay}" Visibility="{x:Bind app:Ui.ShowText(ViewModel.DraftProblem), Mode=OneWay}"
                            Style="{StaticResource CautionText}" Margin="0,-6,0,0" AutomationProperties.LiveSetting="Polite" />
@@ -94,7 +84,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:GroundingSnippet">
                                 <StackPanel Spacing="4" Margin="0,0,0,12">
-                                    <HyperlinkButton Padding="0" NavigateUri="{x:Bind Url}">
+                                    <HyperlinkButton Padding="0" NavigateUri="{x:Bind Url}" ToolTipService.ToolTip="Open this passage where it is published, in your web browser, to read it in full or check a figure.">
                                         <TextBlock TextWrapping="Wrap">
                                             <Run Text="{x:Bind Repo}" /><Run Text=" · " /><Run Text="{x:Bind Path}" />
                                         </TextBlock>
@@ -117,8 +107,8 @@
                 <TextBox x:Name="PromptBox" Header="What the picture shows" Text="{x:Bind ViewModel.SelectedClip.VisualPrompt, Mode=OneWay}" LostFocus="OnPromptLostFocus"
                          AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="140" ScrollViewer.VerticalScrollBarVisibility="Auto"
                          ToolTipService.ToolTip="One sentence describing this clip's picture. Change it, then generate the picture again." />
-                <!-- The host in this picture: whether it is there, and what it is doing -->
-                <Grid ColumnSpacing="{StaticResource GapSmall}">
+                <!-- The host in this picture: whether it is there, and what it is doing. An advanced control: the script chooses it. -->
+                <Grid ColumnSpacing="{StaticResource GapSmall}" Visibility="{x:Bind ViewModel.Advanced, Mode=OneWay}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -166,7 +156,8 @@
                               IsOn="{x:Bind ViewModel.SelectedClip.RobotView, Mode=OneWay}" Toggled="OnRobotViewToggled" Visibility="{x:Bind app:Ui.ShowBoth(ViewModel.Advanced, ViewModel.SelectedClip.HasUserVideo), Mode=OneWay}"
                               ToolTipService.ToolTip="Show the film as the R1's own camera might see it, with the beat and the clip's title in its readout. A film from the beat where it went wrong also glitches. Drawn here, so it costs nothing." />
                 <Button x:Name="RemoveVideoButton" Content="Use a generated picture instead" HorizontalAlignment="Stretch" MinHeight="44" Command="{x:Bind ViewModel.RemoveVideoCommand}"
-                        Visibility="{x:Bind app:Ui.ShowBoth(ViewModel.Advanced, ViewModel.SelectedClip.HasUserVideo), Mode=OneWay}" />
+                        Visibility="{x:Bind app:Ui.ShowBoth(ViewModel.Advanced, ViewModel.SelectedClip.HasUserVideo), Mode=OneWay}"
+                        ToolTipService.ToolTip="Takes your film off this clip, which becomes a narrated title card until you choose a picture type and generate one. Your file is not deleted, and Undo puts the film back." />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

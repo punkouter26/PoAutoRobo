@@ -12,7 +12,8 @@
             <TextBlock Text="Sound" Style="{StaticResource SectionHeading}" />
             <ToggleSwitch x:Name="SoundsSwitch" Header="Sounds" IsOn="{x:Bind ViewModel.SoundsOn, Mode=TwoWay}"
                           ToolTipService.ToolTip="A chime when a long job finishes, a tick as each clip of a batch is done, a low note when something goes wrong, and the buttons' own clicks." />
-            <Slider Header="Volume" Minimum="0" Maximum="1" StepFrequency="0.05" IsThumbToolTipEnabled="False" Value="{x:Bind ViewModel.SoundVolume, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.SoundsOn, Mode=OneWay}" />
+            <Slider Header="Volume" Minimum="0" Maximum="1" StepFrequency="0.05" IsThumbToolTipEnabled="False" Value="{x:Bind ViewModel.SoundVolume, Mode=TwoWay}" IsEnabled="{x:Bind ViewModel.SoundsOn, Mode=OneWay}"
+                    ToolTipService.ToolTip="How loud the app's own sounds are, not the videos you make. Drag left for quieter. Turn Sounds on to use it." />
 
             <TextBlock Text="Pictures" Style="{StaticResource SectionHeading}" />
             <ToggleSwitch x:Name="DraftPicturesSwitch" Header="Draft-quality pictures" IsOn="{x:Bind ViewModel.DraftPictures, Mode=TwoWay}"
@@ -21,7 +22,8 @@
             <TextBlock Text="Spending" Style="{StaticResource SectionHeading}" />
             <NumberBox x:Name="BudgetBox" Header="Monthly budget in dollars (0 for none)" Minimum="0" SmallChange="5" LargeChange="20" SpinButtonPlacementMode="Compact" Value="{x:Bind ViewModel.MonthlyBudget, Mode=TwoWay}"
                        ToolTipService.ToolTip="Once this month's spending across every episode would pass this, the app stops before making anything that costs money." />
-            <TextBlock x:Name="SpendText" Text="{x:Bind ViewModel.SpendDetail, Mode=OneWay}" Style="{StaticResource QuietText}" IsTextSelectionEnabled="True" />
+            <TextBlock x:Name="SpendText" Text="{x:Bind ViewModel.SpendDetail, Mode=OneWay}" Style="{StaticResource QuietText}" IsTextSelectionEnabled="True"
+                       ToolTipService.ToolTip="What the open episode has spent so far, by kind and dearest first, and this month's total across every episode. Worked out afresh each time Settings opens." />
 
             <TextBlock Text="Display" Style="{StaticResource SectionHeading}" />
             <ToggleSwitch x:Name="EffectsSwitch" Header="Effects" IsOn="{x:Bind ViewModel.Effects, Mode=TwoWay}"
@@ -29,24 +31,24 @@
             <TextBlock x:Name="NoAnimationText" Style="{StaticResource QuietText}" TextWrapping="Wrap" Visibility="Collapsed"
                        Text="Windows is set to show no animation, so effects stay off whatever this says." />
             <ToggleSwitch x:Name="AdvancedSwitch" Header="Advanced controls" IsOn="{x:Bind ViewModel.Advanced, Mode=TwoWay}"
-                          ToolTipService.ToolTip="Each clip's picture type, another take, earlier takes and the robot's-eye view; the mix of picture types; 4K or 60 fps video; the editor's read of the script; and making the whole episode in one go. Turned off, the video size goes back to 1080p at 30 fps." />
+                          ToolTipService.ToolTip="Shows the controls most episodes never need: each clip's depth (A, B or C), host switch, picture type, another take, earlier takes and the robot's-eye view; the host and the mix of picture types under Series and look; caption size, outline and any colour; 4K or 60 fps video; the editor's read of the script; and making the whole episode in one go. Turned off, the video size goes back to 1080p at 30 fps; a clip or caption already set away from the standard keeps its control in view." />
 
             <TextBlock Text="Services" Style="{StaticResource SectionHeading}" />
             <TextBlock x:Name="LiveText" Style="{StaticResource QuietText}" TextWrapping="Wrap" />
             <ToggleSwitch x:Name="VideoSwitch" Header="AI video" IsOn="{x:Bind Services.Video, Mode=TwoWay}"
                           ToolTipService.ToolTip="Offers a short AI-made video for a clip. Each one costs more than a picture, and you are shown the cost and asked first." />
             <TextBox Header="Video model" Text="{x:Bind Services.VideoModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Visibility="{x:Bind Services.Video, Mode=OneWay}"
-                     ToolTipService.ToolTip="The name of the video deployment on your Azure AI resource." />
+                     ToolTipService.ToolTip="The name of the video deployment on your Azure AI resource, exactly as it is named there. Used from the next time the app starts." />
             <ToggleSwitch x:Name="StockSwitch" Header="Stock photos" IsOn="{x:Bind Services.StockPhotos, Mode=TwoWay}"
                           ToolTipService.ToolTip="Offers real photographs from Pexels, free, with the Pexels key in your vault." />
             <ToggleSwitch x:Name="LocalSwitch" Header="Small jobs on this computer" IsOn="{x:Bind Services.Local, Mode=TwoWay}"
                           ToolTipService.ToolTip="A model run on this computer in Ollama does the small jobs for free: checking a picture still fits, search terms, teaser ideas and upload notes. Ollama must be running; without it the fast model does them." />
             <TextBox Header="Local model" Text="{x:Bind Services.LocalModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Visibility="{x:Bind Services.Local, Mode=OneWay}"
-                     ToolTipService.ToolTip="The model's name in Ollama." />
+                     ToolTipService.ToolTip="The model's name in Ollama, such as qwen3:8b. It must already be downloaded there. Used from the next time the app starts." />
             <ToggleSwitch x:Name="MeaningSwitch" Header="Find passages by meaning" IsOn="{x:Bind Services.Meaning, Mode=TwoWay}"
                           ToolTipService.ToolTip="Finds the passages of the robot's documentation a script is written from by what they mean, not only by the words they share. Costs a little each time a script is written." />
             <TextBox Header="Embedding model" Text="{x:Bind Services.EmbeddingModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Visibility="{x:Bind Services.Meaning, Mode=OneWay}"
-                     ToolTipService.ToolTip="The name of the embedding deployment on your Azure AI resource." />
+                     ToolTipService.ToolTip="The name of the embedding deployment on your Azure AI resource, exactly as it is named there. Used from the next time the app starts." />
             <TextBlock x:Name="OutsideText" Style="{StaticResource QuietText}" TextWrapping="Wrap" Visibility="Collapsed" />
             <StackPanel Spacing="{StaticResource GapSmall}" Visibility="{x:Bind Services.NeedsRestart, Mode=OneWay}">
                 <TextBlock Style="{StaticResource QuietText}" TextWrapping="Wrap" Text="Services are set up as the app starts, so this change takes effect when it starts again." />

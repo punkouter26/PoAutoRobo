@@ -9,7 +9,7 @@ using Windows.Storage;
 namespace PoAutoRobo.App;
 
 // New cues go on the end; nothing saves them, but the order reads as the order they were added in.
-public enum Cue { Finished, Stopped, Tick, Error, Delete, Undo, Sour, Land, Pour, Fanfare }
+public enum Cue { Finished, Stopped, Tick, Error, Delete, Undo, Sour, Land, Fanfare }
 
 /// <summary>
 /// The app's own sounds, worked out as numbers: short notes with a quick start and a fading tail, and a little noise.
@@ -158,7 +158,6 @@ public static class Sounds
     /// <summary>The cue as one channel of samples, -1 to 1.</summary>
     private static float[] Samples(Cue cue, int step)
     {
-        if (cue == Cue.Pour) return Pouring();
         var notes = Score(cue, step);
         var samples = new float[(int)(notes.Max(n => n.Start + n.Length) * Rate)];
         foreach (var (pitch, start, length, loudness) in notes)
@@ -178,30 +177,6 @@ public static class Sounds
         if (peak > 0.9f)
             for (var i = 0; i < samples.Length; i++)
                 samples[i] *= 0.9f / peak;
-        return samples;
-    }
-
-    /// <summary>
-    /// Liquid poured into a glass: noise through a filter whose opening wobbles, which the ear hears as bubbles, rising
-    /// in pitch as the glass fills. Always the same, as the noise is drawn from the same seed.
-    /// </summary>
-    private static float[] Pouring()
-    {
-        const double Length = 0.8;
-        var samples = new float[(int)(Length * Rate)];
-        var random = new Random(3);
-        var (low, band) = (0.0, 0.0);
-        for (var i = 0; i < samples.Length; i++)
-        {
-            var t = (double)i / Rate;
-            var centre = (500 + 700 * t / Length) * (1 + 0.35 * Math.Sin(2 * Math.PI * 23 * t) * Math.Sin(2 * Math.PI * 3.1 * t));
-            // A two-pole filter (state variable) gives the noise the hollow ring of the glass.
-            var f = 2 * Math.Sin(Math.PI * centre / Rate);
-            low += f * band;
-            band += f * (random.NextDouble() * 2 - 1 - low - band / 6);
-            var swell = Math.Min(1, t / 0.05) * Math.Min(1, (Length - t) / 0.2);
-            samples[i] = (float)(band * swell * 0.5);
-        }
         return samples;
     }
 

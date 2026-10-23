@@ -37,6 +37,11 @@ public partial class MainViewModel
 
     private void SetCaptions(CaptionStyle style) => Edit(e => e with { Captions = style });
 
+    /// <summary>The captions' size or outline is not the standard one. Their controls are advanced, and show too while this is so.</summary>
+    public bool CaptionsTuned => Captions.FontSize != Standard.FontSize || Captions.StrokeWidth != Standard.StrokeWidth;
+
+    private static readonly CaptionStyle Standard = new();
+
     // ---- Music ----
 
     public static IReadOnlyList<string> MusicExtensions { get; } = [".mp3", ".wav", ".m4a", ".flac", ".ogg"];
@@ -194,10 +199,7 @@ public partial class MainViewModel
         ReportFailures(drawn.Failures);
     }
 
-    // ---- The one Make button in the header ----
-
-    /// <summary>What the Make button does when clicked: the next part of the episode still to be made.</summary>
-    public string MakeNextLabel => NextJob().Label;
+    // ---- The next part of the episode to make, for the bar under the header on the clips page ----
 
     // Voices first, as they fix every clip's length; then the pictures still wanted; then a draft to watch it all in.
     private (string Label, System.Windows.Input.ICommand Command) NextJob()
@@ -205,13 +207,6 @@ public partial class MainViewModel
         if (Clips.Any(c => c.Measured is null && !c.OwnSound)) return ("Record voices", NarrateAllCommand);
         if (Episode is { } episode && PicturesAvailable && !CostEstimate.For(episode, _imageModel, Quality).NothingToDo) return ("Generate pictures", GenerateAllCommand);
         return ("Make a draft", MakeDraftCommand);
-    }
-
-    /// <summary>The Make button's own click: starts the next part, when it can start now. Each asks first, as it does from the menu.</summary>
-    public void MakeNext()
-    {
-        var (_, command) = NextJob();
-        if (command.CanExecute(null)) command.Execute(null);
     }
 
     // ---- Watching one clip or one teaser on its own ----

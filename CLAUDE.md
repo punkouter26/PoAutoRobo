@@ -73,10 +73,9 @@ Warnings are errors, analyzer and style rules included, and so is a package with
 
 - **Anything drawn over other content uses a plain `CanvasControl` on a `FrameClock`**, never Win2D's
   `CanvasAnimatedControl`: that one hides whatever lies beneath it, so it is only for the backdrop (`NebulaBackdrop`).
-- **Shader values cross to the graphics card as plain numbers.** ComputeSharp's `float2`/`float3`/`float4` do their
-  arithmetic and swizzles only inside a shader; on the CPU they quietly give zeros, so work colours and positions out
-  with `System.Numerics` and build the shader's vectors from the parts. A chain of shader steps that hands on values
-  below 0 or above 1 needs `BufferPrecision` set to a float on every step, or Direct2D's 8-bit working buffers clip them.
+- **Light is drawn with Win2D's own effects and plain drawing**, never a custom shader: no shader package, no unsafe
+  code. A chain of effects that hands on values below 0 or above 1 needs `BufferPrecision` set to a float on every
+  step, or Direct2D's 8-bit working buffers clip them.
 - **Effects are off unless asked for.** Decorative light and motion is drawn only when `Ui.Effects` is true: *Effects*
   on in Settings and Windows showing animation. Ordinary movement (a card gliding, a panel sliding up) asks `Ui.Animated`.
 - **The simplest app is the default.** A control most episodes never need binds its visibility to
@@ -88,6 +87,8 @@ Warnings are errors, analyzer and style rules included, and so is a package with
 ## Conventions
 
 - Comments and messages are written in plain words for the person using the app, and say *why*. Match that voice.
+- Every control the pointer can rest on has a tooltip: in a sentence or three, what it does, when to use it and how,
+  and whether it costs anything. A new control gets one in the same change.
 - Seams for tests are delegates (`JsonChat`, `SeeingChat`, `Hear`, `ImageMaker`, `RepoSource`, `Embed`, `FetchText`,
   `SecretSource`), not interfaces, unless
   there are two real implementations (`IScriptWriter`, `INarrator`).

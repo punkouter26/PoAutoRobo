@@ -1,23 +1,26 @@
-using ComputeSharp.D2D1.WinUI;
+using System.Numerics;
+using Microsoft.Graphics.Canvas.Brushes;
+using Microsoft.Graphics.Canvas.Effects;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
-using Windows.Foundation;
 using Windows.UI;
 
 namespace PoAutoRobo.App.Views;
 
 /// <summary>
-/// The slow cloud of light in the accent colour behind a page (see <see cref="Nebula"/>), drawn only while there is
+/// The slow cloud of light in the accent colour behind a page: Win2D's own fractal noise, drifting, turned into soft
+/// light in the accent colour. Drawn only while there is
 /// someone to see it: its page showing and the app in front. Windows' switch for no animation leaves it out altogether.
 /// </summary>
 public sealed partial class NebulaBackdrop : UserControl
 {
     private readonly CanvasAnimatedControl _canvas = new() { ClearColor = Colors.Transparent, IsHitTestVisible = false, IsTabStop = false };
-    private PixelShaderEffect<Nebula>? _nebula; // made and used on the drawing thread only
+    private TurbulenceEffect? _noise;          // these two are made and used on the drawing thread only
+    private ColorMatrixEffect? _light;
     private Color _accent;                     // read by the drawing thread, set by the page
     private bool _wanted, _inFront = true, _loaded;
 
@@ -40,7 +43,8 @@ public sealed partial class NebulaBackdrop : UserControl
         {
             _loaded = false;
             _canvas.RemoveFromVisualTree(); // Win2D controls must be detached explicitly or they leak
-            _nebula?.Dispose();
+            _light?.Dispose();
+            _noise?.Dispose();
         };
     }
 
@@ -74,12 +78,33 @@ public sealed partial class NebulaBackdrop : UserControl
 
     private void OnDraw(ICanvasAnimatedControl sender, CanvasAnimatedDrawEventArgs args)
     {
-        var (accent, size) = (_accent, sender.Size);
-        _nebula ??= new PixelShaderEffect<Nebula>();
-        _nebula.ConstantBuffer = new Nebula(
-            (float)args.Timing.TotalTime.TotalSeconds, new float2((float)size.Width, (float)size.Height),
-            new float3(accent.R / 255f, accent.G / 255f, accent.B / 255f), FadeLeft ? 1 : 0);
-        // The cloud has no edges of its own, so it is told which part of it to draw: the backdrop's own area.
-        args.DrawingSession.DrawImage(_nebula, 0, 0, new Rect(0, 0, size.Width, size.Height));
+        var (accent, size, time) = (_accent, sender.Size.ToVector2(), (float)args.Timing.TotalTime.TotalSeconds);
+        _noise ??= new TurbulenceEffect { Octaves = 5, Noise = TurbulenceEffectNoise.FractalSum };
+        _noise.Size = size;
+        _noise.Frequency = new Vector2(1.1f / Math.Max(1, size.Y)); // the same in both directions, so the folds are not stretched by the window's shape
+        _noise.Offset = new Vector2(time * 4, time * 2.5f);             // a slow drift
+        // The noise's first channel becomes light: none in its lower half, up to a quarter strength at its peaks, all in
+        // the accent colour. The effect takes the noise's own see-through-ness off first and puts the light's back after.
+        const float Rise = 0.8f, Floor = -0.36f;
+        _light ??= new ColorMatrixEffect();
+        _light.Source = _noise;
+        _light.ColorMatrix = new Matrix5x4
+        {
+            M14 = Rise,
+            M54 = Floor,
+            M51 = accent.R / 255f,
+            M52 = accent.G / 255f,
+            M53 = accent.B / 255f,
+        };
+        var session = args.DrawingSession;
+        if (!FadeLeft)
+        {
+            session.DrawImage(_light);
+            return;
+        }
+        // Faded out towards the left edge, where a page's form begins.
+        using var fade = new CanvasLinearGradientBrush(session, Colors.Transparent, Colors.White) { StartPoint = Vector2.Zero, EndPoint = new Vector2(size.X * 0.25f, 0) };
+        using (session.CreateLayer(fade))
+            session.DrawImage(_light);
     }
 }

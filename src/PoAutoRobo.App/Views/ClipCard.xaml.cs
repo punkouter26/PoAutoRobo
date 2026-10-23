@@ -1,6 +1,7 @@
 using System.Numerics;
-using ComputeSharp.D2D1.WinUI;
 using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Brushes;
+using Microsoft.Graphics.Canvas.Geometry;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -19,7 +20,6 @@ public sealed partial class ClipCard : UserControl
         nameof(Card), typeof(ClipViewModel), typeof(ClipCard),
         new PropertyMetadata(null, (d, _) => ((ClipCard)d).Bindings.Update())); // recycled containers get a new clip
 
-    private PixelShaderEffect<Lens>? _lens;
     private CanvasRenderTarget? _picture; // the card's picture at the size it is shown, for the lens to look through
     private string? _pictureOf;           // the file it was made from
     private Point _pointer;
@@ -34,9 +34,8 @@ public sealed partial class ClipCard : UserControl
         // closes. Detach it in the deck's own cleanup if long sessions ever show the growth.
         Unloaded += (_, _) =>
         {
-            _lens?.Dispose();
             _picture?.Dispose();
-            (_lens, _picture, _pictureOf) = (null, null, null);
+            (_picture, _pictureOf) = (null, null);
         };
     }
 
@@ -137,7 +136,7 @@ public sealed partial class ClipCard : UserControl
             {
                 using var full = await CanvasBitmap.LoadAsync(LensView, path);
                 if (_pictureOf != path) return; // the card has been given another clip meanwhile
-                // At the size it is shown, in real pixels, so the lens works in one measure throughout.
+                // At the size it is shown, in real pixels, so it stays sharp on a high-resolution screen.
                 var scale = LensView.Dpi / 96;
                 var (w, h) = ((float)(PictureArea.ActualWidth * scale), (float)(PictureArea.ActualHeight * scale));
                 _picture?.Dispose();
@@ -157,14 +156,28 @@ public sealed partial class ClipCard : UserControl
         Fade(LensView, 1);
     }
 
+    // The picture, and over it a circle of glass at the pointer: the picture swells beneath it, with a soft highlight up
+    // and to the left where the light catches the glass and a thin bright rim. Drawn in the card's own measure.
     private void OnDrawLens(CanvasControl sender, CanvasDrawEventArgs args)
     {
         if (_picture is null || !_over) return;
-        var scale = sender.Dpi / 96;
-        var size = _picture.Size;
-        _lens ??= new PixelShaderEffect<Lens>();
-        _lens.Sources[0] = _picture;
-        _lens.ConstantBuffer = new Lens(new float2((float)(_pointer.X * scale), (float)(_pointer.Y * scale)), new float2((float)size.Width, (float)size.Height), (float)(34 * scale), 1);
-        args.DrawingSession.DrawImage(_lens, new Rect(0, 0, sender.ActualWidth, sender.ActualHeight), new Rect(0, 0, size.Width, size.Height));
+        const float Radius = 34, Swell = 1.3f;
+        var (session, source, whole) = (args.DrawingSession, _picture.Bounds, new Rect(0, 0, sender.ActualWidth, sender.ActualHeight));
+        var at = new Vector2((float)_pointer.X, (float)_pointer.Y);
+        session.DrawImage(_picture, whole, source);
+        using (var glass = CanvasGeometry.CreateCircle(session, at, Radius))
+        using (session.CreateLayer(1, glass))
+        {
+            var swollen = new Rect(at.X - at.X * Swell, at.Y - at.Y * Swell, whole.Width * Swell, whole.Height * Swell);
+            session.DrawImage(_picture, swollen, source);
+            using var shine = new CanvasRadialGradientBrush(session, Windows.UI.Color.FromArgb(77, 255, 255, 255), Windows.UI.Color.FromArgb(0, 255, 255, 255))
+            {
+                Center = at - new Vector2(Radius * 0.35f),
+                RadiusX = Radius * 0.5f,
+                RadiusY = Radius * 0.5f,
+            };
+            session.FillCircle(at - new Vector2(Radius * 0.35f), Radius * 0.5f, shine);
+        }
+        session.DrawCircle(at, Radius, Windows.UI.Color.FromArgb(56, 255, 255, 255), 1.5f);
     }
 }

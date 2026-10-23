@@ -259,19 +259,6 @@ public sealed class EndToEndTests : IDisposable
         Assert.InRange(await Ffmpeg.MeasureLoudnessAsync(output, default), -25.0, -10.0);
     }
 
-    /// <summary>Checkpoint evidence: the whole 16-clip mock episode at 1080p30. Takes minutes, so it is opt-in.</summary>
-    [FfmpegFact]
-    public async Task Full_mock_episode_exports_at_1080p30()
-    {
-        if (Environment.GetEnvironmentVariable("POAUTOROBO_SLOW_OUT") is not { Length: > 0 } keep)
-            return;
-        var episode = await new MockScriptWriter().WriteEpisodeAsync(Lesson.Of("Balancing the R1"), [], EpisodeLength.Standard, default);
-
-        var output = await Builder.ExportAsync(episode, _folder, ExportPreset.Hd30, new CaptionStyle(), null, null, default);
-
-        File.Copy(output, keep, overwrite: true);
-    }
-
     [FfmpegFact]
     public async Task Narration_is_cached_so_unchanged_clips_are_not_synthesised_again()
     {

@@ -1,5 +1,5 @@
-using ComputeSharp.D2D1.WinUI;
 using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Effects;
 using Microsoft.Graphics.Canvas.Text;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI;
@@ -15,7 +15,8 @@ namespace PoAutoRobo.App.Views;
 
 /// <summary>
 /// While a preview or the master video is drawn: a strip of film, one frame for each clip, each developing like a
-/// print in the tray as its clip is drawn (see <see cref="Darkroom"/>), and flashing as it is fixed.
+/// print in the tray as its clip is drawn: dark under the red safelight at first, coming up as the clip is drawn, and
+/// flashing white as it is fixed.
 /// </summary>
 public sealed partial class DarkroomStrip : UserControl
 {
@@ -25,7 +26,7 @@ public sealed partial class DarkroomStrip : UserControl
     private readonly FrameClock _clock;
     private readonly DispatcherTimer _look = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private readonly Dictionary<string, CanvasRenderTarget?> _pictures = []; // each clip's picture, made small; null while it loads or when it will not
-    private readonly List<PixelShaderEffect<Darkroom>> _prints = [];        // one for each frame
+    private readonly List<ColorMatrixEffect> _prints = [];                  // one for each frame
     private Frame[] _frames = [];
     private float[] _shown = [], _fixedAt = [];
 
@@ -107,7 +108,7 @@ public sealed partial class DarkroomStrip : UserControl
         var frames = _frames;
         var time = _clock.Time;
         if (_shown.Length != frames.Length) (_shown, _fixedAt) = (new float[frames.Length], Enumerable.Repeat(-1f, frames.Length).ToArray());
-        while (_prints.Count < frames.Length) _prints.Add(new PixelShaderEffect<Darkroom>());
+        while (_prints.Count < frames.Length) _prints.Add(new ColorMatrixEffect());
 
         var width = (float)Math.Min(FrameWidth, (sender.Size.Width - Gap * (frames.Length - 1)) / Math.Max(1, frames.Length));
         using var format = new CanvasTextFormat { FontSize = 10, WordWrapping = CanvasWordWrapping.Wrap, HorizontalAlignment = CanvasHorizontalAlignment.Center, VerticalAlignment = CanvasVerticalAlignment.Center };
@@ -137,10 +138,34 @@ public sealed partial class DarkroomStrip : UserControl
                     paper.DrawText($"{i + 1} · {frames[i].Title}", new Rect(frame.X + 3, frame.Y + 2, frame.Width - 6, frame.Height - 4), Colors.White, format);
                 }
             }
-            _prints[i].Sources[0] = print;
-            _prints[i].ConstantBuffer = new Darkroom(developed, time, flash);
+            _prints[i].Source = print;
+            _prints[i].ColorMatrix = Developing(developed, flash);
             session.DrawImage(_prints[i], (float)frame.X, (float)frame.Y, frame);
             session.DrawRectangle(frame, Color.FromArgb(90, 0, 0, 0), 1); // the frame's edge, as on a contact sheet
         }
+    }
+    // The paper before anything has come up on it: a dark red, as it looks under the safelight.
+    private static readonly System.Numerics.Vector3 Paper = new(0.14f, 0.02f, 0.015f);
+
+    /// <summary>
+    /// A print <paramref name="developed"/> of the way up (0 to 1): the paper giving way to the picture, everything red
+    /// under the safelight until it is nearly done, then <paramref name="flash"/> of white light as it is fixed.
+    /// </summary>
+    private static Matrix5x4 Developing(float developed, float flash)
+    {
+        var safe = 1 - developed * developed * developed;
+        var tint = new System.Numerics.Vector3(1, 1 - 0.55f * safe, 1 - 0.62f * safe); // the safelight, fading as it develops
+        var keep = (1 - flash) * developed * tint;
+        var ground = (1 - flash) * (1 - developed) * tint * Paper + new System.Numerics.Vector3(flash);
+        return new Matrix5x4
+        {
+            M11 = keep.X,
+            M22 = keep.Y,
+            M33 = keep.Z,
+            M44 = 1,
+            M51 = ground.X,
+            M52 = ground.Y,
+            M53 = ground.Z,
+        };
     }
 }

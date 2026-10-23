@@ -15,3 +15,6 @@ TestResults/
 # A code-graph tool and its editor link: rewritten on every run and tied to this computer, so kept local.
 .aura/
 .vscode/mcp.json
+
+# Before-and-after pages (AGENTS.md): kept on this computer, not in the repository
+SCREENSHOTS/

@@ -385,7 +385,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
             CopyTitleFont(work);
             var picture = (await DrawClipsAsync(episode, _ => narration.Words, _ => slot, Draft, null, [index], work, cache, null, ct))[index]!;
             return await cache.GetOrCreateAsync(["clip with its sound", picture, narration.AudioPath], ".mp4", scratch =>
-                ffmpeg.RunAsync(["-i", picture, "-i", narration.AudioPath, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-shortest", "-y", scratch], work, null, null, ct));
+                ffmpeg.RunAsync(FfmpegArgs.Mux(picture, narration.AudioPath, scratch), work, null, null, ct));
         }
         finally
         {
@@ -565,16 +565,22 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
     /// folder, which the app clears at launch.
     /// </summary>
     /// <returns>The video's path.</returns>
-    public async Task<string> PreviewIntroAsync(Brand brand, int number, CancellationToken ct)
+    public Task<string> PreviewIntroAsync(Brand brand, int number, CancellationToken ct) => PreviewBookendAsync(true, brand, number, ct);
+
+    /// <summary>A draft of the series outro, as <see cref="PreviewIntroAsync"/>: its full length, silent, as the music plays on under it.</summary>
+    public Task<string> PreviewOutroAsync(Brand brand, CancellationToken ct) => PreviewBookendAsync(false, brand, 0, ct);
+
+    private async Task<string> PreviewBookendAsync(bool intro, Brand brand, int number, CancellationToken ct)
     {
-        var work = Files.NewScratchFolder("intro");
+        var name = intro ? "intro" : "outro";
+        var work = Files.NewScratchFolder(name);
         CopyTitleFont(work);
         var sample = new Episode("Your next lesson", "", [], 0) { Number = number };
         var cache = new MediaCache(ClipCacheFolder);
-        var sound = await BookendSoundAsync(true, brand, work, cache, ct);
-        var picture = await BookendPictureAsync(true, brand, sample, Draft, IntroLength, work, cache, ct);
-        var output = Path.Combine(work, "intro-preview.mp4");
-        await ffmpeg.RunAsync(["-i", picture, "-i", sound.AudioPath, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-shortest", "-y", output], work, null, null, ct);
+        var sound = await BookendSoundAsync(intro, brand, work, cache, ct);
+        var picture = await BookendPictureAsync(intro, brand, sample, Draft, intro ? IntroLength : brand.Kit.Outro, work, cache, ct);
+        var output = Path.Combine(work, $"{name}-preview.mp4");
+        await ffmpeg.RunAsync(FfmpegArgs.Mux(picture, sound.AudioPath, output), work, null, null, ct);
         return output;
     }
 
@@ -619,7 +625,7 @@ public sealed class EpisodeBuilder(INarrator narrator, FfmpegRunner ffmpeg)
         foreach (var (key, text) in lines.Where(l => l.Text.Trim().Length > 0))
             await System.IO.File.WriteAllTextAsync(Path.Combine(work, $"{name}_{key}.txt"), text.Trim(), ct);
 
-        var look = new BookendLook(kit.Captions.AccentColor, SeriesKit.PathOf(brand.Folder, kit.Logo), SeriesKit.PathOf(brand.Folder, kit.Mascot));
+        var look = new BookendLook(kit.Captions.AccentColor, SeriesKit.PathOf(brand.Folder, kit.Logo), SeriesKit.PathOf(brand.Folder, kit.Mascot), kit.Layout);
         IReadOnlyList<string> Args(string to) => intro
             ? FfmpegArgs.IntroVideo(look, File("channel")!, File("tagline"), File("title")!, length, preset, to)
             : FfmpegArgs.OutroVideo(look, File("channel")!, File("next"), length, preset, to);

@@ -290,10 +290,6 @@ public sealed partial class MainWindow : WindowEx
         flyout.ShowAt(anchor);
     }
 
-    // ---- The header's Make button ----
-
-    private void OnMakeNext(SplitButton sender, SplitButtonClickEventArgs args) => ViewModel.MakeNext();
-
     // ---- The floating bar ----
 
     /// <summary>The job panel rises into place as it appears and sinks away as it goes, unless Windows is set to show no animation.</summary>

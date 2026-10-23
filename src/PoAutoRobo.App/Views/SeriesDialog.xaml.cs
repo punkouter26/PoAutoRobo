@@ -85,11 +85,31 @@ public sealed partial class SeriesDialog : ContentDialog
         NoEpisodeText.Visibility = Ui.Hide(has);
         EpisodeControls.Visibility = Ui.Show(has);
         if (!has) return;
+        _showing = true;
         EpisodeLookBox.SelectedIndex = Math.Max(0, Array.FindIndex(Looks, choice => choice.Value == ViewModel.Look));
         HostSwitch.IsOn = ViewModel.HostMostlyVisible;
+        _showing = false;
         (StillSlider.Value, PanelsSlider.Value, TitleSlider.Value) = (ViewModel.Mix.Still, ViewModel.Mix.MultiPanel, ViewModel.Mix.TitleCard);
         AppliedText.Text = "";
         ShowTotal();
+    }
+
+    private bool _showing; // the controls are being set to what the episode has, which is not a change to apply
+
+    // The look and the host switch are given as soon as they change: their Apply button is with the mix, which is
+    // an advanced control and so often hidden.
+    private void OnLookPicked(object sender, SelectionChangedEventArgs e)
+    {
+        if (_showing || !ViewModel.HasEpisode || EpisodeLookBox.SelectedItem is not Choice<Look> { Value: var look } || look == ViewModel.Look) return;
+        ViewModel.ApplyLook(look);
+        AppliedText.Text = "New look given. Undo puts it back.";
+    }
+
+    private void OnHostToggled(object sender, RoutedEventArgs e)
+    {
+        if (_showing || !ViewModel.HasEpisode || HostSwitch.IsOn == ViewModel.HostMostlyVisible) return;
+        ViewModel.ShowHostEverywhere(HostSwitch.IsOn);
+        AppliedText.Text = HostSwitch.IsOn ? "The host is in every clip. Undo puts it back." : "Voiceover only in every clip. Undo puts it back.";
     }
 
     private MixPercentages Mix => new((int)StillSlider.Value, (int)PanelsSlider.Value, (int)TitleSlider.Value);
@@ -107,9 +127,6 @@ public sealed partial class SeriesDialog : ContentDialog
     private void OnApplyMix(object sender, RoutedEventArgs e)
     {
         if (!ViewModel.HasEpisode) return;
-        var look = (EpisodeLookBox.SelectedItem as Choice<Look>)?.Value ?? ViewModel.Look;
-        ViewModel.ApplyLook(look);
-        if (HostSwitch.IsOn != ViewModel.HostMostlyVisible) ViewModel.ShowHostEverywhere(HostSwitch.IsOn);
         if (Mix != ViewModel.Mix) ViewModel.ApplyMix(Mix);
         AppliedText.Text = "Applied. Undo puts it back.";
     }

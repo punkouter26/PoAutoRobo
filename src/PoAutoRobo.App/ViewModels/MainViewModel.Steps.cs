@@ -137,8 +137,9 @@ public partial class MainViewModel
             var wanted = CostEstimate.For(episode, _imageModel, Quality).ClipIds.Count;
             items.Add(new(wanted == 0 ? "Pictures · all made" : $"Pictures · {wanted} to make", wanted == 0));
         }
-        var off = Durations.RuntimeWarning(Runtime);
-        items.Add(new(off is null ? $"Running time {Runtime:m\\:ss}" : $"Running time {Runtime:m\\:ss}, {off}", off is null, Optional: true));
+        // Said briefly, as the bar has little room: the full warning is in the header's line under the title.
+        var off = Runtime < Durations.MinEpisode ? ", too short" : Runtime > Durations.MaxEpisode ? ", too long" : "";
+        items.Add(new($"Length {Runtime:m\\:ss}{off}", off.Length == 0, Optional: true));
         return items;
     }
 
@@ -196,6 +197,12 @@ public partial class MainViewModel
     /// <summary>The intro page's Show the intro button is lit until the intro has been watched this time.</summary>
     public bool ShowIntroIsNext => IntroPreviewPath is null;
 
+    /// <summary>
+    /// The menu beside the bar's button on the clips page: each job on its own, and all of them as one, ending on a
+    /// draft to watch or (an advanced choice) the finished video.
+    /// </summary>
+    public bool ShowJobs => Step == ClipsStep && HasEpisode;
+
     [RelayCommand]
     private void Continue() => Step = Math.Min(Step + 1, PublishStep);
 
@@ -208,7 +215,7 @@ public partial class MainViewModel
     // What the bar reads from. Any of these changing may tick an item off, so the bar is told to look again.
     private static readonly HashSet<string> GuideSources =
     [
-        nameof(Step), nameof(TopicInput), nameof(Episode), nameof(Preview), nameof(LastExport), nameof(HasTeasers), nameof(MakeNextLabel),
+        nameof(Step), nameof(TopicInput), nameof(Episode), nameof(Preview), nameof(LastExport), nameof(HasTeasers),
         nameof(IntroPreviewPath), nameof(SeriesChannel), nameof(SeriesBrand), nameof(IsConnected), nameof(Runtime),
     ];
 
@@ -219,7 +226,7 @@ public partial class MainViewModel
 
     private void RefreshGuide()
     {
-        foreach (var name in (string[])[nameof(Guide), nameof(GuideActionLabel), nameof(HasGuideAction), nameof(GuideActionIsNext), nameof(WriteIsNext), nameof(ShowIntroIsNext)])
+        foreach (var name in (string[])[nameof(Guide), nameof(GuideActionLabel), nameof(HasGuideAction), nameof(GuideActionIsNext), nameof(WriteIsNext), nameof(ShowIntroIsNext), nameof(ShowJobs)])
             OnPropertyChanged(name);
     }
 }

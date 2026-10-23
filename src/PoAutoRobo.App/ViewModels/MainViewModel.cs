@@ -56,7 +56,7 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>True once the app knows whether it is running on the live services or on stand-ins.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Notice), nameof(NoticeDetail), nameof(PicturesAvailable), nameof(HostCandidatesCost), nameof(MakeNextLabel))]
+    [NotifyPropertyChangedFor(nameof(Notice), nameof(NoticeDetail), nameof(PicturesAvailable), nameof(HostCandidatesCost))]
     [NotifyCanExecuteChangedFor(nameof(CreateEpisodeCommand), nameof(GenerateAllCommand), nameof(GeneratePictureCommand), nameof(AnotherTakeCommand), nameof(MakeAllCommand), nameof(MakeDraftCommand))]
     public partial bool IsConnected { get; set; }
 
@@ -187,8 +187,9 @@ public partial class MainViewModel : ObservableObject
     public partial bool Effects { get; set; }
 
     /// <summary>
-    /// The controls most episodes never need: each clip's picture type, takes and robot's-eye view, the picture mix,
-    /// other video sizes, the editor's read, and making the whole episode in one go. Hidden unless turned on.
+    /// The controls most episodes never need: each clip's depth, host, picture type, takes and robot's-eye view, the host
+    /// and the picture mix, caption size and outline, other video sizes, the editor's read, and making the whole episode
+    /// in one go. Hidden unless turned on.
     /// </summary>
     [ObservableProperty]
     public partial bool Advanced { get; set; }
@@ -254,7 +255,7 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EpisodeTitle), nameof(HasEpisode), nameof(Runtime), nameof(Captions),
-        nameof(CaptionPresetIndex), nameof(CaptionFontSize), nameof(CaptionStroke), nameof(CaptionAccent), nameof(HasMusic), nameof(MusicLabel), nameof(MakeNextLabel))]
+        nameof(CaptionPresetIndex), nameof(CaptionFontSize), nameof(CaptionStroke), nameof(CaptionsTuned), nameof(CaptionAccent), nameof(HasMusic), nameof(MusicLabel))]
     [NotifyCanExecuteChangedFor(nameof(RenderCommand), nameof(SuggestTeasersCommand), nameof(RenderTeasersCommand), nameof(UseSeriesLookCommand), nameof(BuildPreviewCommand), nameof(GenerateAllCommand), nameof(NarrateAllCommand),
         nameof(CleanMediaCommand), nameof(RenameEpisodeCommand), nameof(MakeAllCommand), nameof(MakeDraftCommand), nameof(ReviewScriptCommand), nameof(RemoveMusicCommand),
         nameof(WatchClipCommand), nameof(WatchTeaserCommand))]
@@ -349,7 +350,7 @@ public partial class MainViewModel : ObservableObject
             _usage = string.Join(" · ", new[] { tokens > 0 ? $"{tokens:N0} script tokens" : "", characters > 0 ? $"{characters:N0} voice characters" : "" }.Where(part => part.Length > 0));
         }
         OnPropertyChanged(nameof(Runtime));
-        OnPropertyChanged(nameof(MakeNextLabel)); // a voice or a picture may just have been made
+        RefreshGuide(); // a voice or a picture may just have been made
     }
 
     private readonly List<(string What, int Units, decimal Dollars)> _usedBeforeFolder = []; // a script is written before its episode has a folder

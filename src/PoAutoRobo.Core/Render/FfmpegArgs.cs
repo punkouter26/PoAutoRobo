@@ -21,8 +21,11 @@ public sealed record ExportPreset(int Width, int Height, int Fps)
 /// <summary>One moment of a teaser as FFmpeg cuts it: a stretch of a finished clip picture and of that clip's sound.</summary>
 public sealed record TeaserCut(string Picture, string Sound, TimeSpan Start, TimeSpan Length);
 
-/// <summary>How the series intro and outro look: the accent colour (#RRGGBB) and the kit's logo and mascot pictures, each null when there is none.</summary>
-public sealed record BookendLook(string Accent, string? Logo, string? Mascot);
+/// <summary>
+/// How the series intro and outro look: the accent colour (#RRGGBB), the kit's logo and mascot pictures (each null when
+/// there is none), and where the intro's words and mascot sit.
+/// </summary>
+public sealed record BookendLook(string Accent, string? Logo, string? Mascot, IntroLayout Layout = IntroLayout.Side);
 
 /// <summary>
 /// The owner's film as the robot's own camera might see it: brightness read as depth in false colour, edges traced in
@@ -190,15 +193,23 @@ public static class FfmpegArgs
     public static IReadOnlyList<string> IntroVideo(BookendLook look, string channelFile, string? taglineFile, string titleFile, TimeSpan length, ExportPreset preset, string output) =>
         Card(look, length, preset, output, IntroWords(look, channelFile, taglineFile, titleFile));
 
-    // With a mascot on the right, the words keep to the left; without one, they are centred.
+    // Side: with a mascot on the right the words keep to the left; without one, they are centred. Centre: centred,
+    // under the mascot when there is one. Lower: on a dark band across the lower third, clear of the mascot.
     private static IReadOnlyList<string> IntroWords(BookendLook look, string channelFile, string? taglineFile, string titleFile)
     {
-        var x = look.Mascot is null ? "(w-text_w)/2" : "w*0.08";
+        var (x, channel, tagline, title) = look.Layout switch
+        {
+            IntroLayout.Centre when look.Mascot is not null => ("(w-text_w)/2", "h*0.54", "h*0.67", "h*0.76"),
+            IntroLayout.Centre => ("(w-text_w)/2", "h*0.34", "h*0.48", "h*0.60"),
+            IntroLayout.Lower => ("w*0.06", "h*0.64", "h*0.76", "h*0.82"),
+            _ => (look.Mascot is null ? "(w-text_w)/2" : "w*0.08", "h*0.34", "h*0.48", "h*0.60"),
+        };
         return
         [
-            Words(channelFile, "h/10", x, "h*0.34", 0.8),
-            .. taglineFile is null ? [] : new[] { Words(taglineFile, "h/24", x, "h*0.48", 1.2) },
-            Words(titleFile, "h/14", x, "h*0.60", 1.6),
+            .. look.Layout == IntroLayout.Lower ? new[] { "drawbox=x=0:y=ih*0.61:w=iw:h=ih*0.31:color=black@0.45:t=fill" } : [],
+            Words(channelFile, "h/10", x, channel, 0.8),
+            .. taglineFile is null ? [] : new[] { Words(taglineFile, "h/24", x, tagline, 1.2) },
+            Words(titleFile, "h/14", x, title, 1.6),
         ];
     }
 
@@ -272,9 +283,11 @@ public static class FfmpegArgs
         var picture = "[0:v]";
         if (look.Mascot is { } mascot)
         {
+            // Large and to one side, or smaller and above the words in an intro laid out about its centre.
+            var (height, x, y) = !mascotLeft && look.Layout == IntroLayout.Centre ? (h * 2 / 5, "(W-w)/2", "H*0.08") : (h * 7 / 10, mascotLeft ? "W*0.05" : "W-w-W*0.05", "(H-h)/2");
             inputs.AddRange(["-loop", "1", "-i", mascot]);
-            graph.Add($"[{inputs.Count(a => a == "-i") - 1}:v]scale=-2:{h * 7 / 10},format=rgba,fade=t=in:st=0.4:d=0.6:alpha=1[mascot]");
-            graph.Add($"{picture}[mascot]overlay=x={(mascotLeft ? "W*0.05" : "W-w-W*0.05")}:y=(H-h)/2[m]");
+            graph.Add($"[{inputs.Count(a => a == "-i") - 1}:v]scale=-2:{height},format=rgba,fade=t=in:st=0.4:d=0.6:alpha=1[mascot]");
+            graph.Add($"{picture}[mascot]overlay=x={x}:y={y}[m]");
             picture = "[m]";
         }
         if (look.Logo is { } logo)
@@ -364,9 +377,16 @@ public static class FfmpegArgs
     // ponytail: software x264 only. A native (not emulated) FFmpeg build is the bigger win on ARM machines.
     private static string[] Encode(ExportPreset preset) =>
     [
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+        .. Compression,
         "-r", preset.Fps.ToString(CultureInfo.InvariantCulture), "-video_track_timescale", "90000",
     ];
+
+    /// <summary>How every picture the app makes is compressed. A clip's own frames use it too, before the clip is encoded.</summary>
+    public static IReadOnlyList<string> Compression { get; } = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p"];
+
+    /// <summary>A picture and its sound in one file: the picture copied as it is, the sound made AAC, ending with the shorter.</summary>
+    public static IReadOnlyList<string> Mux(string picture, string sound, string output) =>
+        ["-i", picture, "-i", sound, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-shortest", "-y", output];
 
     /// <summary>
     /// The sound of the owner's film as a track exactly <paramref name="length"/> long, in the narration's form, so it

@@ -144,7 +144,7 @@ public sealed class SceneRenderer(string browserPath, FfmpegRunner ffmpeg)
             }
 
             Files.EnsureFolderFor(outputPath);
-            await ffmpeg.RunAsync(["-framerate", $"{Fps}", "-i", "f%05d.jpg", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-y", Path.GetFullPath(outputPath)], work, null, null, ct);
+            await ffmpeg.RunAsync(["-framerate", $"{Fps}", "-i", "f%05d.jpg", .. FfmpegArgs.Compression, "-y", Path.GetFullPath(outputPath)], work, null, null, ct);
         }
         catch (WebSocketException e) when (!ct.IsCancellationRequested)
         {

@@ -1,6 +1,12 @@
 namespace PoAutoRobo.Core.Library;
 
 /// <summary>
+/// Where the intro's words and mascot sit. Side: the words on the left, the mascot on the right. Centre: the mascot
+/// above, the words centred under it. Lower: the mascot on the right, the words on a dark band across the lower third.
+/// </summary>
+public enum IntroLayout { Side, Centre, Lower }
+
+/// <summary>
 /// What every episode of the series shares: the channel's name, its logo, sounds and mascot for the intro and outro,
 /// and the look new episodes start in. Set up once and kept beside the app's settings, never in an episode.
 /// </summary>
@@ -34,6 +40,9 @@ public sealed record SeriesKit
 
     public int OutroSeconds { get; init; } = 15;
 
+    /// <summary>How the intro is laid out. The outro keeps one layout, as YouTube's end-screen cards need its right half.</summary>
+    public IntroLayout Layout { get; init; }
+
     public TimeSpan Outro => TimeSpan.FromSeconds(OutroSeconds);
 
     /// <summary>The kit in <paramref name="folder"/>, made safe to use; an empty kit when there is none or it is unreadable.</summary>
@@ -50,6 +59,7 @@ public sealed record SeriesKit
             Mascot = Bare(kit.Mascot),
             Captions = kit.Captions is { } style && AssCaptions.IsHexColour(style.AccentColor) ? style : new CaptionStyle(),
             OutroSeconds = Math.Clamp(kit.OutroSeconds, MinOutroSeconds, MaxOutroSeconds),
+            Layout = Enum.IsDefined(kit.Layout) ? kit.Layout : IntroLayout.Side,
         };
 
         static string? Bare(string? name) => name is not null && name.Length > 0 && Path.GetFileName(name) == name ? name : null;

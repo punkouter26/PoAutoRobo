@@ -18,7 +18,7 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
     public static Choice<VisualKind>[] KindChoices { get; } = [.. Visuals.Kinds.Select(k => new Choice<VisualKind>(k.Label, k.Kind))];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Title), nameof(Heading), nameof(Summary), nameof(Warnings), nameof(TierIndex), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(VisualPrompt),
+    [NotifyPropertyChangedFor(nameof(Title), nameof(Heading), nameof(Summary), nameof(Warnings), nameof(TierIndex), nameof(OffStandardTier), nameof(HostVisible), nameof(Dialogue), nameof(Pose), nameof(VisualPrompt),
         nameof(IsStale), nameof(StaleWarning), nameof(LengthWarning), nameof(HasUserVideo), nameof(OwnSound), nameof(RobotView), nameof(CanPickKind), nameof(KindIndex), nameof(ThumbnailPath), nameof(EarlierTakes), nameof(HasEarlierTakes))]
     public partial Clip Clip { get; set; } = clip;
 
@@ -66,7 +66,7 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
     /// <summary>The recorded length when there is one, otherwise an estimate from the word count.</summary>
     public TimeSpan Duration => Measured ?? Durations.Estimate(Clip.Active.Dialogue);
 
-    /// <summary>The clip's state in one line for its card: depth, picture type and length.</summary>
+    /// <summary>The clip's state in one line for its card: picture type and length, and the depth when it is not the standard B.</summary>
     public string Summary
     {
         get
@@ -74,7 +74,8 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
             var kind = KindChoices.FirstOrDefault(k => k.Value == Clip.Visual.Kind)?.Label ?? "My video";
             var length = Measured is { } real ? $"{real.TotalSeconds:0} s" : $"about {Duration.TotalSeconds:0} s";
             var sound = Clip.OwnSound ? " · my sound" : Clip.HostVisible ? "" : " · voice only";
-            return $"{Clip.ActiveTier} · {kind} · {length}{sound}";
+            var depth = OffStandardTier ? $"{Clip.ActiveTier} · " : "";
+            return $"{depth}{kind} · {length}{sound}";
         }
     }
 
@@ -139,6 +140,9 @@ public partial class ClipViewModel(Clip clip, Action<Func<Episode, Episode>> edi
                 pickTier(this, (Tier)value);
         }
     }
+
+    /// <summary>The clip is on depth A or C, not the B every clip starts on; its depth control then shows without advanced controls.</summary>
+    public bool OffStandardTier => Clip.ActiveTier != Tier.B;
 
     /// <summary>A picture for this clip has appeared on disk without the clip itself changing.</summary>
     public void PictureChanged() => OnPropertyChanged(nameof(ThumbnailPath));
