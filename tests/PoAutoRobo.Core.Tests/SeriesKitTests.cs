@@ -19,6 +19,7 @@ public sealed class SeriesKitTests : IDisposable
             Tagline = "One skill at a time",
             Logo = SeriesKit.Import(_folder, picked, "logo"),
             Look = Look.Photoreal,
+            Structure = BeatStructure.HookFirst,
             Captions = new CaptionStyle(CaptionPreset.CleanSubtitle, 70, "#22CC88", 3),
             OutroSeconds = 12,
         };
@@ -34,13 +35,14 @@ public sealed class SeriesKitTests : IDisposable
 
         // Anyone can edit the file. What it names must be its own copies, and its numbers within reach.
         File.WriteAllText(Path.Combine(_folder, SeriesKit.FileName), """
-            { "ChannelName": "Teaching the R1", "Logo": "..\\..\\secret.png", "Sting": "missing.wav", "OutroSeconds": 600, "Captions": { "AccentColor": "red" } }
+            { "ChannelName": "Teaching the R1", "Logo": "..\\..\\secret.png", "Sting": "missing.wav", "OutroSeconds": 600, "Structure": 9, "Captions": { "AccentColor": "red" } }
             """);
         var edited = SeriesKit.Load(_folder);
         Assert.Null(SeriesKit.PathOf(_folder, edited.Logo));
         Assert.Null(SeriesKit.PathOf(_folder, edited.Sting));
         Assert.Equal(TimeSpan.FromSeconds(SeriesKit.MaxOutroSeconds), edited.Outro);
         Assert.Equal(new CaptionStyle(), edited.Captions);
+        Assert.Equal(BeatStructure.Story, edited.Structure); // no such shape: the first
         File.WriteAllText(Path.Combine(_folder, SeriesKit.FileName), "{ not json");
         Assert.Equal(SeriesKit.Starter, SeriesKit.Load(_folder));
 

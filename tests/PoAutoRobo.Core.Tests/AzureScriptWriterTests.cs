@@ -82,7 +82,7 @@ public sealed class AzureScriptWriterTests
     }
 
     [Fact]
-    public async Task Too_few_clips_are_planned_again_once_keeping_the_ones_already_planned_and_a_second_short_plan_is_reported()
+    public async Task A_plan_is_held_to_the_length_asked_too_few_planned_again_once_and_too_many_trimmed_before_any_is_written()
     {
         _replies.Enqueue(OutlineJson(4));
         Plan(2, written: 6);
@@ -102,11 +102,9 @@ public sealed class AzureScriptWriterTests
 
         Assert.Contains("try again", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, _calls.Count); // never a third plan, and no clip written for a plan that will not do
-    }
 
-    [Fact]
-    public async Task Too_many_clips_are_trimmed_before_any_is_written_so_none_is_paid_for_that_is_not_kept()
-    {
+        // Too many are trimmed before any is written, so none is paid for that is not kept.
+        _calls.Clear();
         Plan(4, written: 1);
         Plan(23, written: 10);
 
@@ -190,7 +188,7 @@ public sealed class AzureScriptWriterTests
     }
 
     [Fact]
-    public async Task Another_depth_is_written_on_demand_by_the_fast_model_from_the_depth_the_clip_is_on()
+    public async Task Another_depth_or_a_new_length_is_written_on_demand_from_the_words_the_clip_has()
     {
         _replies.Enqueue(JsonSerializer.Serialize(new { dialogue = "Picture a bus.", visualPrompt = "Analogy panel", pose = "waving" }));
         var clip = ProjectStoreTests.NewClip("Why balance is hard");
@@ -204,6 +202,12 @@ public sealed class AzureScriptWriterTests
         Assert.Contains("Depth to write: a", call.User);
         Assert.Contains("Why balance is hard", call.User);
         Assert.Contains($"<existing depth=\"b\">\n{clip.Active.Dialogue}\n</existing>", call.User);
+
+        // A rewrite to fit asks for the length wanted and returns only the new words.
+        _calls.Clear();
+        _replies.Enqueue(JsonSerializer.Serialize(new { dialogue = "A longer version of the line." }));
+        Assert.Equal("A longer version of the line.", await Writer.RewriteToLengthAsync("A line.", 90, Ct));
+        Assert.Contains("90 words", Assert.Single(_calls).User);
     }
 
     [Fact]
@@ -241,33 +245,6 @@ public sealed class AzureScriptWriterTests
         Assert.Equal(Settings.FastChatDeployment, Assert.Single(_calls).Deployment);
         await writer.RewriteToLengthAsync("A line.", 9, Ct); // writing is not a small job: never the local model
         Assert.Equal(2, local.Count);
-    }
-
-    [Fact]
-    public async Task Rewrite_asks_for_the_target_length_and_returns_the_new_dialogue()
-    {
-        _replies.Enqueue(JsonSerializer.Serialize(new { dialogue = "A longer version of the line." }));
-
-        Assert.Equal("A longer version of the line.", await Writer.RewriteToLengthAsync("A line.", 90, Ct));
-
-        Assert.Contains("90 words", Assert.Single(_calls).User);
-    }
-
-    /// <summary>Opt-in: one real call. Reports how well the model keeps to the rules instead of asserting on style.</summary>
-    [Fact]
-    [Trait("Category", "Live")]
-    public async Task Live_episode_has_as_many_clips_as_its_length_asks_at_depth_b()
-    {
-        if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
-        var settings = await AppSettings.LoadAsync(KeyVault.Default(), Ct);
-
-        var length = EpisodeLength.Standard;
-        var episode = await AzureScriptWriter.Create(settings).WriteEpisodeAsync(Lesson.Of("Training whole-body dynamic balancing on the Unitree R1 EDU"), [], length, Ct);
-
-        Assert.InRange(episode.Clips.Count, length.MinClips, length.MaxClips);
-        Assert.All(episode.Clips, c => Assert.Equal(Tier.B, Assert.Single(c.Scripts).Key));
-        var outOfRange = episode.Clips.Count(c => Durations.Warning(c) is not null);
-        Assert.True(outOfRange <= episode.Clips.Count / 5, $"{outOfRange} of {episode.Clips.Count} clips fall outside 15–60s");
     }
 
     [Fact]
@@ -364,7 +341,7 @@ public sealed class AzureScriptWriterTests
     }
 
     [Fact]
-    public async Task What_turned_a_request_away_is_said_plainly_and_a_refusal_in_the_shape_of_a_script_is_not_taken_for_one()
+    public async Task A_refusal_is_said_plainly_is_not_taken_for_a_script_and_costs_only_the_clip_turned_away()
     {
         // The service's own reply when its filter blocks a request, as it arrives.
         const string Blocked = """{ "error": { "code": "content_filter", "status": 400, "innererror": { "code": "ResponsibleAIPolicyViolation", "content_filter_result": { "hate": { "filtered": false, "severity": "safe" }, "jailbreak": { "detected": false, "filtered": false }, "self_harm": { "filtered": false, "severity": "safe" }, "violence": { "filtered": true, "severity": "medium" } } } } }""";
@@ -385,11 +362,8 @@ public sealed class AzureScriptWriterTests
         // Ordinary words that merely begin a sentence the same way are a script, not a refusal.
         Assert.False(ScriptDeclinedException.IsRefusal("I can show you how the valve opens."));
         Assert.True(ScriptDeclinedException.IsRefusal("Sorry, I can't help with that."));
-    }
 
-    [Fact]
-    public async Task A_clip_turned_away_is_left_to_the_user_and_only_that_clip_is_lost()
-    {
+        // A clip turned away is left to the user, and only that clip is lost.
         var asked = new List<string>();
         var notes = new List<string>();
         var writer = new AzureScriptWriter(Settings, (_, system, user, schemaName, _, _, _) =>

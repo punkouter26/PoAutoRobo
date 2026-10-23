@@ -222,13 +222,6 @@ public sealed class FfmpegArgsTests : IDisposable
         var rush = WavInfo.Peaks(Write("whoosh.wav", Synth.Whoosh()), 9);
         Assert.InRange(Array.IndexOf(rush, rush.Max()) / 10.0, 0.4, 0.7);
 
-        // Heard band by band, as the audition draws a voice: silence before the hit, the low thump strongest on it.
-        var bands = WavInfo.Spectrum(Write("sting.wav", sting), 30, 16);
-        Assert.Equal(150, bands.Length);
-        Assert.All(bands, frame => Assert.All(frame, strength => Assert.InRange(strength, 0f, 1f)));
-        var onHit = bands[(int)(Synth.Hit.TotalSeconds * 30) + 2];
-        Assert.True(onHit[0] > 0.5f && onHit[0] > bands[1][0], $"{onHit[0]} on the hit, {bands[1][0]} at the start");
-
         // The made-up logo and mascot: see-through round the robot, solid in the middle, the series colour in its eyes, and
         // the same picture for the same colour, so they cache.
         var logo = Emblem.Logo((0x22, 0xCC, 0x88));

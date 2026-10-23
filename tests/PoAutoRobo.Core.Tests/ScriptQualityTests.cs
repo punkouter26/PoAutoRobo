@@ -52,7 +52,9 @@ public sealed class ScriptQualityTests(ITestOutputHelper output)
     {
         if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
         var settings = await AppSettings.LoadAsync(KeyVault.Default(), Ct);
-        Assert.True(settings.IsLive, $"The live services are needed for this. {settings.LoadError}");
+        // The vault as the signed-in user supplies everything the script and voice need.
+        Assert.Null(settings.LoadError);
+        Assert.True(settings.IsLive, "The live services are needed for this.");
         var writer = AzureScriptWriter.Create(settings);
         var grounding = Grounding.Create(settings.GitHubToken, Path.Combine(Files.ScratchRoot, "quality-grounding"), expand: writer.SearchTermsAsync);
         var judge = new AzureOpenAIClient(settings.Endpoint!, settings.Credential).GetChatClient(settings.ChatDeployment);
@@ -99,7 +101,11 @@ public sealed class ScriptQualityTests(ITestOutputHelper output)
                 judged.Variety,
                 judged.Voice,
             });
-            Assert.NotEmpty(episode.Clips);
+            // Held to the rules, whatever the scores: as many clips as the length asks, all at depth B, few outside 15-60 s.
+            Assert.InRange(episode.Clips.Count, EpisodeLength.Standard.MinClips, EpisodeLength.Standard.MaxClips);
+            Assert.All(episode.Clips, c => Assert.Equal(Tier.B, Assert.Single(c.Scripts).Key));
+            var outOfRange = episode.Clips.Count(c => Durations.Warning(c) is not null);
+            Assert.True(outOfRange <= episode.Clips.Count / 5, $"{outOfRange} of {episode.Clips.Count} clips fall outside 15–60s");
         }
 
         var log = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PoAutoRobo", "quality.jsonl");

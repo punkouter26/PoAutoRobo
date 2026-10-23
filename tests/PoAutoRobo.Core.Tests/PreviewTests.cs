@@ -37,7 +37,7 @@ public sealed class PreviewTests : IDisposable
     {
         var music = Path.Combine(_folder, "imports", "bed.wav");
         Directory.CreateDirectory(Path.GetDirectoryName(music)!);
-        NarratorTests.WriteSilentWav(music, 1.0); // far shorter than the video, so it must repeat
+        VoiceTests.WriteSilentWav(music, 1.0); // far shorter than the video, so it must repeat
         var episode = ProjectStoreTests.NewEpisode(2) with { MusicPath = music };
         var builder = new EpisodeBuilder(new MockNarrator(), new FfmpegRunner(FfmpegRunner.Locate()!));
         Assert.DoesNotContain(music, builder.UnusedMedia(episode, _folder)); // tidying up leaves the music alone

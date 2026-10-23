@@ -32,7 +32,7 @@ internal static class TestExtensions
             if (takes is { } wait)
                 await Task.Delay(wait);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            NarratorTests.WriteSilentWav(path, 1.0);
+            VoiceTests.WriteSilentWav(path, 1.0);
             return new Narration(path, TimeSpan.FromSeconds(1), [new WordTiming("x", TimeSpan.Zero, TimeSpan.FromSeconds(1))]);
         });
         return narrator;

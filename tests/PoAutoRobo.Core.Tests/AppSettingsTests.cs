@@ -101,17 +101,4 @@ public sealed class AppSettingsTests
         Assert.DoesNotContain("secret-value", text);
         Assert.Equal("AppSettings { Endpoint = https://example.cognitiveservices.azure.com/, GitHubToken = (set), PexelsKey = (set) }", text);
     }
-
-    /// <summary>Opt-in: reads the real vault as the signed-in user. Asserts presence only; values are never printed.</summary>
-    [Fact]
-    [Trait("Category", "Live")]
-    public async Task Live_vault_supplies_everything_script_and_voice_need()
-    {
-        if (Environment.GetEnvironmentVariable("POAUTOROBO_LIVE") != "1") return;
-
-        var settings = await AppSettings.LoadAsync(KeyVault.Default(), Ct);
-
-        Assert.Null(settings.LoadError);
-        Assert.True(settings.IsLive);
-    }
 }

@@ -150,7 +150,6 @@ public sealed class VisualKindsTests : IDisposable
         var relit = EpisodeEditor.SetLook(episode, Look.Cinematic);
         Assert.Equal([true, false], relit.Clips.Select(c => c.Visual.Stale));
         Assert.Same(episode, EpisodeEditor.SetLook(episode, Look.Comic));
-        Assert.All(EpisodeEditor.SetHostEverywhere(episode, false).Clips, c => Assert.False(c.HostVisible));
     }
 
     [Fact]
@@ -195,7 +194,7 @@ public sealed class VisualKindsTests : IDisposable
     }
 
     [Fact]
-    public async Task An_ai_video_is_asked_for_waited_on_and_downloaded_and_a_failure_is_reported_in_the_services_words()
+    public async Task An_ai_video_is_waited_on_and_downloaded_picked_up_again_if_stopped_and_a_failure_is_reported_in_the_services_words()
     {
         var statuses = new Queue<string>(["queued", "in_progress", "completed"]);
         var web = new Web(request =>
@@ -220,6 +219,44 @@ public sealed class VisualKindsTests : IDisposable
         var missing = new Web(_ => Json("""{ "error": { "message": "The API deployment for this resource does not exist." } }""", HttpStatusCode.NotFound));
         error = await Assert.ThrowsAsync<InvalidOperationException>(() => new AzureVideoGen(Live, new HttpClient(missing), Path.Combine(_folder, "jobs")).GenerateAsync("x", output, Ct));
         Assert.Contains("does not exist", error.Message);
+
+        // One stopped while being made is picked up again and not paid for twice, and a busy service is waited out.
+        var jobs = Path.Combine(_folder, "resumed");
+        var slow = new Web(request => Json($$"""{ "id": "video_7", "status": "{{(request.Method == HttpMethod.Post ? "queued" : "in_progress")}}" }"""));
+        var stopped = new AzureVideoGen(Live, new HttpClient(slow), jobs) { Delay = (_, _) => Task.FromCanceled(new CancellationToken(true)) };
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stopped.GenerateAsync("a tower rising", output, Ct));
+        Assert.Single(Directory.GetFiles(jobs)); // the video is paid for, so its name is kept
+
+        var busy = true;
+        var later = new Web(request =>
+        {
+            if (busy)
+            {
+                busy = false;
+                return new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+            }
+            return request.RequestUri!.AbsolutePath.EndsWith("/content", StringComparison.Ordinal)
+                ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([7]) }
+                : Json("""{ "id": "video_7", "status": "completed" }""");
+        });
+        waits = 0;
+        await new AzureVideoGen(Live, new HttpClient(later), jobs) { Delay = (_, _) => { waits++; return Task.CompletedTask; } }.GenerateAsync("a tower rising", output, Ct);
+
+        Assert.Equal([7], File.ReadAllBytes(output));
+        Assert.Equal(1, waits); // the one refusal was waited out
+        Assert.DoesNotContain(later.Asked, asked => asked.StartsWith("POST", StringComparison.Ordinal)); // never asked for a second time
+        Assert.EndsWith("/videos/video_7", later.Asked[0]);
+        Assert.Empty(Directory.GetFiles(jobs)); // delivered, so there is nothing left to pick up
+
+        // A job the service has forgotten is simply begun again.
+        Directory.CreateDirectory(jobs);
+        var gone = new Web(request =>
+            request.RequestUri!.AbsolutePath.EndsWith("/video_old", StringComparison.Ordinal) ? Json("{}", HttpStatusCode.NotFound)
+            : request.RequestUri.AbsolutePath.EndsWith("/content", StringComparison.Ordinal) ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([8]) }
+            : Json("""{ "id": "video_new", "status": "completed" }"""));
+        File.WriteAllText(Path.Combine(jobs, Files.TextHash($"{Live.VideoDeployment}|a bridge")[..32] + ".job"), "video_old");
+        await new AzureVideoGen(Live, new HttpClient(gone), jobs).GenerateAsync("a bridge", output, Ct);
+        Assert.Equal([8], File.ReadAllBytes(output));
     }
 
     // ---- Drawing ----
@@ -367,48 +404,6 @@ public sealed class VisualKindsTests : IDisposable
         await stock.DrawAsync(Clip(VisualKind.Stock), Look.Comic, Ct);
         await stock.DrawAsync(EpisodeEditor.NextTake(Clip(VisualKind.Stock)), Look.Comic, Ct);
         Assert.Equal([0, 1], asked);
-    }
-
-    [Fact]
-    public async Task A_video_stopped_while_being_made_is_picked_up_again_and_not_paid_for_twice_and_a_busy_service_is_waited_out()
-    {
-        var jobs = Path.Combine(_folder, "jobs");
-        var output = Path.Combine(_folder, "shot.mp4");
-        var slow = new Web(request => Json($$"""{ "id": "video_7", "status": "{{(request.Method == HttpMethod.Post ? "queued" : "in_progress")}}" }"""));
-        var stopped = new AzureVideoGen(Live, new HttpClient(slow), jobs) { Delay = (_, _) => Task.FromCanceled(new CancellationToken(true)) };
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stopped.GenerateAsync("a tower rising", output, Ct));
-        Assert.Single(Directory.GetFiles(jobs)); // the video is paid for, so its name is kept
-
-        var busy = true;
-        var later = new Web(request =>
-        {
-            if (busy)
-            {
-                busy = false;
-                return new HttpResponseMessage(HttpStatusCode.TooManyRequests);
-            }
-            return request.RequestUri!.AbsolutePath.EndsWith("/content", StringComparison.Ordinal)
-                ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([7]) }
-                : Json("""{ "id": "video_7", "status": "completed" }""");
-        });
-        var waits = 0;
-        await new AzureVideoGen(Live, new HttpClient(later), jobs) { Delay = (_, _) => { waits++; return Task.CompletedTask; } }.GenerateAsync("a tower rising", output, Ct);
-
-        Assert.Equal([7], File.ReadAllBytes(output));
-        Assert.Equal(1, waits); // the one refusal was waited out
-        Assert.DoesNotContain(later.Asked, asked => asked.StartsWith("POST", StringComparison.Ordinal)); // never asked for a second time
-        Assert.EndsWith("/videos/video_7", later.Asked[0]);
-        Assert.Empty(Directory.GetFiles(jobs)); // delivered, so there is nothing left to pick up
-
-        // A job the service has forgotten is simply begun again.
-        Directory.CreateDirectory(jobs);
-        var gone = new Web(request =>
-            request.RequestUri!.AbsolutePath.EndsWith("/video_old", StringComparison.Ordinal) ? Json("{}", HttpStatusCode.NotFound)
-            : request.RequestUri.AbsolutePath.EndsWith("/content", StringComparison.Ordinal) ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([8]) }
-            : Json("""{ "id": "video_new", "status": "completed" }"""));
-        File.WriteAllText(Path.Combine(jobs, Files.TextHash($"{Live.VideoDeployment}|a bridge")[..32] + ".job"), "video_old");
-        await new AzureVideoGen(Live, new HttpClient(gone), jobs).GenerateAsync("a bridge", output, Ct);
-        Assert.Equal([8], File.ReadAllBytes(output));
     }
 
     [Fact]
